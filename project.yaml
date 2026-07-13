@@ -1,0 +1,60 @@
+# misterdev project config for Countless (pnpm monorepo).
+# Each target is self-contained: a task's gate is routed to the target that owns
+# its files, and ONLY that target's commands run. Top-level commands below apply
+# only to files outside every target (root configs like package.json / biome.json).
+
+language: typescript
+
+build:
+  # `run --tasks DEVPLAN.md` has no task cap, but raise this so a `build` run
+  # (LLM decomposition) never silently drops tasks from the ~100-task plan.
+  max_tasks: 120
+  # Master dollar ceiling for a run; also settable with --budget. A ~100-task
+  # TS+tests build is real spend — run wave-by-wave and adjust deliberately.
+  budget: 100.0
+
+orchestrator:
+  # Re-run a red test gate once before trusting it: a flaky vitest/miniflare run
+  # then can't revert a correct edit. 0 disables; 1 is a safe default here.
+  flaky_reruns: 1
+
+# Files outside every target (root package.json, biome.json, tsconfig.base.json,
+# pnpm-workspace.yaml) gate with the root scripts.
+lint_command: "pnpm lint"
+typecheck_command: "pnpm typecheck"
+
+targets:
+  - name: shared
+    path: packages/shared
+    # No build step; typecheck is the compile gate.
+    typecheck_command: "pnpm --filter @countless/shared typecheck"
+    test_command: "pnpm --filter @countless/shared test"
+    lint_command: "pnpm --filter @countless/shared lint"
+
+  - name: server
+    path: apps/server
+    # A Worker has no separate build; typecheck + vitest (miniflare) are the gate.
+    typecheck_command: "pnpm --filter @countless/server typecheck"
+    test_command: "pnpm --filter @countless/server test"
+    lint_command: "pnpm --filter @countless/server lint"
+
+  - name: dashboard
+    path: apps/dashboard
+    build_command: "pnpm --filter @countless/dashboard build"
+    typecheck_command: "pnpm --filter @countless/dashboard typecheck"
+    test_command: "pnpm --filter @countless/dashboard test"
+    lint_command: "pnpm --filter @countless/dashboard lint"
+
+  - name: client
+    path: packages/client
+    build_command: "pnpm --filter countless build"
+    typecheck_command: "pnpm --filter countless typecheck"
+    test_command: "pnpm --filter countless test"
+    lint_command: "pnpm --filter countless lint"
+
+  - name: cli
+    path: packages/cli
+    build_command: "pnpm --filter countless-cli build"
+    typecheck_command: "pnpm --filter countless-cli typecheck"
+    test_command: "pnpm --filter countless-cli test"
+    lint_command: "pnpm --filter countless-cli lint"

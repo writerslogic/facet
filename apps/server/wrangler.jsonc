@@ -1,0 +1,59 @@
+{
+  // Countless Worker config: ingest + stats API + dashboard static assets + cron rollups.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "countless",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  // Hourly cron: aggregate raw events into rollups and enforce retention.
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+  // Dashboard build output, served by the Worker for non-API routes.
+  "assets": {
+    "directory": "../dashboard/dist",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "countless",
+      "database_id": "PLACEHOLDER_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // Rolling retention window for raw events, in days.
+    "RAW_RETENTION_DAYS": "90"
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // POST-v1 SCALE PATH — Cloudflare-native bindings, intentionally disabled.
+  // Uncomment a block only when adopting that capability; each is out of v1 scope.
+  // ─────────────────────────────────────────────────────────────────────────
+  //
+  // Analytics Engine — high-cardinality event sink (10M+ writes/s, SQL over HTTP).
+  // Alternative/complement to the D1 `events` table at very high volume.
+  //   "analytics_engine_datasets": [
+  //     { "binding": "AE", "dataset": "countless_events" }
+  //   ],
+  //
+  // Queues — decouple ingest from aggregation (at-least-once, retries).
+  //   "queues": {
+  //     "producers": [{ "binding": "INGEST_QUEUE", "queue": "countless-ingest" }],
+  //     "consumers": [{ "queue": "countless-ingest", "max_batch_size": 100, "max_batch_timeout": 5 }]
+  //   },
+  //
+  // Durable Objects + alarms — exactly-once real-time aggregation (1 DO per
+  // metric_key+time_bucket, alarm flushes to D1/AE every 5s) for live dashboards.
+  //   "durable_objects": {
+  //     "bindings": [{ "name": "AGGREGATOR", "class_name": "Aggregator" }]
+  //   },
+  //   "migrations": [{ "tag": "v2", "new_sqlite_classes": ["Aggregator"] }],
+  //
+  // R2 — CSV/Parquet exports and nightly AE→R2 archival (presigned URLs via S3 API).
+  //   "r2_buckets": [{ "binding": "EXPORTS", "bucket_name": "countless-exports" }],
+}
