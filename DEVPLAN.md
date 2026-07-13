@@ -1,3 +1,7 @@
+---
+status: completed
+---
+
 <!-- Deterministic v1 build plan for Countless. Executable by an autonomous coding agent with
      zero human clarification. Every load-bearing decision is pre-resolved. No "TBD", no "choose",
      no "e.g." for anything an implementer must know. Where a value is fixed, it is stated as fixed.
