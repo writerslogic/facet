@@ -24,6 +24,10 @@ export const events = sqliteTable(
 		country: text('country'),
 		device: text('device'),
 		createdAt: integer('created_at').notNull(),
+		utmSource: text('utm_source'),
+		utmMedium: text('utm_medium'),
+		utmCampaign: text('utm_campaign'),
+		channel: text('channel'),
 	},
 	(t) => [
 		index('idx_events_site_created_name').on(t.siteId, t.createdAt, t.name),
@@ -54,6 +58,26 @@ export const sessions = sqliteTable(
 		firstSeen: integer('first_seen').notNull(),
 	},
 	(t) => [primaryKey({ columns: [t.siteId, t.visitorHash, t.dayKey] })],
+);
+
+export const eventSessions = sqliteTable(
+	'event_sessions',
+	{
+		id: text('id').primaryKey(),
+		siteId: text('site_id').notNull(),
+		visitorHash: text('visitor_hash').notNull(),
+		dayKey: text('day_key').notNull(),
+		startedAt: integer('started_at').notNull(),
+		endedAt: integer('ended_at').notNull(),
+		entryPath: text('entry_path').notNull(),
+		exitPath: text('exit_path').notNull(),
+		channel: text('channel'),
+		pageviews: integer('pageviews').notNull().default(0),
+		events: integer('events').notNull().default(0),
+		durationMs: integer('duration_ms').notNull().default(0),
+		isBounce: integer('is_bounce').notNull().default(0),
+	},
+	(t) => [index('idx_sessions_site_started').on(t.siteId, t.startedAt)],
 );
 
 export const salts = sqliteTable('salts', {
