@@ -27,9 +27,7 @@ export async function seedSite(
 	const hostname = overrides.hostname ?? `${siteId}.example.com`;
 	const name = overrides.name ?? 'Test Site';
 
-	await env.DB.prepare(
-		`INSERT INTO sites (id, hostname, name, created_at) VALUES (?, ?, ?, ?)`,
-	)
+	await env.DB.prepare('INSERT INTO sites (id, domain, name, created_at) VALUES (?, ?, ?, ?)')
 		.bind(siteId, hostname, name, Date.now())
 		.run();
 
@@ -53,14 +51,25 @@ export async function seedEvents(env: Env, opts: SeedEventsOptions): Promise<voi
 	const step = spanMs > 0 && count > 1 ? Math.floor(spanMs / (count - 1)) : 0;
 
 	const stmt = env.DB.prepare(
-		`INSERT INTO events (id, site_id, name, hostname, path, referrer, device, country, visitor_hash, ts)
+		`INSERT INTO events (id, site_id, name, hostname, path, referrer, device, country, visitor_hash, created_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	);
 
 	const batch = Array.from({ length: count }, (_, i) => {
 		const ts = baseTs + i * step;
 		const visitorHash = `fixture-visitor-${siteId}-${i}`;
-		return stmt.bind(crypto.randomUUID(), siteId, name, hostname, path, referrer, device, country, visitorHash, ts);
+		return stmt.bind(
+			crypto.randomUUID(),
+			siteId,
+			name,
+			hostname,
+			path,
+			referrer,
+			device,
+			country,
+			visitorHash,
+			ts,
+		);
 	});
 
 	await env.DB.batch(batch);

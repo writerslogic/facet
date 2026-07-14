@@ -12,5 +12,8 @@ export const DEFAULT_RAW_RETENTION_DAYS = 90 as const;
 /** CORS max-age for preflight responses, in seconds. */
 export const CORS_MAX_AGE = 86400 as const;
 
+/** Maximum accepted body size for a `POST /api/collect` beacon, in bytes. */
+export const COLLECT_MAX_BODY_BYTES = 8192 as const;
+
 /** HTTP status code returned for a successful CORS preflight. */
 export const PREFLIGHT_STATUS = 204 as const;
