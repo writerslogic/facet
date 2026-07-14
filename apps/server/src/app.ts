@@ -4,6 +4,7 @@
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
+import { HTTPException } from 'hono/http-exception';
 import type { Env } from './env.js';
 import { COLLECT_MAX_BODY_BYTES, CORS_MAX_AGE } from './lib/constants.js';
 import { ApiError, toErrorBody } from './lib/http.js';
@@ -40,6 +41,10 @@ export function createApp(): Hono<{ Bindings: Env }> {
 	app.onError((err, c) => {
 		if (err instanceof ApiError) {
 			return c.json(toErrorBody(err), err.status);
+		}
+		// A 400 HTTPException here only comes from body parsing (malformed JSON / form).
+		if (err instanceof HTTPException && err.status === 400) {
+			return c.json({ error: 'validation_failed' }, 400);
 		}
 		// Never leak an unexpected error's message to the client; details go to logs only.
 		return c.json({ error: 'internal_error' }, 500);
