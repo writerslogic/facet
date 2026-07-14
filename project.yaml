@@ -17,6 +17,17 @@ orchestrator:
   # Re-run a red test gate once before trusting it: a flaky vitest/miniflare run
   # then can't revert a correct edit. 0 disables; 1 is a safe default here.
   flaky_reruns: 1
+  # The DEVPLAN pre-decides files and details, so the agentic MCP filesystem-
+  # exploration loop (3 rounds/task) is redundant with the code + symbol context
+  # misterdev already supplies — and it dominated the wall-clock on early tasks.
+  # Off = go straight to the edit. (Symbol graph + reference sites still apply.)
+  mcp_tool_use: false
+  mcp_enabled: false
+  # Run independent tasks in a wave concurrently, each in its own git worktree.
+  # Verified that pnpm gates resolve deps natively in a worktree here. max_workers
+  # kept modest so parallel tsc/vitest don't thrash a laptop.
+  run_parallel: true
+  max_workers: 3
 
 # Files outside every target (root package.json, biome.json, tsconfig.base.json,
 # pnpm-workspace.yaml) gate with the root scripts.

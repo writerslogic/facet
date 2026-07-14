@@ -1,0 +1,113 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "0001_init",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "sites": {
+      "name": "sites",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "domain": { "name": "domain", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "events": {
+      "name": "events",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "site_id": { "name": "site_id", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "hostname": { "name": "hostname", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "path": { "name": "path", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "referrer": { "name": "referrer", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false, "default": "''" },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "props": { "name": "props", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "visitor_hash": { "name": "visitor_hash", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "country": { "name": "country", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "device": { "name": "device", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {
+        "idx_events_site_created_name": { "name": "idx_events_site_created_name", "columns": ["site_id", "created_at", "name"], "isUnique": false },
+        "idx_events_site_host_created": { "name": "idx_events_site_host_created", "columns": ["site_id", "hostname", "created_at"], "isUnique": false }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "event_rollups": {
+      "name": "event_rollups",
+      "columns": {
+        "site_id": { "name": "site_id", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "hostname": { "name": "hostname", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "bucket_start": { "name": "bucket_start", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "interval": { "name": "interval", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "pageviews": { "name": "pageviews", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 0 },
+        "events": { "name": "events", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 0 },
+        "visitors": { "name": "visitors", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false, "default": 0 }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "event_rollups_site_id_hostname_bucket_start_interval_pk": { "name": "event_rollups_site_id_hostname_bucket_start_interval_pk", "columns": ["site_id", "hostname", "bucket_start", "interval"] }
+      },
+      "uniqueConstraints": {}
+    },
+    "sessions": {
+      "name": "sessions",
+      "columns": {
+        "site_id": { "name": "site_id", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "visitor_hash": { "name": "visitor_hash", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "day_key": { "name": "day_key", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "first_seen": { "name": "first_seen", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "sessions_site_id_visitor_hash_day_key_pk": { "name": "sessions_site_id_visitor_hash_day_key_pk", "columns": ["site_id", "visitor_hash", "day_key"] }
+      },
+      "uniqueConstraints": {}
+    },
+    "salts": {
+      "name": "salts",
+      "columns": {
+        "day_key": { "name": "day_key", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "salt": { "name": "salt", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "api_keys": {
+      "name": "api_keys",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "site_id": { "name": "site_id", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "key_hash": { "name": "key_hash", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "label": { "name": "label", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "last_used": { "name": "last_used", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false }
+      },
+      "indexes": {
+        "api_keys_key_hash_unique": { "name": "api_keys_key_hash_unique", "columns": ["key_hash"], "isUnique": true },
+        "idx_apikeys_site": { "name": "idx_apikeys_site", "columns": ["site_id"], "isUnique": false }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  }
+}

@@ -1,18 +1,25 @@
-// Runtime validation schemas (valibot) — the single source of truth for request shapes.
-// Server validates against these; TS types are derived from them so the wire contract can
-// never drift between client, server, and dashboard. Full field rules land in T003.
+// Wire-level valibot schemas + inferred types. The single source of truth for the collect
+// payload wire contract. Zero runtime deps beyond valibot.
 
 import * as v from 'valibot';
 
-/** Custom-event property value: a JSON scalar. */
-export const PropValueSchema = v.union([v.string(), v.number(), v.boolean(), v.null()]);
+export const PropValueSchema = v.union([v.string(), v.number(), v.boolean()]);
 
-/** Body accepted by `POST /api/collect`. */
-export const CollectPayloadSchema = v.object({
-	site_id: v.pipe(v.string(), v.uuid()),
-	hostname: v.pipe(v.string(), v.maxLength(253)),
-	path: v.pipe(v.string(), v.maxLength(2048)),
-	referrer: v.pipe(v.string(), v.maxLength(2048)),
-	name: v.optional(v.pipe(v.string(), v.maxLength(128))),
-	props: v.optional(v.record(v.string(), PropValueSchema)),
+export const EventPropsSchema = v.record(v.string(), PropValueSchema);
+
+export const UtmSchema = v.object({
+	source: v.optional(v.pipe(v.string(), v.maxLength(200))),
+	medium: v.optional(v.pipe(v.string(), v.maxLength(200))),
+	campaign: v.optional(v.pipe(v.string(), v.maxLength(200))),
 });
+
+export const CollectPayloadSchema = v.object({
+	siteId: v.pipe(v.string(), v.maxLength(200)),
+	url: v.pipe(v.string(), v.maxLength(2000)),
+	referrer: v.optional(v.pipe(v.string(), v.maxLength(2000))),
+	name: v.optional(v.pipe(v.string(), v.maxLength(200))),
+	props: v.optional(EventPropsSchema),
+	utm: v.optional(UtmSchema),
+});
+
+export type CollectInput = v.InferInput<typeof CollectPayloadSchema>;
