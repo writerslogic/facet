@@ -29,6 +29,16 @@ orchestrator:
   run_parallel: true
   max_workers: 3
 
+# Independent reviewers: run the review roles on different-family frontier models than the
+# Claude generators (opus/sonnet) so the review doesn't share the generator's blind spots
+# (resolves the once-per-run "same model that wrote the code" reflection note). critic and
+# judge are deliberately DIFFERENT models: the adversarial code critic uses a code-specialized
+# model, the acceptance/goal judge uses a general reasoner.
+critic:
+  model: "openai/gpt-5.1-codex"
+judge:
+  model: "google/gemini-3.1-pro-preview"
+
 # Files outside every target (root package.json, biome.json, tsconfig.base.json,
 # pnpm-workspace.yaml) gate with the root scripts.
 lint_command: "pnpm lint"
