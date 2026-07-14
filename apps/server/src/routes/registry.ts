@@ -4,6 +4,7 @@
 
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
+import { adminRoutes } from './admin.js';
 import { collectRoute } from './collect.js';
 import { statsRoutes } from './stats.js';
 
@@ -20,4 +21,5 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/api/health', router: healthRoute },
 	{ path: '/api/collect', router: collectRoute },
 	{ path: '/api', router: statsRoutes },
+	{ path: '/api', router: adminRoutes },
 ];
