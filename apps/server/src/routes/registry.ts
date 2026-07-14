@@ -3,17 +3,17 @@
 // chain — see the DRY mandate). Health lives here too, as the smallest router.
 
 import { Hono } from 'hono';
-import type { Env } from '../env.js';
+import type { AppEnv } from '../env.js';
 import { collectRoute } from './collect.js';
 import { statsRoutes } from './stats.js';
 
-const healthRoute = new Hono<{ Bindings: Env }>();
+const healthRoute = new Hono<AppEnv>();
 healthRoute.get('/', (c) => c.json({ ok: true }));
 
 /** A sub-router and the base path it mounts under. */
 export interface RouteEntry {
 	path: string;
-	router: Hono<{ Bindings: Env }>;
+	router: Hono<AppEnv>;
 }
 
 export const ROUTES: RouteEntry[] = [

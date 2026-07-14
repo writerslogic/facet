@@ -5,13 +5,13 @@ import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { cors } from 'hono/cors';
 import { HTTPException } from 'hono/http-exception';
-import type { Env } from './env.js';
+import type { AppEnv } from './env.js';
 import { COLLECT_MAX_BODY_BYTES, CORS_MAX_AGE } from './lib/constants.js';
 import { ApiError, toErrorBody } from './lib/http.js';
 import { ROUTES } from './routes/registry.js';
 
-export function createApp(): Hono<{ Bindings: Env }> {
-	const app = new Hono<{ Bindings: Env }>();
+export function createApp(): Hono<AppEnv> {
+	const app = new Hono<AppEnv>();
 
 	// Public beacon only: any origin may POST, and oversized bodies are rejected before parsing.
 	app.use(

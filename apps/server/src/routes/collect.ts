@@ -6,14 +6,14 @@ import { CollectPayloadSchema } from '@countless/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import { insertEvent, upsertSession } from '../db/queries.js';
-import type { Env } from '../env.js';
+import type { AppEnv } from '../env.js';
 import { isBot } from '../lib/bots.js';
 import { visitorHash } from '../lib/hash.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, country, device } from '../lib/request-meta.js';
 import { dayKey, getDailySalt } from '../lib/salt.js';
 
-export const collectRoute = new Hono<{ Bindings: Env }>();
+export const collectRoute = new Hono<AppEnv>();
 
 collectRoute.post(
 	'/',

@@ -53,4 +53,6 @@ export interface StatsResponse {
 	top_paths: CountRow[];
 	top_referrers: CountRow[];
 	top_events: CountRow[];
+	top_countries: CountRow[];
+	top_devices: CountRow[];
 }
