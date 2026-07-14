@@ -15,7 +15,8 @@
 		"test": "vitest run",
 		"db:generate": "drizzle-kit generate",
 		"migrate:local": "wrangler d1 migrations apply countless --local",
-		"migrate:remote": "wrangler d1 migrations apply countless --remote"
+		"migrate:remote": "wrangler d1 migrations apply countless --remote",
+		"seed:local": "wrangler d1 execute countless --local --file=./scripts/seed.sql"
 	},
 	"dependencies": {
 		"@countless/shared": "workspace:*",
