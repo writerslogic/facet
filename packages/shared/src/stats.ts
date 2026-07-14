@@ -15,6 +15,16 @@ export interface StatsQuery {
 	interval?: Interval;
 }
 
+/** Internal filter for stats query helpers (camelCase, post-validation). */
+export interface StatsFilter {
+	siteId: string;
+	hostname?: string;
+	/** Inclusive start, unix epoch milliseconds. */
+	start: number;
+	/** Exclusive end, unix epoch milliseconds. */
+	end: number;
+}
+
 /** Aggregate totals for a site over a range. */
 export interface StatsSummary {
 	pageviews: number;
