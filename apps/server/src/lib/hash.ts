@@ -1,12 +1,15 @@
-// Privacy-safe visitor hashing: SHA-256(ip + user_agent + daily_salt + site_id).
-// Raw IPs never leave this function. Real implementation lands in T008.
+// Privacy-safe visitor hashing: SHA-256(ip ⧊ user_agent ⧊ daily_salt ⧊ site_id) with ⧊ =
+// HASH_DELIMITER, in that exact field order. Raw IPs never leave this function or reach a log.
 
-/** Compute the daily privacy-safe visitor hash. Returns lowercase hex. */
+import { HASH_DELIMITER } from './constants.js';
+import { sha256Hex } from './crypto.js';
+
+/** Compute the daily privacy-safe visitor hash. Returns 64 lowercase hex chars. */
 export async function visitorHash(
-	_ip: string,
-	_userAgent: string,
-	_dailySalt: string,
-	_siteId: string,
+	ip: string,
+	userAgent: string,
+	dailySalt: string,
+	siteId: string,
 ): Promise<string> {
-	return '';
+	return sha256Hex([ip, userAgent, dailySalt, siteId].join(HASH_DELIMITER));
 }
