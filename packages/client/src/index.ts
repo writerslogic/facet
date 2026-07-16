@@ -10,7 +10,7 @@ export interface CountlessConfig {
 	siteId: string;
 }
 
-let _config: CountlessConfig | undefined;
+let Config: CountlessConfig | undefined;
 
 function parseUtmFromSearch(search: string): Record<string, string> | undefined {
 	const params = new URLSearchParams(search);
@@ -19,25 +19,27 @@ function parseUtmFromSearch(search: string): Record<string, string> | undefined 
 	const campaign = params.get('utm_campaign') ?? undefined;
 	if (source === undefined && medium === undefined && campaign === undefined) return undefined;
 	const utm: Record<string, string> = {};
-	if (source !== undefined) utm['source'] = source;
-	if (medium !== undefined) utm['medium'] = medium;
-	if (campaign !== undefined) utm['campaign'] = campaign;
+	if (source !== undefined) utm.source = source;
+	if (medium !== undefined) utm.medium = medium;
+	if (campaign !== undefined) utm.campaign = campaign;
 	return utm;
 }
 
 /** Track a pageview (no name) or a named custom event. */
 export function track(_name?: string, _props?: EventProps): void {
-	if (!_config) return;
-	const { host, siteId } = _config;
-	const url = typeof location !== 'undefined' ? location.href : '';
-	const referrer = typeof document !== 'undefined' ? document.referrer : undefined;
+	if (!Config) return;
+	const { host, siteId } = Config;
+	const hostname = typeof location !== 'undefined' ? location.hostname : '';
+	const path = typeof location !== 'undefined' ? location.pathname : '/';
+	const referrer = typeof document !== 'undefined' ? document.referrer : '';
 	const search = typeof location !== 'undefined' ? location.search : '';
 	const utm = parseUtmFromSearch(search);
 
 	const payload: Record<string, unknown> = {
-		siteId,
-		url,
-		...(referrer ? { referrer } : {}),
+		site_id: siteId,
+		hostname,
+		path: path || '/',
+		referrer: referrer ?? '',
 		...(_name ? { name: _name } : {}),
 		...(_props ? { props: _props } : {}),
 		...(utm ? { utm } : {}),
@@ -48,11 +50,16 @@ export function track(_name?: string, _props?: EventProps): void {
 	if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
 		navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }));
 	} else {
-		fetch(endpoint, { method: 'POST', body, headers: { 'content-type': 'application/json' }, keepalive: true }).catch(() => undefined);
+		fetch(endpoint, {
+			method: 'POST',
+			body,
+			headers: { 'content-type': 'application/json' },
+			keepalive: true,
+		}).catch(() => undefined);
 	}
 }
 
 /** Configure the tracker (host + site id). Called by the auto-init shim. */
 export function init(_config_: CountlessConfig): void {
-	_config = _config_;
+	Config = _config_;
 }

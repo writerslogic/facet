@@ -1,13 +1,67 @@
-// Root dashboard component. Renders the site picker + metrics views once the API layer lands
-// (T021–T023). For now it renders a minimal shell so the build/typecheck are green.
+// Root dashboard component: KeyGate until credentials are stored, otherwise the app shell
+// with KPI cards, traffic chart, and breakdowns driven by the stats query.
 
+import type { StatsQuery } from '@countless/shared';
 import type { ReactElement } from 'react';
+import { Breakdowns } from './components/Breakdowns.js';
+import { ChannelsPanel } from './components/ChannelsPanel.js';
+import { EngagementCards } from './components/EngagementCards.js';
+import { KeyGate } from './components/KeyGate.js';
+import { KpiCards } from './components/KpiCards.js';
+import { Layout } from './components/Layout.js';
+import { TrafficChart } from './components/TrafficChart.js';
+import { useStats } from './hooks/stats.js';
+import { useDashboard } from './state.js';
+
+function Dashboard(): ReactElement {
+	const { apiKey, siteId, preset, range } = useDashboard();
+
+	const query: StatsQuery = {
+		site_id: siteId,
+		start: range.start,
+		end: range.end,
+		interval: preset === '24h' ? 'hour' : 'day',
+	};
+
+	const { data, isLoading, error } = useStats(apiKey, query);
+	const errorMessage = error instanceof Error ? error.message : null;
+
+	return (
+		<Layout>
+			<div className="space-y-6">
+				<KpiCards summary={data?.summary ?? { pageviews: 0, visitors: 0, events: 0 }} />
+				<EngagementCards
+					engagement={
+						data?.engagement ?? {
+							sessions: 0,
+							bounce_rate: 0,
+							pages_per_session: 0,
+							avg_duration_ms: 0,
+						}
+					}
+				/>
+				<TrafficChart
+					series={data?.series ?? []}
+					loading={isLoading}
+					error={errorMessage}
+				/>
+				{data ? (
+					<>
+						<ChannelsPanel channels={data.channels} />
+						<Breakdowns stats={data} />
+					</>
+				) : (
+					<p className="text-sm text-neutral-400">
+						{errorMessage ?? 'Loading breakdowns…'}
+					</p>
+				)}
+			</div>
+		</Layout>
+	);
+}
 
 export function App(): ReactElement {
-	return (
-		<main>
-			<h1>Countless</h1>
-			<p>Dashboard coming online.</p>
-		</main>
-	);
+	const { apiKey, siteId } = useDashboard();
+	if (!apiKey || !siteId) return <KeyGate />;
+	return <Dashboard />;
 }

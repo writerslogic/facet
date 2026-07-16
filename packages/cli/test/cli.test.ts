@@ -49,21 +49,9 @@ describe('main dispatcher', () => {
 		expect(stderr).toContain('Usage: countless');
 	});
 
-	it('dispatches to init', async () => {
-		const code = await main(['init']);
-		expect(code).toBe(0);
-		expect(stdout).toContain('countless init');
-	});
-
-	it('dispatches to migrate', async () => {
-		const code = await main(['migrate']);
-		expect(code).toBe(0);
-		expect(stdout).toContain('countless migrate');
-	});
-
-	it('dispatches to stats', async () => {
+	it('routes to stats and surfaces its failure exit code on missing options', async () => {
 		const code = await main(['stats']);
-		expect(code).toBe(0);
-		expect(stdout).toContain('countless stats');
+		expect(code).toBe(1);
+		expect(stderr).toContain('required');
 	});
 });

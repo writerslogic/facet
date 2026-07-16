@@ -19,7 +19,7 @@ INSERT INTO sites (id, name, domain, created_at) VALUES
 INSERT INTO api_keys (id, site_id, key_hash, label, created_at, last_used) VALUES
     ('22222222-2222-4222-8222-222222222222',
      '11111111-1111-4111-8111-111111111111',
-     'd8f4590320e1343a915b6394170650a8f35d6926fb99cf3c9f68abfc90bb832d',
+     '2a043fa7fc8ab73575e5d9e2d33544b933c8ecb96892711db5f7005f0281f3bf',
      'local dev key', 1704067200000, NULL);
 
 -- 30 events across 2 hostnames, 3 paths, 2 devices, 2 countries, 1 custom event.

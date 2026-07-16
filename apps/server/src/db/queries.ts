@@ -24,6 +24,10 @@ export interface NewEvent {
 	country: string | null;
 	device: string | null;
 	createdAt: number;
+	utmSource?: string | null;
+	utmMedium?: string | null;
+	utmCampaign?: string | null;
+	channel?: string | null;
 }
 
 /** Insert a raw event row. Returns the generated event id. */

@@ -37,6 +37,21 @@ export function createApp(): Hono<AppEnv> {
 		app.route(path, router);
 	}
 
+	// Everything that is not an API route is served from the built dashboard assets. A navigation
+	// request that misses a real file falls back to index.html so client-side routes resolve (SPA).
+	app.get('*', async (c) => {
+		const { pathname } = new URL(c.req.url);
+		if (pathname.startsWith('/api/')) {
+			return c.json({ error: 'not_found' }, 404);
+		}
+		const res = await c.env.ASSETS.fetch(c.req.raw);
+		if (res.status === 404 && (c.req.header('accept') ?? '').includes('text/html')) {
+			const indexUrl = new URL('/index.html', c.req.url);
+			return c.env.ASSETS.fetch(new Request(indexUrl, { method: 'GET' }));
+		}
+		return res;
+	});
+
 	app.notFound((c) => c.json({ error: 'not_found' }, 404));
 	app.onError((err, c) => {
 		if (err instanceof ApiError) {
