@@ -26,6 +26,10 @@ migrate by swapping a single script tag.
 - **Sessions & engagement.** Bounce rate, pages/session, and average visit duration, materialized hourly from raw events.
 - **Traffic channels.** Automatic direct / referral / organic / social / paid / email classification from referrer + UTM.
 - **Goals, conversions & funnels.** Define goals and multi-step funnels; get conversion rates and in-order funnel drop-off.
+- **A/B experiments & feature flags.** Privacy-first, client-side variant assignment; two-proportion significance testing in the dashboard.
+- **Anomaly detection & autopsy.** Automatic z-score detection with a plain-language root-cause summary (largest-contributing segment).
+- **Ask in plain English.** Natural-language queries over your stats via Workers AI (translated to a constrained, safe query intent).
+- **Ad-block-resilient.** First-party `POST /api/event` server-to-server ingest — no client script to block.
 - **Unlimited sites.** Multi-site is first-class.
 
 ## Packages

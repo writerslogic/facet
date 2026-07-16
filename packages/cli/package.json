@@ -1,6 +1,6 @@
 {
 	"name": "countless-cli",
-	"version": "0.1.0",
+	"version": "0.3.0",
 	"description": "Countless CLI: init, migrate, and stats for self-hosted Countless.",
 	"license": "MIT",
 	"type": "module",
