@@ -5,6 +5,7 @@
 import type { Funnel, FunnelReportResult, StatsFilter } from '@countless/shared';
 import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import type { Env } from '../env.js';
+import { DAY_MS } from '../lib/constants.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
 
@@ -52,7 +53,13 @@ export async function funnelReport(
 			createdAt: schema.events.createdAt,
 		})
 		.from(schema.events)
-		.where(eq(schema.events.siteId, f.siteId))
+		.where(
+			and(
+				eq(schema.events.siteId, f.siteId),
+				gte(schema.events.createdAt, f.start),
+				lt(schema.events.createdAt, f.end + DAY_MS),
+			),
+		)
 		.orderBy(asc(schema.events.createdAt))) as EventRow[];
 
 	const byVisitor = new Map<string, EventRow[]>();

@@ -22,7 +22,10 @@ migrate by swapping a single script tag.
 - **No database to run.** State lives in Cloudflare D1.
 - **Cookieless & GDPR-friendly.** Privacy-safe uniques via `SHA-256(ip + user_agent + daily_salt + site_id)`.
 - **Free, self-issued API keys.** Query your own stats programmatically.
-- **umami-compatible client.** `window.umami.track(name, props)` and auto-pageviews work unchanged.
+- **umami-compatible client.** `window.umami.track(name, props)`, auto-pageviews, SPA navigation, UTM capture, and form-submission tracking work out of the box.
+- **Sessions & engagement.** Bounce rate, pages/session, and average visit duration, materialized hourly from raw events.
+- **Traffic channels.** Automatic direct / referral / organic / social / paid / email classification from referrer + UTM.
+- **Goals, conversions & funnels.** Define goals and multi-step funnels; get conversion rates and in-order funnel drop-off.
 - **Unlimited sites.** Multi-site is first-class.
 
 ## Packages

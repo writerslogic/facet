@@ -5,6 +5,7 @@ import { type Goal, StatsQuerySchema, type StatsResponse } from '@countless/shar
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { listFunnels, listGoals } from '../db/catalog.js';
 import { goalConversions } from '../db/conversions.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
@@ -187,4 +188,22 @@ statsRoutes.get('/stats/conversions', requireApiKey, async (c) => {
 		sessions: result.sessions,
 		rate: result.rate,
 	});
+});
+
+// API-key-scoped catalog reads so the dashboard can enumerate a site's goals/funnels (config, not
+// PII) without the admin token. Creation/deletion remain admin-only.
+statsRoutes.get('/stats/goals', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	return c.json({ goals: await listGoals(c.env, siteId) });
+});
+
+statsRoutes.get('/stats/funnels', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	return c.json({ funnels: await listFunnels(c.env, siteId) });
 });

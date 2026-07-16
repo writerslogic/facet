@@ -42,6 +42,22 @@ counts as `N` unique visitors over a multi-day range. Distinct-visitor counts ar
 per day, not deduplicated across days. This is the intended, privacy-preserving trade-off:
 the system cannot link the same person across days even in principle.
 
+## Sessions & UTM
+
+Sessions are **derived from raw events**, never sent by the client. On the cron, a day's
+events for each `(site, visitor)` are folded into sessions, splitting on any inactivity gap
+longer than 30 minutes. A session row carries **no raw IP and no raw user-agent** — it
+references the visitor only through the same daily `visitor_hash`, and its own id is a
+non-reversible `SHA-256` digest of `site_id | visitor_hash | started_at`. Because a session
+is keyed on the daily hash, sessions inherit the **daily un-linkability** of the visitor
+hash: the same person's sessions on two different UTC days cannot be linked, even in
+principle.
+
+UTM values (`utm_source`, `utm_medium`, `utm_campaign`) are **site-supplied marketing
+tags** taken verbatim from the page URL. They are stored only in their own declared columns
+and used to classify each event's traffic channel; they are not identifiers and are not
+mixed into the visitor hash.
+
 ## Retention
 
 Raw data is purged past a rolling window, `RAW_RETENTION_DAYS` (default **90** days,
