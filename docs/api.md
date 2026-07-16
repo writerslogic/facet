@@ -9,6 +9,7 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
 - `POST /api/collect` — **public**, no auth (CORS-open, rate-limited).
 - `POST /api/event` — **API key**: first-party server-to-server ingest (`Authorization: Bearer <clk_...>`).
 - `GET /api/experiments/active` — **public**: client-facing feature-flag config.
+- `GET /api/stats/anomalies`, `GET /api/stats/experiments`, `GET /api/stats/experiment` — **API key**.
 - `GET /api/stats`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
   `GET /api/stats/conversions`, `GET /api/stats/goals`, `GET /api/stats/funnels`,
   `GET /api/funnels/:id/report` — **API key**: `Authorization: Bearer <clk_...>`
@@ -478,6 +479,34 @@ z-test `p_value` vs the control with a `significant` flag (α = 0.05; control's 
   "variants": [
     { "key": "control", "exposures": 1000, "conversions": 100, "rate": 0.1, "p_value": null, "significant": false },
     { "key": "b", "exposures": 1000, "conversions": 150, "rate": 0.15, "p_value": 0.00072, "significant": true }
+  ]
+}
+```
+
+---
+
+## `GET /api/stats/anomalies?site_id&start&end` (API key)
+
+Automated anomaly detection with a plain-language root-cause "autopsy". Scores the most recent hour
+of pageviews against the earlier hours in the range (sample z-score); when the deviation exceeds
+`ANOMALY_Z` (3.0) it returns the anomaly plus the largest-contributing segment
+(`device` / `country` / `channel`) and a summary sentence. Returns `{ "anomalies": [] }` when nothing
+is anomalous or the baseline is too short. **API key**; key must own `site_id`. Same
+`bad_range` / `range_too_large` rules as the other stats reads.
+
+```json
+{
+  "anomalies": [
+    {
+      "metric": "pageviews",
+      "bucket": 1704672000000,
+      "value": 3,
+      "baseline_mean": 42,
+      "z": -4.1,
+      "direction": "drop",
+      "diagnosis": { "dimension": "device", "value": "mobile", "current": 1, "baseline_avg": 25 },
+      "summary": "Pageviews dropped 93% in the last hour (z=-4.1). Largest contributor: device=mobile (1 vs ~25 typical)."
+    }
   ]
 }
 ```
