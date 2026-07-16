@@ -13,7 +13,7 @@ migrate by swapping a single script tag.
 
 ## Deploy to Cloudflare
 
-<!-- TODO(T031): replace OWNER/REPO once the GitHub repo exists. -->
+<!-- Replace OWNER with your GitHub org/user; OWNER/countless is a documented placeholder. -->
 [![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/OWNER/countless)
 
 ## Why Countless
@@ -32,7 +32,7 @@ migrate by swapping a single script tag.
 | `apps/server` | — | Cloudflare Worker: ingest + stats API + cron rollups + D1 schema |
 | `apps/dashboard` | — | React 19 + Vite dashboard, served as static assets by the Worker |
 | `packages/client` | [`countless`](https://www.npmjs.com/package/countless) | Browser tracking snippet (zero deps, umami shim) |
-| `packages/cli` | [`countless`](https://www.npmjs.com/package/countless) (`npx countless`) | `init` / `migrate` / `stats` CLI |
+| `packages/cli` | [`countless-cli`](https://www.npmjs.com/package/countless-cli) (`npx countless-cli`) | `init` / `migrate` / `stats` CLI |
 | `packages/shared` | — | Shared TypeScript types |
 
 ## Quick start
@@ -42,7 +42,30 @@ pnpm install
 pnpm typecheck
 ```
 
-See [`docs/`](./docs) for self-hosting, the privacy model, and the API reference, and
+To deploy to your own Cloudflare account, see [`docs/self-hosting.md`](./docs/self-hosting.md).
+
+## Create a site & API key
+
+Sites and keys are created through the admin API, authenticated with your `ADMIN_TOKEN`:
+
+```sh
+# Create a site (returns { "site": { "id": "…", … } }):
+curl -X POST https://your-deployment.example.com/api/sites \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"name":"My Site","domain":"example.com"}'
+
+# Issue an API key for it (the plaintext key is shown once):
+curl -X POST https://your-deployment.example.com/api/keys \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"site_id":"<SITE_ID>","label":"reporting"}'
+```
+
+Use the site `id` as your `data-site-id`, and the returned `clk_…` key for `GET /api/stats`.
+
+See [`docs/`](./docs) for [usage](./docs/usage.md), [self-hosting](./docs/self-hosting.md),
+the [privacy model](./docs/privacy.md), and the [API reference](./docs/api.md), and
 [`DEVPLAN.md`](./DEVPLAN.md) for the full v1 build plan.
 
 ## License

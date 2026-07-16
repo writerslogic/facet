@@ -2,7 +2,7 @@
 
 # Countless documentation
 
-- [Usage](./usage.md) — install the client, track pageviews and custom events.
-- [Self-hosting](./self-hosting.md) — deploy the Worker + D1 to your own Cloudflare account.
-- [Privacy model](./privacy.md) — how cookieless, salted-hash unique counting works.
-- [API reference](./api.md) — the ingest beacon and the API-key-authenticated stats endpoints.
+- [Usage](./usage.md) — add the script tag, use the `countless` npm API, umami-compatible globals, and custom events with props.
+- [Self-hosting](./self-hosting.md) — deploy the Worker + D1 to your own Cloudflare account, create sites and API keys, and run locally.
+- [Privacy model](./privacy.md) — cookieless, salted daily-hash unique counting and retention.
+- [API reference](./api.md) — the ingest beacon, the API-key stats endpoint, and the admin site/key endpoints.
