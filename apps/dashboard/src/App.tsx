@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { Breakdowns } from './components/Breakdowns.js';
 import { ChannelsPanel } from './components/ChannelsPanel.js';
 import { EngagementCards } from './components/EngagementCards.js';
+import { Experiments } from './components/Experiments.js';
 import { FunnelsView } from './components/FunnelsView.js';
 import { KeyGate } from './components/KeyGate.js';
 import { KpiCards } from './components/KpiCards.js';
@@ -16,11 +17,12 @@ import { useStats } from './hooks/stats.js';
 import { cn } from './lib/cn.js';
 import { useDashboard } from './state.js';
 
-type View = 'overview' | 'funnels';
+type View = 'overview' | 'funnels' | 'experiments';
 
 const TABS: { id: View; label: string }[] = [
 	{ id: 'overview', label: 'Overview' },
 	{ id: 'funnels', label: 'Funnels' },
+	{ id: 'experiments', label: 'Experiments' },
 ];
 
 function Overview(): ReactElement {
@@ -87,8 +89,10 @@ function Dashboard(): ReactElement {
 			</div>
 			{view === 'overview' ? (
 				<Overview />
-			) : (
+			) : view === 'funnels' ? (
 				<FunnelsView apiKey={apiKey} siteId={siteId} range={range} />
+			) : (
+				<Experiments apiKey={apiKey} siteId={siteId} range={range} />
 			)}
 		</Layout>
 	);

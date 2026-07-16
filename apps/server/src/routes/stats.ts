@@ -5,8 +5,9 @@ import { type Goal, StatsQuerySchema, type StatsResponse } from '@countless/shar
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { listFunnels, listGoals } from '../db/catalog.js';
+import { listExperiments, listFunnels, listGoals } from '../db/catalog.js';
 import { goalConversions } from '../db/conversions.js';
+import { experimentResult } from '../db/experiments.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import {
@@ -206,4 +207,47 @@ statsRoutes.get('/stats/funnels', requireApiKey, async (c) => {
 		throw new ApiError('site_mismatch', 403);
 	}
 	return c.json({ funnels: await listFunnels(c.env, siteId) });
+});
+
+statsRoutes.get('/stats/experiments', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	return c.json({ experiments: await listExperiments(c.env, siteId) });
+});
+
+statsRoutes.get('/stats/experiment', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	const start = Number(c.req.query('start'));
+	const end = Number(c.req.query('end'));
+	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+		throw new ApiError('bad_range', 400);
+	}
+	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
+		throw new ApiError('range_too_large', 400);
+	}
+	const goalType = c.req.query('goal_type');
+	if (goalType !== 'event' && goalType !== 'path') {
+		throw new ApiError('bad_goal', 400);
+	}
+	const goalValue = c.req.query('goal_value') ?? '';
+	if (goalValue.length === 0) {
+		throw new ApiError('bad_goal', 400);
+	}
+	const experiments = await listExperiments(c.env, siteId);
+	const experiment = experiments.find((e) => e.id === (c.req.query('experiment_id') ?? ''));
+	if (!experiment) {
+		return c.json({ error: 'not_found' }, 404);
+	}
+	const result = await experimentResult(
+		c.env,
+		experiment,
+		{ type: goalType, value: goalValue },
+		{ siteId, start, end },
+	);
+	return c.json(result);
 });

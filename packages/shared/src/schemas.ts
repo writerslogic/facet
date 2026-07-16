@@ -101,6 +101,19 @@ export const FunnelSchema = v.object({
 	steps: v.pipe(v.array(FunnelStepSchema), v.minLength(2), v.maxLength(10)),
 });
 
+export const ExperimentVariantSchema = v.object({
+	key: v.pipe(v.string(), v.minLength(1), v.maxLength(60)),
+	weight: v.pipe(v.number(), v.minValue(0)),
+});
+
+export const ExperimentSchema = v.object({
+	site_id: v.pipe(v.string(), v.uuid()),
+	name: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
+	flag_key: v.pipe(v.string(), v.minLength(1), v.maxLength(60)),
+	variants: v.pipe(v.array(ExperimentVariantSchema), v.minLength(2), v.maxLength(8)),
+	active: v.optional(v.boolean()),
+});
+
 export type CollectInput = v.InferOutput<typeof CollectPayloadSchema>;
 export type ServerEventInput = v.InferOutput<typeof ServerEventSchema>;
 export type StatsQueryInput = v.InferOutput<typeof StatsQuerySchema>;
@@ -109,3 +122,5 @@ export type IssueKeyInput = v.InferOutput<typeof IssueKeySchema>;
 export type GoalInput = v.InferOutput<typeof GoalSchema>;
 export type FunnelStepInput = v.InferOutput<typeof FunnelStepSchema>;
 export type FunnelInput = v.InferOutput<typeof FunnelSchema>;
+export type ExperimentVariantInput = v.InferOutput<typeof ExperimentVariantSchema>;
+export type ExperimentInput = v.InferOutput<typeof ExperimentSchema>;

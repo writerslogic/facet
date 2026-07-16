@@ -7,6 +7,7 @@ import type { AppEnv } from '../env.js';
 import { adminRoutes } from './admin.js';
 import { collectRoute } from './collect.js';
 import { eventRoute } from './event.js';
+import { experimentsRoutes } from './experiments.js';
 import { funnelsRoutes } from './funnels.js';
 import { goalsRoutes } from './goals.js';
 import { statsRoutes } from './stats.js';
@@ -28,4 +29,5 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/api', router: adminRoutes },
 	{ path: '/api/goals', router: goalsRoutes },
 	{ path: '/api/funnels', router: funnelsRoutes },
+	{ path: '/api/experiments', router: experimentsRoutes },
 ];
