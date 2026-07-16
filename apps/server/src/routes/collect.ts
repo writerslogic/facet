@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { insertEvent, upsertSession } from '../db/queries.js';
 import type { AppEnv } from '../env.js';
 import { isBot } from '../lib/bots.js';
+import { classifyChannel } from '../lib/channel.js';
 import { visitorHash } from '../lib/hash.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, country, device } from '../lib/request-meta.js';
@@ -34,6 +35,16 @@ collectRoute.post(
 		const dk = dayKey(now);
 		const salt = await getDailySalt(c.env, dk, now);
 		const vh = await visitorHash(ip, ua, salt, body.site_id);
+		const utm = {
+			source: body.utm?.source ?? null,
+			medium: body.utm?.medium ?? null,
+			campaign: body.utm?.campaign ?? null,
+		};
+		const channel = classifyChannel({
+			referrer: body.referrer,
+			utm,
+			siteHostname: body.hostname,
+		});
 		await insertEvent(c.env, {
 			siteId: body.site_id,
 			hostname: body.hostname,
@@ -45,6 +56,10 @@ collectRoute.post(
 			country: country(c.req.raw),
 			device: device(ua),
 			createdAt: now,
+			utmSource: utm.source,
+			utmMedium: utm.medium,
+			utmCampaign: utm.campaign,
+			channel,
 		});
 		await upsertSession(c.env, body.site_id, vh, dk, now);
 		return c.body(null, 202);

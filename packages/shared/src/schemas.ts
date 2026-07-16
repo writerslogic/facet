@@ -32,6 +32,13 @@ export const CollectPayloadSchema = v.object({
 	referrer: v.pipe(v.string(), v.maxLength(2048)),
 	name: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
 	props: v.optional(PropsSchema),
+	utm: v.optional(
+		v.object({
+			source: v.optional(v.pipe(v.string(), v.maxLength(200))),
+			medium: v.optional(v.pipe(v.string(), v.maxLength(200))),
+			campaign: v.optional(v.pipe(v.string(), v.maxLength(200))),
+		}),
+	),
 });
 
 export const StatsQuerySchema = v.object({
