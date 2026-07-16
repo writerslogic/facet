@@ -29,15 +29,17 @@ function parseUtmFromSearch(search: string): Record<string, string> | undefined 
 export function track(_name?: string, _props?: EventProps): void {
 	if (!Config) return;
 	const { host, siteId } = Config;
-	const url = typeof location !== 'undefined' ? location.href : '';
-	const referrer = typeof document !== 'undefined' ? document.referrer : undefined;
+	const hostname = typeof location !== 'undefined' ? location.hostname : '';
+	const path = typeof location !== 'undefined' ? location.pathname : '/';
+	const referrer = typeof document !== 'undefined' ? document.referrer : '';
 	const search = typeof location !== 'undefined' ? location.search : '';
 	const utm = parseUtmFromSearch(search);
 
 	const payload: Record<string, unknown> = {
-		siteId,
-		url,
-		...(referrer ? { referrer } : {}),
+		site_id: siteId,
+		hostname,
+		path: path || '/',
+		referrer: referrer ?? '',
 		...(_name ? { name: _name } : {}),
 		...(_props ? { props: _props } : {}),
 		...(utm ? { utm } : {}),
