@@ -1,5 +1,7 @@
 // Shared stats-API types: query parameters and response shapes for GET /api/stats.
 
+import type { QueryIntent } from './schemas.js';
+
 /** Time-bucket granularity for time-series responses. */
 export type Interval = 'hour' | 'day';
 
@@ -78,6 +80,13 @@ export interface Anomaly {
 /** Response body for `GET /api/stats/anomalies`. */
 export interface AnomaliesResponse {
 	anomalies: Anomaly[];
+}
+
+/** Result of executing a constrained natural-language query intent over the aggregate helpers. */
+export interface NlQueryResult {
+	intent: QueryIntent;
+	answer: string;
+	result: { kind: 'scalar'; value: number } | { kind: 'breakdown'; rows: CountRow[] };
 }
 
 /** Response body for `GET /api/stats`. */

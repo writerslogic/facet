@@ -23,6 +23,7 @@ import {
 	topReferrers,
 } from '../db/stats.js';
 import type { AppEnv } from '../env.js';
+import { aiRunner, answerQuestion } from '../lib/ai.js';
 import { requireApiKey } from '../lib/auth.js';
 import { DAY_MS, HOUR_MS, MAX_RANGE_DAYS } from '../lib/constants.js';
 import { ApiError } from '../lib/http.js';
@@ -178,6 +179,41 @@ statsRoutes.get(
 		return c.json({ anomalies: await detectAnomalies(c.env, f) });
 	},
 );
+
+// Natural-language analytics query: translate a plain-English question into a constrained intent
+// (via Workers AI) and execute it over the aggregate helpers. Aggregate-only, no identity.
+statsRoutes.post('/stats/query', requireApiKey, async (c) => {
+	const body = (await c.req.json().catch(() => ({}))) as {
+		site_id?: unknown;
+		question?: unknown;
+		start?: unknown;
+		end?: unknown;
+	};
+	if (body.site_id !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	if (
+		typeof body.question !== 'string' ||
+		body.question.length === 0 ||
+		body.question.length > 500
+	) {
+		throw new ApiError('bad_request', 400);
+	}
+	const start = Number(body.start);
+	const end = Number(body.end);
+	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+		throw new ApiError('bad_range', 400);
+	}
+	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
+		throw new ApiError('range_too_large', 400);
+	}
+	if (!c.env.AI) {
+		return c.json({ error: 'ai_unavailable' }, 503);
+	}
+	const siteId = c.get('siteId');
+	const f = { siteId, start, end };
+	return c.json(await answerQuestion(c.env, aiRunner(c.env), siteId, body.question, f));
+});
 
 statsRoutes.get('/stats/conversions', requireApiKey, async (c) => {
 	const siteId = c.req.query('site_id');

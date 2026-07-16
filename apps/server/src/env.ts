@@ -17,6 +17,8 @@ export interface Env {
 	CF_API_TOKEN: string;
 	/** Admin bearer token (Worker secret, never a var). */
 	ADMIN_TOKEN: string;
+	/** Workers AI binding, used to translate natural-language analytics questions. */
+	AI: Ai;
 }
 
 /** App-wide Hono environment: bindings plus request-scoped variables (set by auth middleware). */

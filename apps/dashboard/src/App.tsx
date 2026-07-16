@@ -5,6 +5,7 @@ import type { StatsQuery } from '@countless/shared';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Anomalies } from './components/Anomalies.js';
+import { AskPanel } from './components/AskPanel.js';
 import { Breakdowns } from './components/Breakdowns.js';
 import { ChannelsPanel } from './components/ChannelsPanel.js';
 import { EngagementCards } from './components/EngagementCards.js';
@@ -18,13 +19,14 @@ import { useStats } from './hooks/stats.js';
 import { cn } from './lib/cn.js';
 import { useDashboard } from './state.js';
 
-type View = 'overview' | 'funnels' | 'experiments' | 'anomalies';
+type View = 'overview' | 'funnels' | 'experiments' | 'anomalies' | 'ask';
 
 const TABS: { id: View; label: string }[] = [
 	{ id: 'overview', label: 'Overview' },
 	{ id: 'funnels', label: 'Funnels' },
 	{ id: 'experiments', label: 'Experiments' },
 	{ id: 'anomalies', label: 'Anomalies' },
+	{ id: 'ask', label: 'Ask' },
 ];
 
 function Overview(): ReactElement {
@@ -95,8 +97,10 @@ function Dashboard(): ReactElement {
 				<FunnelsView apiKey={apiKey} siteId={siteId} range={range} />
 			) : view === 'experiments' ? (
 				<Experiments apiKey={apiKey} siteId={siteId} range={range} />
-			) : (
+			) : view === 'anomalies' ? (
 				<Anomalies apiKey={apiKey} siteId={siteId} range={range} />
+			) : (
+				<AskPanel apiKey={apiKey} siteId={siteId} range={range} />
 			)}
 		</Layout>
 	);

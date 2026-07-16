@@ -1,0 +1,30 @@
+{
+  // Test-only Worker config for the vitest-pool-workers runtime. Mirrors wrangler.jsonc EXCEPT it
+  // omits the `ai` binding: this miniflare version can't resolve the external AI worker, which
+  // crashes the pool at startup. The NL pipeline is tested via an injectable stub LlmRunner instead
+  // of a live binding, and the /api/stats/query route returns 503 when `env.AI` is absent — which is
+  // exactly the case here. Keep the D1/assets/vars in sync with wrangler.jsonc.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "countless",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+  "assets": {
+    "directory": "../dashboard/dist",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "countless",
+      "database_id": "PLACEHOLDER_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "RAW_RETENTION_DAYS": "90"
+  }
+}

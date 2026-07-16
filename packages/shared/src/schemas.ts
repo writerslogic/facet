@@ -73,6 +73,14 @@ export const StatsQuerySchema = v.object({
 	interval: v.optional(v.picklist(['hour', 'day'])),
 });
 
+// Constrained natural-language query intent. The LLM only ever emits a value matching this schema;
+// the executor maps it onto existing aggregate helpers. Never used to build SQL from model text.
+export const QueryIntentSchema = v.object({
+	metric: v.picklist(['pageviews', 'visitors', 'events', 'sessions', 'bounce_rate']),
+	dimension: v.optional(v.picklist(['path', 'referrer', 'country', 'device', 'channel'])),
+	limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(50))),
+});
+
 export const CreateSiteSchema = v.object({
 	name: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
 	domain: v.pipe(v.string(), v.minLength(1), v.maxLength(253)),
@@ -114,6 +122,7 @@ export const ExperimentSchema = v.object({
 	active: v.optional(v.boolean()),
 });
 
+export type QueryIntent = v.InferOutput<typeof QueryIntentSchema>;
 export type CollectInput = v.InferOutput<typeof CollectPayloadSchema>;
 export type ServerEventInput = v.InferOutput<typeof ServerEventSchema>;
 export type StatsQueryInput = v.InferOutput<typeof StatsQuerySchema>;

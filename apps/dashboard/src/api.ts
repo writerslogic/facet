@@ -28,6 +28,25 @@ export async function apiFetch<T>(path: string, apiKey: string): Promise<T> {
 	return (await res.json()) as T;
 }
 
+/** Canonical POST helper: attaches the bearer token + JSON body and unwraps `{ error }` on failure. */
+export async function apiPost<T>(path: string, apiKey: string, body: unknown): Promise<T> {
+	const res = await fetch(path, {
+		method: 'POST',
+		headers: {
+			Authorization: `Bearer ${apiKey}`,
+			'content-type': 'application/json',
+		},
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const errorBody = (await res.json().catch(() => ({}))) as {
+			error?: string;
+		};
+		throw new Error(errorBody.error ?? 'request_failed');
+	}
+	return (await res.json()) as T;
+}
+
 /** Fetch the summary + series + top-N stats for a site. */
 export function fetchStats(apiKey: string, query: StatsQuery): Promise<StatsResponse> {
 	return apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, apiKey);
