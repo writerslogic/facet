@@ -7,6 +7,7 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
 ## Authentication
 
 - `POST /api/collect` — **public**, no auth (CORS-open, rate-limited).
+- `POST /api/event` — **API key**: first-party server-to-server ingest (`Authorization: Bearer <clk_...>`).
 - `GET /api/stats`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
   `GET /api/stats/conversions`, `GET /api/stats/goals`, `GET /api/stats/funnels`,
   `GET /api/funnels/:id/report` — **API key**: `Authorization: Bearer <clk_...>`
@@ -84,6 +85,29 @@ A validation failure returns:
 
 ```json
 { "error": "validation_failed", "issues": [ /* valibot issues */ ] }
+```
+
+---
+
+## `POST /api/event`
+
+First-party **server-to-server** event ingest, authenticated with an API key. Send events from
+your own backend so ad-blockers and content filters can't drop client-side traffic — because the
+request originates from your first-party server, there is no third-party script to block. Same
+privacy model as the beacon: any supplied `ip` is used only to derive the daily visitor hash and is
+never stored.
+
+- **Auth:** `Authorization: Bearer <api_key>` (the site is taken from the key; no `site_id` in the body).
+- **Body:** `hostname`, `path` (absolute), optional `referrer`, `name`, `props`, `utm`, and optional
+  `ip` / `user_agent` (the end-user's, for hashing + device/channel classification).
+- **Responses:** `202` (empty) on accept or bot-drop; `400 validation_failed`; `401 invalid_api_key`.
+
+```sh
+curl -X POST https://your-deployment.example.com/api/event \
+  -H "Authorization: Bearer clk_..." \
+  -H "content-type: application/json" \
+  -d '{"hostname":"shop.example.com","path":"/checkout","name":"purchase",
+       "props":{"amount":42},"ip":"203.0.113.9","user_agent":"Mozilla/5.0 ..."}'
 ```
 
 ---
