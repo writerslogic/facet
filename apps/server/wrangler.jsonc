@@ -28,6 +28,10 @@
   "vars": {
     // Rolling retention window for raw events, in days.
     "RAW_RETENTION_DAYS": "90"
+  },
+  // Workers AI: translates natural-language analytics questions into a constrained query intent.
+  "ai": {
+    "binding": "AI"
   }
 
   // ─────────────────────────────────────────────────────────────────────────

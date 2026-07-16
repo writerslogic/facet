@@ -5,8 +5,10 @@ import { type Goal, StatsQuerySchema, type StatsResponse } from '@countless/shar
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
-import { listFunnels, listGoals } from '../db/catalog.js';
+import { detectAnomalies } from '../db/anomaly.js';
+import { listExperiments, listFunnels, listGoals } from '../db/catalog.js';
 import { goalConversions } from '../db/conversions.js';
+import { experimentResult } from '../db/experiments.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import {
@@ -21,6 +23,7 @@ import {
 	topReferrers,
 } from '../db/stats.js';
 import type { AppEnv } from '../env.js';
+import { aiRunner, answerQuestion } from '../lib/ai.js';
 import { requireApiKey } from '../lib/auth.js';
 import { DAY_MS, HOUR_MS, MAX_RANGE_DAYS } from '../lib/constants.js';
 import { ApiError } from '../lib/http.js';
@@ -148,6 +151,70 @@ statsRoutes.get(
 	},
 );
 
+statsRoutes.get(
+	'/stats/anomalies',
+	requireApiKey,
+	vValidator('query', StatsQuerySchema, (result, c) => {
+		if (!result.success) {
+			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
+		}
+	}),
+	async (c) => {
+		const query = c.req.valid('query');
+		if (query.site_id !== c.get('siteId')) {
+			throw new ApiError('site_mismatch', 403);
+		}
+		if (query.end <= query.start) {
+			throw new ApiError('bad_range', 400);
+		}
+		if (query.end - query.start > MAX_RANGE_DAYS * DAY_MS) {
+			throw new ApiError('range_too_large', 400);
+		}
+		const f = {
+			siteId: query.site_id,
+			hostname: query.hostname,
+			start: query.start,
+			end: query.end,
+		};
+		return c.json({ anomalies: await detectAnomalies(c.env, f) });
+	},
+);
+
+// Natural-language analytics query: translate a plain-English question into a constrained intent
+// (via Workers AI) and execute it over the aggregate helpers. Aggregate-only, no identity.
+statsRoutes.post('/stats/query', requireApiKey, async (c) => {
+	const body = (await c.req.json().catch(() => ({}))) as {
+		site_id?: unknown;
+		question?: unknown;
+		start?: unknown;
+		end?: unknown;
+	};
+	if (body.site_id !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	if (
+		typeof body.question !== 'string' ||
+		body.question.length === 0 ||
+		body.question.length > 500
+	) {
+		throw new ApiError('bad_request', 400);
+	}
+	const start = Number(body.start);
+	const end = Number(body.end);
+	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+		throw new ApiError('bad_range', 400);
+	}
+	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
+		throw new ApiError('range_too_large', 400);
+	}
+	if (!c.env.AI) {
+		return c.json({ error: 'ai_unavailable' }, 503);
+	}
+	const siteId = c.get('siteId');
+	const f = { siteId, start, end };
+	return c.json(await answerQuestion(c.env, aiRunner(c.env), siteId, body.question, f));
+});
+
 statsRoutes.get('/stats/conversions', requireApiKey, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
@@ -206,4 +273,47 @@ statsRoutes.get('/stats/funnels', requireApiKey, async (c) => {
 		throw new ApiError('site_mismatch', 403);
 	}
 	return c.json({ funnels: await listFunnels(c.env, siteId) });
+});
+
+statsRoutes.get('/stats/experiments', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	return c.json({ experiments: await listExperiments(c.env, siteId) });
+});
+
+statsRoutes.get('/stats/experiment', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	const start = Number(c.req.query('start'));
+	const end = Number(c.req.query('end'));
+	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+		throw new ApiError('bad_range', 400);
+	}
+	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
+		throw new ApiError('range_too_large', 400);
+	}
+	const goalType = c.req.query('goal_type');
+	if (goalType !== 'event' && goalType !== 'path') {
+		throw new ApiError('bad_goal', 400);
+	}
+	const goalValue = c.req.query('goal_value') ?? '';
+	if (goalValue.length === 0) {
+		throw new ApiError('bad_goal', 400);
+	}
+	const experiments = await listExperiments(c.env, siteId);
+	const experiment = experiments.find((e) => e.id === (c.req.query('experiment_id') ?? ''));
+	if (!experiment) {
+		return c.json({ error: 'not_found' }, 404);
+	}
+	const result = await experimentResult(
+		c.env,
+		experiment,
+		{ type: goalType, value: goalValue },
+		{ siteId, start, end },
+	);
+	return c.json(result);
 });

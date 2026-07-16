@@ -126,3 +126,19 @@ export const funnels = sqliteTable(
 	},
 	(t) => [index('idx_funnels_site').on(t.site_id)],
 );
+
+// experiments store their `variants` as a JSON TEXT column (mirrors funnels.steps): the validated
+// array is stringified on insert and parsed back on read. `active` is a 0/1 integer flag.
+export const experiments = sqliteTable(
+	'experiments',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		name: text('name').notNull(),
+		flag_key: text('flag_key').notNull(),
+		variants: text('variants').notNull(),
+		active: integer('active').notNull().default(1),
+		created_at: integer('created_at').notNull(),
+	},
+	(t) => [index('idx_experiments_site').on(t.site_id)],
+);

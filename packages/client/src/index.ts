@@ -63,3 +63,10 @@ export function track(_name?: string, _props?: EventProps): void {
 export function init(_config_: CountlessConfig): void {
 	Config = _config_;
 }
+
+/** The active config, or undefined before init(). Used by the experiments module. */
+export function getConfig(): CountlessConfig | undefined {
+	return Config;
+}
+
+export { variant } from './experiments.js';

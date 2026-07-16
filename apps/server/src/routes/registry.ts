@@ -6,6 +6,8 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { adminRoutes } from './admin.js';
 import { collectRoute } from './collect.js';
+import { eventRoute } from './event.js';
+import { experimentsRoutes } from './experiments.js';
 import { funnelsRoutes } from './funnels.js';
 import { goalsRoutes } from './goals.js';
 import { statsRoutes } from './stats.js';
@@ -22,8 +24,10 @@ export interface RouteEntry {
 export const ROUTES: RouteEntry[] = [
 	{ path: '/api/health', router: healthRoute },
 	{ path: '/api/collect', router: collectRoute },
+	{ path: '/api/event', router: eventRoute },
 	{ path: '/api', router: statsRoutes },
 	{ path: '/api', router: adminRoutes },
 	{ path: '/api/goals', router: goalsRoutes },
 	{ path: '/api/funnels', router: funnelsRoutes },
+	{ path: '/api/experiments', router: experimentsRoutes },
 ];

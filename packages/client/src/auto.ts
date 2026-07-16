@@ -2,13 +2,17 @@
 // executing script's data-* attributes, installs the window.umami-compatible shim, fires an initial
 // pageview, and auto-tracks SPA navigations (history pushState/replaceState + popstate).
 
-import { init, track } from './index.js';
+import { init, track, variant } from './index.js';
 
 declare global {
 	interface Window {
 		/** umami-compatible global: window.umami.track(name, props). */
 		umami?: { track: typeof track };
-		countless?: { track: typeof track; init: typeof init };
+		countless?: {
+			track: typeof track;
+			init: typeof init;
+			variant: typeof variant;
+		};
 	}
 }
 
@@ -61,7 +65,7 @@ function boot(): void {
 	if (typeof window !== 'undefined') {
 		window.addEventListener('popstate', () => track());
 		window.umami = { track };
-		window.countless = { track, init };
+		window.countless = { track, init, variant };
 	}
 }
 

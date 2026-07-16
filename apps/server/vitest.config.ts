@@ -13,7 +13,9 @@ export default defineWorkersConfig(async () => {
 				workers: {
 					singleWorker: true,
 					isolatedStorage: true,
-					wrangler: { configPath: './wrangler.jsonc' },
+					// Uses wrangler.test.jsonc (wrangler.jsonc minus the `ai` binding, which crashes
+					// this miniflare version). See that file's header for the rationale.
+					wrangler: { configPath: './wrangler.test.jsonc' },
 					miniflare: {
 						bindings: {
 							ADMIN_TOKEN: 'test-admin-token',

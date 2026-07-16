@@ -1,5 +1,7 @@
 // Shared stats-API types: query parameters and response shapes for GET /api/stats.
 
+import type { QueryIntent } from './schemas.js';
+
 /** Time-bucket granularity for time-series responses. */
 export type Interval = 'hour' | 'day';
 
@@ -52,6 +54,39 @@ export interface SeriesPoint {
 	t: number;
 	pageviews: number;
 	visitors: number;
+}
+
+/** A detected anomaly in a metric's hourly series, with an optional root-cause diagnosis. */
+export interface Anomaly {
+	metric: 'pageviews';
+	/** ms bucket start of the anomalous (most recent) hour. */
+	bucket: number;
+	/** Pageviews in that bucket. */
+	value: number;
+	baseline_mean: number;
+	/** Signed z-score. */
+	z: number;
+	direction: 'drop' | 'spike';
+	diagnosis: {
+		dimension: 'device' | 'country' | 'channel';
+		value: string;
+		current: number;
+		baseline_avg: number;
+	} | null;
+	/** Plain-language autopsy. */
+	summary: string;
+}
+
+/** Response body for `GET /api/stats/anomalies`. */
+export interface AnomaliesResponse {
+	anomalies: Anomaly[];
+}
+
+/** Result of executing a constrained natural-language query intent over the aggregate helpers. */
+export interface NlQueryResult {
+	intent: QueryIntent;
+	answer: string;
+	result: { kind: 'scalar'; value: number } | { kind: 'breakdown'; rows: CountRow[] };
 }
 
 /** Response body for `GET /api/stats`. */
