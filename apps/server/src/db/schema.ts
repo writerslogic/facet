@@ -98,3 +98,31 @@ export const apiKeys = sqliteTable(
 	},
 	(t) => [index('idx_apikeys_site').on(t.siteId)],
 );
+
+// goals/funnels use snake_case JS keys for the columns crudRouter and its POST body touch (`id`,
+// `site_id`, `created_at`, and `match_value`) so the validated body inserts verbatim; this satisfies
+// the crudRouter `CrudTable` contract without a per-field remap.
+export const goals = sqliteTable(
+	'goals',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		name: text('name').notNull(),
+		type: text('type').notNull(),
+		match_value: text('match_value').notNull(),
+		created_at: integer('created_at').notNull(),
+	},
+	(t) => [index('idx_goals_site').on(t.site_id)],
+);
+
+export const funnels = sqliteTable(
+	'funnels',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		name: text('name').notNull(),
+		steps: text('steps').notNull(),
+		created_at: integer('created_at').notNull(),
+	},
+	(t) => [index('idx_funnels_site').on(t.site_id)],
+);

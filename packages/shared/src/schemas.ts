@@ -59,7 +59,28 @@ export const IssueKeySchema = v.object({
 	label: v.optional(v.pipe(v.string(), v.maxLength(100))),
 });
 
+export const GoalSchema = v.object({
+	site_id: v.pipe(v.string(), v.uuid()),
+	name: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
+	type: v.picklist(['event', 'path']),
+	match_value: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
+});
+
+export const FunnelStepSchema = v.object({
+	type: v.picklist(['event', 'path']),
+	match_value: v.pipe(v.string(), v.minLength(1), v.maxLength(2048)),
+});
+
+export const FunnelSchema = v.object({
+	site_id: v.pipe(v.string(), v.uuid()),
+	name: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
+	steps: v.pipe(v.array(FunnelStepSchema), v.minLength(2), v.maxLength(10)),
+});
+
 export type CollectInput = v.InferOutput<typeof CollectPayloadSchema>;
 export type StatsQueryInput = v.InferOutput<typeof StatsQuerySchema>;
 export type CreateSiteInput = v.InferOutput<typeof CreateSiteSchema>;
 export type IssueKeyInput = v.InferOutput<typeof IssueKeySchema>;
+export type GoalInput = v.InferOutput<typeof GoalSchema>;
+export type FunnelStepInput = v.InferOutput<typeof FunnelStepSchema>;
+export type FunnelInput = v.InferOutput<typeof FunnelSchema>;

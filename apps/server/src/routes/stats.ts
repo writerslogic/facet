@@ -1,9 +1,13 @@
 // GET /api/stats — API-key authenticated read endpoint. Validates the range, enforces that the key
 // owns the requested site, and assembles the full stats response from the T021 helpers.
 
-import { StatsQuerySchema, type StatsResponse } from '@countless/shared';
+import { type Goal, StatsQuerySchema, type StatsResponse } from '@countless/shared';
 import { vValidator } from '@hono/valibot-validator';
+import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { goalConversions } from '../db/conversions.js';
+import { db } from '../db/queries.js';
+import * as schema from '../db/schema.js';
 import {
 	channels,
 	engagement,
@@ -142,3 +146,45 @@ statsRoutes.get(
 		return c.json({ channels: await channels(c.env, f) });
 	},
 );
+
+statsRoutes.get('/stats/conversions', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	const start = Number(c.req.query('start'));
+	const end = Number(c.req.query('end'));
+	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+		throw new ApiError('bad_range', 400);
+	}
+	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
+		throw new ApiError('range_too_large', 400);
+	}
+	const row = await db(c.env)
+		.select()
+		.from(schema.goals)
+		.where(eq(schema.goals.id, c.req.query('goal_id') ?? ''))
+		.get();
+	if (!row || row.site_id !== siteId) {
+		return c.json({ error: 'not_found' }, 404);
+	}
+	const goal: Goal = {
+		id: row.id,
+		site_id: row.site_id,
+		name: row.name,
+		type: row.type as Goal['type'],
+		match_value: row.match_value,
+		created_at: row.created_at,
+	};
+	const result = await goalConversions(c.env, siteId, goal, {
+		siteId,
+		start,
+		end,
+	});
+	return c.json({
+		goal_id: goal.id,
+		conversions: result.conversions,
+		sessions: result.sessions,
+		rate: result.rate,
+	});
+});
