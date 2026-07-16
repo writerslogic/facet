@@ -13,7 +13,9 @@ describe('migration 0002 — sessions & traffic columns', () => {
 	});
 
 	it('event_sessions table exists with 13 columns', async () => {
-		const result = await env.DB.prepare('PRAGMA table_info(event_sessions)').all<{ name: string }>();
+		const result = await env.DB.prepare('PRAGMA table_info(event_sessions)').all<{
+			name: string;
+		}>();
 		expect(result.results).toHaveLength(13);
 		const names = result.results.map((r) => r.name);
 		for (const col of [

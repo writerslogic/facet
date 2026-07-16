@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
 import { env } from 'cloudflare:test';
+import { describe, expect, it } from 'vitest';
 
 describe('test harness', () => {
 	it('has a D1 binding', () => {

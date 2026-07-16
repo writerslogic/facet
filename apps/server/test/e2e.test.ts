@@ -25,7 +25,7 @@ interface Beacon {
 	name?: string;
 }
 
-function collect(siteId: string, b: Beacon): Promise<Response> {
+function collect(siteId: string, b: Beacon) {
 	const body: Record<string, unknown> = {
 		site_id: siteId,
 		hostname: b.hostname,
