@@ -56,6 +56,26 @@ and a `siteId`. Until `init` is called, `track()` is a no-op. `track()` reads
 `location.hostname`, `location.pathname`, and `document.referrer` from the browser, and
 appends any `utm_source` / `utm_medium` / `utm_campaign` query parameters as `utm`.
 
+## Automatic UTM & form tracking
+
+The client captures marketing attribution and form submissions with no extra code:
+
+- **UTM capture** — every beacon reads `utm_source`, `utm_medium`, and `utm_campaign`
+  from the current URL's query string and sends them as `utm: { source, medium, campaign }`
+  (only the params that are present). The server uses these to classify each event's
+  [traffic channel](./api.md#traffic-channels) (paid / email / social / organic / direct /
+  internal / referral).
+- **Form submissions** — when loaded via the script tag, the client auto-tracks form
+  submits as a `form_submit` event with props `form_id`, `form_name`, and `action` (any of
+  which may be `null`). **No field values are ever read.** Opt a form out by adding
+  `data-countless-ignore` to the `<form>`:
+
+  ```html
+  <form data-countless-ignore>
+    <!-- this form's submits are not tracked -->
+  </form>
+  ```
+
 ## umami compatibility
 
 Countless installs umami-compatible globals so existing umami sites migrate by swapping
