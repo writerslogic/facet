@@ -1,6 +1,6 @@
 {
 	"name": "countless",
-	"version": "0.0.0",
+	"version": "0.1.0",
 	"description": "Countless browser tracking snippet: zero-dependency, umami-compatible.",
 	"license": "MIT",
 	"type": "module",
