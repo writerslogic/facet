@@ -35,3 +35,9 @@ export const DAY_MS = 86_400_000 as const;
 
 /** Inactivity gap after which a new session starts, in milliseconds (30 minutes). */
 export const SESSION_TIMEOUT_MS = 1_800_000 as const;
+
+/** Signed z-score threshold at/above which a bucket is flagged as anomalous. */
+export const ANOMALY_Z = 3.0 as const;
+
+/** Minimum number of baseline buckets required before an anomaly can be scored. */
+export const ANOMALY_MIN_BASELINE = 3 as const;

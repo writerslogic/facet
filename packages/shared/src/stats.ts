@@ -54,6 +54,32 @@ export interface SeriesPoint {
 	visitors: number;
 }
 
+/** A detected anomaly in a metric's hourly series, with an optional root-cause diagnosis. */
+export interface Anomaly {
+	metric: 'pageviews';
+	/** ms bucket start of the anomalous (most recent) hour. */
+	bucket: number;
+	/** Pageviews in that bucket. */
+	value: number;
+	baseline_mean: number;
+	/** Signed z-score. */
+	z: number;
+	direction: 'drop' | 'spike';
+	diagnosis: {
+		dimension: 'device' | 'country' | 'channel';
+		value: string;
+		current: number;
+		baseline_avg: number;
+	} | null;
+	/** Plain-language autopsy. */
+	summary: string;
+}
+
+/** Response body for `GET /api/stats/anomalies`. */
+export interface AnomaliesResponse {
+	anomalies: Anomaly[];
+}
+
 /** Response body for `GET /api/stats`. */
 export interface StatsResponse {
 	summary: StatsSummary;

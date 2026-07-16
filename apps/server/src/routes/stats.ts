@@ -5,6 +5,7 @@ import { type Goal, StatsQuerySchema, type StatsResponse } from '@countless/shar
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { detectAnomalies } from '../db/anomaly.js';
 import { listExperiments, listFunnels, listGoals } from '../db/catalog.js';
 import { goalConversions } from '../db/conversions.js';
 import { experimentResult } from '../db/experiments.js';
@@ -146,6 +147,35 @@ statsRoutes.get(
 			end: query.end,
 		};
 		return c.json({ channels: await channels(c.env, f) });
+	},
+);
+
+statsRoutes.get(
+	'/stats/anomalies',
+	requireApiKey,
+	vValidator('query', StatsQuerySchema, (result, c) => {
+		if (!result.success) {
+			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
+		}
+	}),
+	async (c) => {
+		const query = c.req.valid('query');
+		if (query.site_id !== c.get('siteId')) {
+			throw new ApiError('site_mismatch', 403);
+		}
+		if (query.end <= query.start) {
+			throw new ApiError('bad_range', 400);
+		}
+		if (query.end - query.start > MAX_RANGE_DAYS * DAY_MS) {
+			throw new ApiError('range_too_large', 400);
+		}
+		const f = {
+			siteId: query.site_id,
+			hostname: query.hostname,
+			start: query.start,
+			end: query.end,
+		};
+		return c.json({ anomalies: await detectAnomalies(c.env, f) });
 	},
 );
 
