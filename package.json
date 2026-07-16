@@ -11,23 +11,23 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "dev:web": "pnpm --filter web dev",
-    "dev:worker": "pnpm --filter worker dev",
+    "dev:web": "pnpm --filter @countless/dashboard dev",
+    "dev:worker": "pnpm --filter @countless/server dev",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "ci": "biome ci .",
-    "build": "pnpm -r build",
-    "deploy": "pnpm --filter worker deploy",
-    "db:generate": "pnpm --filter worker drizzle-kit generate:sqlite",
-    "db:migrate": "pnpm --filter worker wrangler d1 migrations apply countless_db"
+    "build": "pnpm --filter @countless/dashboard build && pnpm -r --filter '!@countless/dashboard' build",
+    "deploy": "pnpm --filter @countless/server deploy",
+    "db:generate": "pnpm --filter @countless/server db:generate",
+    "db:migrate": "pnpm --filter @countless/server migrate:local"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
-    "@cloudflare/workers-types": "^4.20250712.0",
+    "@cloudflare/workers-types": "4.20250712.0",
     "typescript": "5.7.3",
-    "wrangler": "^4.0.0"
+    "wrangler": "4.0.0"
   }
 }

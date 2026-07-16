@@ -11,5 +11,7 @@ export async function fetchStats(_apiKey: string, _query: StatsQuery): Promise<S
 		top_paths: [],
 		top_referrers: [],
 		top_events: [],
+		top_countries: [],
+		top_devices: [],
 	};
 }
