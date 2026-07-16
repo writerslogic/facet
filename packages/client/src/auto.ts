@@ -42,6 +42,22 @@ function boot(): void {
 			};
 		}
 	}
+	// Auto-track form submissions (no field values are ever read). Opt out with data-countless-ignore.
+	document.addEventListener(
+		'submit',
+		(event) => {
+			const form = event.target as HTMLFormElement | null;
+			if (!form || form.tagName !== 'FORM' || form.hasAttribute('data-countless-ignore'))
+				return;
+			track('form_submit', {
+				form_id: form.id || null,
+				form_name: form.getAttribute('name') || null,
+				action: form.getAttribute('action') || null,
+			});
+		},
+		true,
+	);
+
 	if (typeof window !== 'undefined') {
 		window.addEventListener('popstate', () => track());
 		window.umami = { track };

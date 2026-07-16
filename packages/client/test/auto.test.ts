@@ -13,6 +13,7 @@ function setup(): { beacons: () => number } {
 	});
 	vi.stubGlobal('document', {
 		referrer: '',
+		addEventListener: () => {},
 		currentScript: {
 			getAttribute: (k: string) =>
 				k === 'data-site-id' ? '11111111-1111-4111-8111-111111111111' : null,
