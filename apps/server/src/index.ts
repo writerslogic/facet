@@ -2,7 +2,7 @@
 
 import { createApp } from './app.js';
 import type { Env } from './env.js';
-import { runScheduled } from './lib/rollups.js';
+import { runScheduled } from './lib/scheduled.js';
 
 const app = createApp();
 
