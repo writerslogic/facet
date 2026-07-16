@@ -4,6 +4,8 @@
 import type { StatsQuery } from '@countless/shared';
 import type { ReactElement } from 'react';
 import { Breakdowns } from './components/Breakdowns.js';
+import { ChannelsPanel } from './components/ChannelsPanel.js';
+import { EngagementCards } from './components/EngagementCards.js';
 import { KeyGate } from './components/KeyGate.js';
 import { KpiCards } from './components/KpiCards.js';
 import { Layout } from './components/Layout.js';
@@ -28,13 +30,26 @@ function Dashboard(): ReactElement {
 		<Layout>
 			<div className="space-y-6">
 				<KpiCards summary={data?.summary ?? { pageviews: 0, visitors: 0, events: 0 }} />
+				<EngagementCards
+					engagement={
+						data?.engagement ?? {
+							sessions: 0,
+							bounce_rate: 0,
+							pages_per_session: 0,
+							avg_duration_ms: 0,
+						}
+					}
+				/>
 				<TrafficChart
 					series={data?.series ?? []}
 					loading={isLoading}
 					error={errorMessage}
 				/>
 				{data ? (
-					<Breakdowns stats={data} />
+					<>
+						<ChannelsPanel channels={data.channels} />
+						<Breakdowns stats={data} />
+					</>
 				) : (
 					<p className="text-sm text-neutral-400">
 						{errorMessage ?? 'Loading breakdowns…'}
