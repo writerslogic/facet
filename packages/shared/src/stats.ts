@@ -38,6 +38,14 @@ export interface CountRow {
 	count: number;
 }
 
+/** Engagement metrics derived from sessionized events over a range. */
+export interface EngagementSummary {
+	sessions: number;
+	bounce_rate: number;
+	pages_per_session: number;
+	avg_duration_ms: number;
+}
+
 /** A single point in a time series. */
 export interface SeriesPoint {
 	/** Bucket start, unix epoch milliseconds. */
@@ -55,4 +63,6 @@ export interface StatsResponse {
 	top_events: CountRow[];
 	top_countries: CountRow[];
 	top_devices: CountRow[];
+	engagement: EngagementSummary;
+	channels: CountRow[];
 }

@@ -5,6 +5,8 @@ import { StatsQuerySchema, type StatsResponse } from '@countless/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import {
+	channels,
+	engagement,
 	series,
 	summary,
 	topCountries,
@@ -47,16 +49,27 @@ statsRoutes.get(
 			start: query.start,
 			end: query.end,
 		};
-		const [summaryResult, seriesResult, paths, referrers, events, countries, devices] =
-			await Promise.all([
-				summary(c.env, f),
-				series(c.env, f, interval),
-				topPaths(c.env, f),
-				topReferrers(c.env, f),
-				topEvents(c.env, f),
-				topCountries(c.env, f),
-				topDevices(c.env, f),
-			]);
+		const [
+			summaryResult,
+			seriesResult,
+			paths,
+			referrers,
+			events,
+			countries,
+			devices,
+			engagementResult,
+			channelsResult,
+		] = await Promise.all([
+			summary(c.env, f),
+			series(c.env, f, interval),
+			topPaths(c.env, f),
+			topReferrers(c.env, f),
+			topEvents(c.env, f),
+			topCountries(c.env, f),
+			topDevices(c.env, f),
+			engagement(c.env, f),
+			channels(c.env, f),
+		]);
 		const body: StatsResponse = {
 			summary: summaryResult,
 			series: seriesResult,
@@ -65,7 +78,67 @@ statsRoutes.get(
 			top_events: events,
 			top_countries: countries,
 			top_devices: devices,
+			engagement: engagementResult,
+			channels: channelsResult,
 		};
 		return c.json(body);
+	},
+);
+
+statsRoutes.get(
+	'/stats/sessions',
+	requireApiKey,
+	vValidator('query', StatsQuerySchema, (result, c) => {
+		if (!result.success) {
+			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
+		}
+	}),
+	async (c) => {
+		const query = c.req.valid('query');
+		if (query.site_id !== c.get('siteId')) {
+			throw new ApiError('site_mismatch', 403);
+		}
+		if (query.end <= query.start) {
+			throw new ApiError('bad_range', 400);
+		}
+		if (query.end - query.start > MAX_RANGE_DAYS * DAY_MS) {
+			throw new ApiError('range_too_large', 400);
+		}
+		const f = {
+			siteId: query.site_id,
+			hostname: query.hostname,
+			start: query.start,
+			end: query.end,
+		};
+		return c.json({ engagement: await engagement(c.env, f) });
+	},
+);
+
+statsRoutes.get(
+	'/stats/channels',
+	requireApiKey,
+	vValidator('query', StatsQuerySchema, (result, c) => {
+		if (!result.success) {
+			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
+		}
+	}),
+	async (c) => {
+		const query = c.req.valid('query');
+		if (query.site_id !== c.get('siteId')) {
+			throw new ApiError('site_mismatch', 403);
+		}
+		if (query.end <= query.start) {
+			throw new ApiError('bad_range', 400);
+		}
+		if (query.end - query.start > MAX_RANGE_DAYS * DAY_MS) {
+			throw new ApiError('range_too_large', 400);
+		}
+		const f = {
+			siteId: query.site_id,
+			hostname: query.hostname,
+			start: query.start,
+			end: query.end,
+		};
+		return c.json({ channels: await channels(c.env, f) });
 	},
 );

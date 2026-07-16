@@ -16,6 +16,13 @@ const RESPONSE: StatsResponse = {
 	top_events: [],
 	top_countries: [],
 	top_devices: [],
+	engagement: {
+		sessions: 0,
+		bounce_rate: 0,
+		pages_per_session: 0,
+		avg_duration_ms: 0,
+	},
+	channels: [],
 };
 
 describe('runStats', () => {

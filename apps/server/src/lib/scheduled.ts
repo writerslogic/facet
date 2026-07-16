@@ -3,9 +3,12 @@
 // editing `runScheduled` (see the DRY mandate).
 
 import type { Env } from '../env.js';
+import { HOUR_MS } from './constants.js';
 import { createLogger } from './log.js';
 import { enforceRetention } from './retention.js';
 import { runRollups } from './rollups.js';
+import { dayKey } from './salt.js';
+import { buildSessions } from './sessions.js';
 
 /** A unit of scheduled work: a stable name and an idempotent run function. */
 export interface ScheduledJob {
@@ -22,6 +25,12 @@ export function registerJob(job: ScheduledJob): void {
 }
 
 registerJob({ name: 'rollups', run: (env, now) => runRollups(env, now) });
+registerJob({
+	name: 'sessions',
+	run: async (env, now) => {
+		await buildSessions(env, dayKey(now - HOUR_MS));
+	},
+});
 registerJob({
 	name: 'retention',
 	run: (env, now) => enforceRetention(env, now),

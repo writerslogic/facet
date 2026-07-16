@@ -32,3 +32,6 @@ export const HOUR_MS = 3_600_000 as const;
 
 /** One day in milliseconds. */
 export const DAY_MS = 86_400_000 as const;
+
+/** Inactivity gap after which a new session starts, in milliseconds (30 minutes). */
+export const SESSION_TIMEOUT_MS = 1_800_000 as const;

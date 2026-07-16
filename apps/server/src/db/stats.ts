@@ -2,8 +2,15 @@
 // reads via Drizzle `sql` helpers (COUNT(DISTINCT …), bucket math) — no raw string SQL. Time is
 // unix ms; ranges are [start, end).
 
-import type { CountRow, Interval, SeriesPoint, StatsFilter, StatsSummary } from '@countless/shared';
-import { type SQL, and, desc, isNotNull, ne, sql } from 'drizzle-orm';
+import type {
+	CountRow,
+	EngagementSummary,
+	Interval,
+	SeriesPoint,
+	StatsFilter,
+	StatsSummary,
+} from '@countless/shared';
+import { type SQL, and, desc, eq, gte, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { Env } from '../env.js';
 import { DAY_MS, HOUR_MS } from '../lib/constants.js';
@@ -111,4 +118,60 @@ export function topCountries(env: Env, f: StatsFilter, limit = 10): Promise<Coun
 
 export function topDevices(env: Env, f: StatsFilter): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.device, { excludeNull: true });
+}
+
+/** Build the site + [start, end) predicate over `event_sessions` (hostname is not a session column). */
+function buildSessionWhere(f: StatsFilter): SQL {
+	return and(
+		eq(schema.eventSessions.siteId, f.siteId),
+		gte(schema.eventSessions.startedAt, f.start),
+		lt(schema.eventSessions.startedAt, f.end),
+	) as SQL;
+}
+
+/** Session engagement metrics over the range; all zero when there are no sessions. */
+export async function engagement(env: Env, f: StatsFilter): Promise<EngagementSummary> {
+	const row = await db(env)
+		.select({
+			sessions: sql<number>`COUNT(*)`,
+			bounces: sql<number>`SUM(${schema.eventSessions.isBounce})`,
+			pageviews: sql<number>`SUM(${schema.eventSessions.pageviews})`,
+			duration: sql<number>`SUM(${schema.eventSessions.durationMs})`,
+		})
+		.from(schema.eventSessions)
+		.where(buildSessionWhere(f))
+		.get();
+	const sessions = Number(row?.sessions ?? 0);
+	if (sessions === 0) {
+		return {
+			sessions: 0,
+			bounce_rate: 0,
+			pages_per_session: 0,
+			avg_duration_ms: 0,
+		};
+	}
+	return {
+		sessions,
+		bounce_rate: Number(row?.bounces ?? 0) / sessions,
+		pages_per_session: Number(row?.pageviews ?? 0) / sessions,
+		avg_duration_ms: Number(row?.duration ?? 0) / sessions,
+	};
+}
+
+/** Sessions grouped by acquisition channel, excluding `internal` and NULL, count desc. */
+export async function channels(env: Env, f: StatsFilter): Promise<CountRow[]> {
+	const count = sql<number>`COUNT(*)`;
+	const rows = await db(env)
+		.select({ key: schema.eventSessions.channel, count })
+		.from(schema.eventSessions)
+		.where(
+			and(
+				buildSessionWhere(f),
+				isNotNull(schema.eventSessions.channel),
+				ne(schema.eventSessions.channel, 'internal'),
+			),
+		)
+		.groupBy(schema.eventSessions.channel)
+		.orderBy(desc(count), schema.eventSessions.channel);
+	return rows.map((r) => ({ key: String(r.key), count: Number(r.count) }));
 }
