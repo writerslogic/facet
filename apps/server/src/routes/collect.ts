@@ -5,14 +5,10 @@
 import { CollectPayloadSchema } from '@countless/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
-import { insertEvent, upsertSession } from '../db/queries.js';
 import type { AppEnv } from '../env.js';
-import { isBot } from '../lib/bots.js';
-import { classifyChannel } from '../lib/channel.js';
-import { visitorHash } from '../lib/hash.js';
+import { ingestEvent } from '../lib/ingest.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, country, device } from '../lib/request-meta.js';
-import { dayKey, getDailySalt } from '../lib/salt.js';
 
 export const collectRoute = new Hono<AppEnv>();
 
@@ -26,42 +22,21 @@ collectRoute.post(
 	}),
 	async (c) => {
 		const body = c.req.valid('json');
-		const now = Date.now();
 		const ua = c.req.header('user-agent') ?? '';
-		if (isBot(ua)) {
-			return c.body(null, 202);
-		}
-		const ip = clientIp(c.req.raw);
-		const dk = dayKey(now);
-		const salt = await getDailySalt(c.env, dk, now);
-		const vh = await visitorHash(ip, ua, salt, body.site_id);
-		const utm = {
-			source: body.utm?.source ?? null,
-			medium: body.utm?.medium ?? null,
-			campaign: body.utm?.campaign ?? null,
-		};
-		const channel = classifyChannel({
-			referrer: body.referrer,
-			utm,
-			siteHostname: body.hostname,
-		});
-		await insertEvent(c.env, {
+		await ingestEvent(c.env, {
 			siteId: body.site_id,
+			ip: clientIp(c.req.raw),
+			ua,
 			hostname: body.hostname,
 			path: body.path,
 			referrer: body.referrer,
 			name: body.name ?? null,
 			props: body.props ?? null,
-			visitorHash: vh,
+			utm: body.utm ?? null,
 			country: country(c.req.raw),
 			device: device(ua),
-			createdAt: now,
-			utmSource: utm.source,
-			utmMedium: utm.medium,
-			utmCampaign: utm.campaign,
-			channel,
+			now: Date.now(),
 		});
-		await upsertSession(c.env, body.site_id, vh, dk, now);
 		return c.body(null, 202);
 	},
 );
