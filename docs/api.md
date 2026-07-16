@@ -8,6 +8,7 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
 
 - `POST /api/collect` — **public**, no auth (CORS-open, rate-limited).
 - `POST /api/event` — **API key**: first-party server-to-server ingest (`Authorization: Bearer <clk_...>`).
+- `GET /api/experiments/active` — **public**: client-facing feature-flag config.
 - `GET /api/stats`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
   `GET /api/stats/conversions`, `GET /api/stats/goals`, `GET /api/stats/funnels`,
   `GET /api/funnels/:id/report` — **API key**: `Authorization: Bearer <clk_...>`
@@ -436,6 +437,48 @@ curl "https://your-deployment.example.com/api/funnels/44444444-4444-4444-8444-44
     { "index": 2, "match_value": "purchase", "count": 9 }
   ],
   "overall_rate": 0.225
+}
+```
+
+---
+
+## Experiments & feature flags
+
+Privacy-first A/B testing. Variant assignment is computed **client-side** from a random
+`localStorage['countless.exp']` id (never sent as identity); the server only stores aggregate
+`$exposure` events and conversions. In the browser, `window.countless.variant('flag_key')` returns
+the assigned variant and fires one `$exposure` event per flag per page load.
+
+### `POST /api/experiments` (admin)
+
+Body `{ site_id, name, flag_key, variants: [{ key, weight }], active? }` (2–8 variants; the first is
+the control). Returns `201` with `{ "experiment": { ... } }`.
+
+### `GET /api/experiments?site_id=<uuid>` (admin) · `DELETE /api/experiments/:id?site_id=<uuid>` (admin)
+
+List (variants parsed, `active` as boolean) and delete, same contract as goals/funnels.
+
+### `GET /api/experiments/active?site_id=<uuid>` (public)
+
+Client-facing flag config — **no auth** (these definitions are inherently public to the browser).
+Returns only active experiments: `{ "experiments": [{ "id", "flag_key", "variants": [...] }] }`.
+
+### `GET /api/stats/experiments?site_id=<uuid>` (API key)
+
+Catalog read for the dashboard (key must own `site_id`).
+
+### `GET /api/stats/experiment?site_id&experiment_id&goal_type&goal_value&start&end` (API key)
+
+Results per variant: exposures, distinct-visitor conversions against the goal
+(`goal_type` = `event|path`, matched on `goal_value`), conversion `rate`, and a two-proportion
+z-test `p_value` vs the control with a `significant` flag (α = 0.05; control's `p_value` is `null`).
+
+```json
+{
+  "variants": [
+    { "key": "control", "exposures": 1000, "conversions": 100, "rate": 0.1, "p_value": null, "significant": false },
+    { "key": "b", "exposures": 1000, "conversions": 150, "rate": 0.15, "p_value": 0.00072, "significant": true }
+  ]
 }
 ```
 
