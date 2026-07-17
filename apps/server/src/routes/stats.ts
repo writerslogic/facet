@@ -14,6 +14,7 @@ import * as schema from '../db/schema.js';
 import {
 	channels,
 	engagement,
+	realtime,
 	series,
 	sessionFreshness,
 	summary,
@@ -27,7 +28,13 @@ import {
 import type { AppEnv } from '../env.js';
 import { aiRunner, answerQuestion } from '../lib/ai.js';
 import { requireApiKey } from '../lib/auth.js';
-import { DAY_MS, EXPORT_MAX_ROWS, HOUR_MS, MAX_RANGE_DAYS } from '../lib/constants.js';
+import {
+	DAY_MS,
+	EXPORT_MAX_ROWS,
+	HOUR_MS,
+	MAX_RANGE_DAYS,
+	REALTIME_WINDOW_MS,
+} from '../lib/constants.js';
 import { toCsv } from '../lib/csv.js';
 import { ApiError } from '../lib/http.js';
 
@@ -193,6 +200,16 @@ statsRoutes.get(
 		return c.json({ interactions: await topInteractions(c.env, f) });
 	},
 );
+
+// Realtime snapshot: active-visitor proxy (distinct daily hashes) + pageviews over the last few
+// minutes. Privacy-safe (no cookies/ids), bounded window, indexed by created_at.
+statsRoutes.get('/stats/realtime', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	return c.json(await realtime(c.env, siteId, Date.now(), REALTIME_WINDOW_MS));
+});
 
 // Authenticated read-only export of a series or a breakdown as CSV or JSON. Same site-scoping and
 // range validation as the other stats reads; output is bounded (series by range, breakdown by limit)

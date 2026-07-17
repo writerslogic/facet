@@ -7,6 +7,7 @@ import type {
 	EngagementSummary,
 	Freshness,
 	Interval,
+	RealtimeSnapshot,
 	SeriesPoint,
 	StatsFilter,
 	StatsSummary,
@@ -182,6 +183,37 @@ export async function sessionFreshness(env: Env, f: StatsFilter): Promise<Freshn
 	return {
 		materialization: 'hourly',
 		pending: rawEvents > 0 && sessions === 0,
+	};
+}
+
+/**
+ * Realtime snapshot: distinct visitor hashes and pageviews over the trailing `[now - windowMs, now)`
+ * window for a site. Bounded (small window, indexed by created_at). Privacy-safe: no cookies or
+ * persistent ids — just the daily visitor hash, de-duplicated within the window.
+ */
+export async function realtime(
+	env: Env,
+	siteId: string,
+	now: number,
+	windowMs: number,
+): Promise<RealtimeSnapshot> {
+	const start = now - windowMs;
+	const row = await db(env)
+		.select({ visitors: visitorCount, pageviews: pageviewCount })
+		.from(schema.events)
+		.where(
+			and(
+				eq(schema.events.siteId, siteId),
+				gte(schema.events.createdAt, start),
+				lt(schema.events.createdAt, now),
+			),
+		)
+		.get();
+	return {
+		window_ms: windowMs,
+		visitors: Number(row?.visitors ?? 0),
+		pageviews: Number(row?.pageviews ?? 0),
+		until: now,
 	};
 }
 

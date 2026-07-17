@@ -101,6 +101,22 @@ export interface Freshness {
 	pending: boolean;
 }
 
+/**
+ * Realtime snapshot over a trailing window. `visitors` is the count of distinct daily visitor
+ * hashes seen in the window — a privacy-safe proxy for "active visitors" (no cookies, no persistent
+ * id). It is an approximation: a visitor is de-duplicated only within the current UTC day.
+ */
+export interface RealtimeSnapshot {
+	/** Trailing window width in milliseconds. */
+	window_ms: number;
+	/** Distinct visitor hashes seen in the window (active-visitor proxy). */
+	visitors: number;
+	/** Pageviews in the window. */
+	pageviews: number;
+	/** End of the window (unix ms) — effectively "as of" time. */
+	until: number;
+}
+
 export interface StatsResponse {
 	summary: StatsSummary;
 	series: SeriesPoint[];
