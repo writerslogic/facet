@@ -27,19 +27,23 @@ pnpm install
 wrangler d1 create facet
 ```
 
-This prints a `database_id`. Open `apps/server/wrangler.jsonc` and replace the
-placeholder — it ships as `PLACEHOLDER_D1_DATABASE_ID`:
+This prints a `database_id`. Write it into `apps/server/wrangler.jsonc` — which ships with
+the placeholder `PLACEHOLDER_D1_DATABASE_ID` — with the CLI (this does a targeted replace
+that preserves the file's comments and unrelated config):
 
-```jsonc
-"d1_databases": [
-  {
-    "binding": "DB",
-    "database_name": "facet",
-    "database_id": "PLACEHOLDER_D1_DATABASE_ID", // ← paste your real id here
-    "migrations_dir": "migrations"
-  }
-]
+```sh
+facet config set-db-id --id <database_id> --config apps/server/wrangler.jsonc
 ```
+
+`set-db-id` refuses to clobber an already-set real id unless you pass `--force`. Verify the
+binding before deploying:
+
+```sh
+facet config check --config apps/server/wrangler.jsonc
+```
+
+`check` exits nonzero if `database_id` is missing or still the placeholder, so it doubles as
+a pre-deploy guard.
 
 ### 2. Set the admin token
 
@@ -122,6 +126,26 @@ Response (`201`) — the plaintext `key` is shown **once** and never retrievable
 See the [API reference](./api.md) for the full admin surface (`GET /api/sites`,
 `GET /api/keys?site_id=`, `DELETE /api/keys/:id?site_id=`) and the stats endpoint.
 
+### With the CLI
+
+The `facet` CLI wraps the same admin API. Point it at your deployment with `--host` /
+`--admin-token` (or export `FACET_HOST` / `FACET_ADMIN_TOKEN`); the admin token is only ever
+sent in the `Authorization` header and is never printed:
+
+```sh
+export FACET_HOST=https://your-deployment.example.com
+export FACET_ADMIN_TOKEN=<ADMIN_TOKEN>
+
+facet sites create --name "My Site" --domain example.com
+facet sites list
+facet keys issue --site <site-uuid> --label reporting   # prints the clk_… key ONCE
+facet keys list --site <site-uuid>
+facet keys revoke --id <key-uuid> --site <site-uuid>
+```
+
+The same command groups manage `goals`, `funnels`, and `experiments`. Add `--json` to any
+command for machine-readable output.
+
 ## Local development
 
 Apply migrations to the local D1 database, then load the demo seed:
@@ -158,3 +182,13 @@ Raw events, sessions, and daily salts are purged past a rolling window controlle
 `RAW_RETENTION_DAYS` var in `apps/server/wrangler.jsonc` (default **90** days). Aggregated
 rollups are durable and never deleted. The purge runs on the hourly cron. See the
 [privacy model](./privacy.md) for details.
+
+## Test Worker config
+
+`apps/server/wrangler.test.jsonc` is **generated** from `wrangler.jsonc` by
+`apps/server/scripts/gen-test-wrangler.mjs` (run automatically by the server `pretest` script,
+so it never drifts). It is identical to `wrangler.jsonc` except the `ai` binding is stripped:
+the `vitest-pool-workers` miniflare runtime can't resolve the external AI worker and crashes at
+startup. The NL pipeline is instead tested with an injectable stub `LlmRunner`, and
+`/api/stats/query` returns `503` when `env.AI` is absent. Edit `wrangler.jsonc` (not the test
+file) and regenerate with `pnpm --filter @facet/server gen:test-config`.
