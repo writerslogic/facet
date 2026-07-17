@@ -82,6 +82,6 @@ Cloudflare Workers + D1.
 - **CLI** (`@writerslogic/facet-cli` on npm) — `init`, `migrate`, and `stats` commands for self-hosters.
 - **Docs** — usage, self-hosting, privacy model, and API reference.
 
-[0.3.0]: https://github.com/writerslogic/facet/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/writerslogic/facet/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/writerslogic/facet/releases/tag/v0.1.0
+[0.3.0]: https://github.com/dcondrey/facet/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/dcondrey/facet/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/dcondrey/facet/releases/tag/v0.1.0

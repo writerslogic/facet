@@ -14,7 +14,7 @@ API, the dashboard, and the hourly cron rollups.
 Clone the repo and install dependencies:
 
 ```sh
-git clone https://github.com/writerslogic/facet.git
+git clone https://github.com/dcondrey/facet.git
 cd facet
 pnpm install
 ```
