@@ -1,6 +1,6 @@
 // KPI summary cards: pageviews, unique visitors, custom events, formatted with Intl.
 
-import type { StatsSummary } from '@countless/shared';
+import type { StatsSummary } from '@facet/shared';
 import type { ReactElement } from 'react';
 
 const numberFormat = new Intl.NumberFormat('en-US');

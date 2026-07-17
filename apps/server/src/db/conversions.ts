@@ -2,7 +2,7 @@
 // goal within the session's [startedAt, endedAt] window for that (site, visitor). Match is by event
 // name (`type='event'`) or path (`type='path'`). rate = conversions / sessions (0 when no sessions).
 
-import type { Goal, StatsFilter } from '@countless/shared';
+import type { Goal, StatsFilter } from '@facet/shared';
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import type { Env } from '../env.js';
 import { db } from './queries.js';

@@ -2,7 +2,7 @@
 // pointer only on an in-order match of the next step. steps[i].count is the number of sessions that
 // reached step i; overall_rate = steps[last].count / steps[0].count (0 when step0 is 0).
 
-import type { Funnel, FunnelReportResult, StatsFilter } from '@countless/shared';
+import type { Funnel, FunnelReportResult, StatsFilter } from '@facet/shared';
 import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import type { Env } from '../env.js';
 import { DAY_MS } from '../lib/constants.js';

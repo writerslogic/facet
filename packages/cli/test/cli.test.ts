@@ -28,25 +28,25 @@ describe('main dispatcher', () => {
 	it('returns 0 and prints usage with no args', async () => {
 		const code = await main([]);
 		expect(code).toBe(0);
-		expect(stdout).toContain('Usage: countless');
+		expect(stdout).toContain('Usage: facet');
 	});
 
 	it('returns 0 and prints usage for --help', async () => {
 		const code = await main(['--help']);
 		expect(code).toBe(0);
-		expect(stdout).toContain('Usage: countless');
+		expect(stdout).toContain('Usage: facet');
 	});
 
 	it('returns 0 and prints usage for -h', async () => {
 		const code = await main(['-h']);
 		expect(code).toBe(0);
-		expect(stdout).toContain('Usage: countless');
+		expect(stdout).toContain('Usage: facet');
 	});
 
 	it('returns 1 and prints usage to stderr for unknown command', async () => {
 		const code = await main(['bogus']);
 		expect(code).toBe(1);
-		expect(stderr).toContain('Usage: countless');
+		expect(stderr).toContain('Usage: facet');
 	});
 
 	it('routes to stats and surfaces its failure exit code on missing options', async () => {

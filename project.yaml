@@ -1,4 +1,4 @@
-# misterdev project config for Countless (pnpm monorepo).
+# misterdev project config for Facet (pnpm monorepo).
 # Each target is self-contained: a task's gate is routed to the target that owns
 # its files, and ONLY that target's commands run. Top-level commands below apply
 # only to files outside every target (root configs like package.json / biome.json).
@@ -48,34 +48,34 @@ targets:
   - name: shared
     path: packages/shared
     # No build step; typecheck is the compile gate.
-    typecheck_command: "pnpm --filter @countless/shared typecheck"
-    test_command: "pnpm --filter @countless/shared test"
-    lint_command: "pnpm --filter @countless/shared lint"
+    typecheck_command: "pnpm --filter @facet/shared typecheck"
+    test_command: "pnpm --filter @facet/shared test"
+    lint_command: "pnpm --filter @facet/shared lint"
 
   - name: server
     path: apps/server
     # A Worker has no separate build; typecheck + vitest (miniflare) are the gate.
-    typecheck_command: "pnpm --filter @countless/server typecheck"
-    test_command: "pnpm --filter @countless/server test"
-    lint_command: "pnpm --filter @countless/server lint"
+    typecheck_command: "pnpm --filter @facet/server typecheck"
+    test_command: "pnpm --filter @facet/server test"
+    lint_command: "pnpm --filter @facet/server lint"
 
   - name: dashboard
     path: apps/dashboard
-    build_command: "pnpm --filter @countless/dashboard build"
-    typecheck_command: "pnpm --filter @countless/dashboard typecheck"
-    test_command: "pnpm --filter @countless/dashboard test"
-    lint_command: "pnpm --filter @countless/dashboard lint"
+    build_command: "pnpm --filter @facet/dashboard build"
+    typecheck_command: "pnpm --filter @facet/dashboard typecheck"
+    test_command: "pnpm --filter @facet/dashboard test"
+    lint_command: "pnpm --filter @facet/dashboard lint"
 
   - name: client
     path: packages/client
-    build_command: "pnpm --filter countless build"
-    typecheck_command: "pnpm --filter countless typecheck"
-    test_command: "pnpm --filter countless test"
-    lint_command: "pnpm --filter countless lint"
+    build_command: "pnpm --filter @writerslogic/facet build"
+    typecheck_command: "pnpm --filter @writerslogic/facet typecheck"
+    test_command: "pnpm --filter @writerslogic/facet test"
+    lint_command: "pnpm --filter @writerslogic/facet lint"
 
   - name: cli
     path: packages/cli
-    build_command: "pnpm --filter countless-cli build"
-    typecheck_command: "pnpm --filter countless-cli typecheck"
-    test_command: "pnpm --filter countless-cli test"
-    lint_command: "pnpm --filter countless-cli lint"
+    build_command: "pnpm --filter @writerslogic/facet-cli build"
+    typecheck_command: "pnpm --filter @writerslogic/facet-cli typecheck"
+    test_command: "pnpm --filter @writerslogic/facet-cli test"
+    lint_command: "pnpm --filter @writerslogic/facet-cli lint"

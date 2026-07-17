@@ -446,8 +446,8 @@ curl "https://your-deployment.example.com/api/funnels/44444444-4444-4444-8444-44
 ## Experiments & feature flags
 
 Privacy-first A/B testing. Variant assignment is computed **client-side** from a random
-`localStorage['countless.exp']` id (never sent as identity); the server only stores aggregate
-`$exposure` events and conversions. In the browser, `window.countless.variant('flag_key')` returns
+`localStorage['facet.exp']` id (never sent as identity); the server only stores aggregate
+`$exposure` events and conversions. In the browser, `window.facet.variant('flag_key')` returns
 the assigned variant and fires one `$exposure` event per flag per page load.
 
 ### `POST /api/experiments` (admin)

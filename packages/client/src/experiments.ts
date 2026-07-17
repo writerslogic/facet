@@ -1,5 +1,5 @@
 // Client-side A/B variant assignment. Privacy-first: bucketing is computed locally from a random id
-// in localStorage (`countless.exp`) that is NEVER sent to the server as identity. The server only
+// in localStorage (`facet.exp`) that is NEVER sent to the server as identity. The server only
 // receives an aggregate `$exposure` event carrying { flag, variant }. Zero dependencies.
 
 import { getConfig, track } from './index.js';
@@ -9,7 +9,7 @@ interface FlagDef {
 	variants: { key: string; weight: number }[];
 }
 
-const STORAGE_KEY = 'countless.exp';
+const STORAGE_KEY = 'facet.exp';
 const CONTROL = 'control';
 
 let flags: FlagDef[] | null = null;

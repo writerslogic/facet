@@ -1,0 +1,67 @@
+name: Bug Report
+description: Report a bug in Facet
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this bug!
+        Do not include API keys, admin tokens, or secrets in this report.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A clear description of what the bug is.
+      placeholder: When I POST to /api/collect, the visitor hash ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: Steps to reproduce the behavior.
+      placeholder: |
+        1. Deploy the Worker with ...
+        2. Fire an event via ...
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What you expected to happen.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      description: Which part of Facet is affected?
+      options:
+        - Worker / API (@facet/server)
+        - Dashboard (@facet/dashboard)
+        - Browser client (@writerslogic/facet)
+        - CLI (@writerslogic/facet-cli)
+        - Docs / self-hosting
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version, pnpm version, wrangler version, and whether local (`wrangler dev`) or deployed.
+      placeholder: |
+        - Node: 20.x
+        - pnpm: 11.x
+        - wrangler: 4.x
+        - Environment: local / deployed
+    validations:
+      required: false

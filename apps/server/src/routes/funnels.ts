@@ -3,7 +3,7 @@
 // factory doesn't fit); create/list/delete otherwise follow the same admin contract. The report
 // endpoint is API-key authed and reuses funnelReport.
 
-import { type Funnel, FunnelSchema, type FunnelStep } from '@countless/shared';
+import { type Funnel, FunnelSchema, type FunnelStep } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';

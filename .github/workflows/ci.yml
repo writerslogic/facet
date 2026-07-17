@@ -1,4 +1,4 @@
-# CI: install, lint, typecheck, and test the Countless monorepo on every push and PR.
+# CI: install, lint, typecheck, and test the Facet monorepo on every push and PR.
 name: CI
 
 on:

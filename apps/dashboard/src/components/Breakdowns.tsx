@@ -1,6 +1,6 @@
 // Breakdown grid: reuses TopList for each dimension of the stats response.
 
-import type { StatsResponse } from '@countless/shared';
+import type { StatsResponse } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { TopList } from './TopList.js';
 

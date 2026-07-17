@@ -2,7 +2,7 @@
 // Each step's bar width is proportional to the first step's count; drop-off vs. the previous step
 // is shown per row, and the overall completion rate is highlighted.
 
-import type { FunnelReportResult } from '@countless/shared';
+import type { FunnelReportResult } from '@facet/shared';
 import type { ReactElement } from 'react';
 
 const numberFormat = new Intl.NumberFormat('en-US');

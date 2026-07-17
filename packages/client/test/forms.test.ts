@@ -1,5 +1,5 @@
 // T056: the auto bundle fires a `form_submit` event (no field values) on a form submission, and
-// respects the data-countless-ignore opt-out.
+// respects the data-facet-ignore opt-out.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -56,7 +56,7 @@ function form(attrs: {
 		id: attrs.id ?? '',
 		getAttribute: (k: string) =>
 			k === 'name' ? (attrs.name ?? null) : k === 'action' ? (attrs.action ?? null) : null,
-		hasAttribute: (k: string) => k === 'data-countless-ignore' && Boolean(attrs.ignore),
+		hasAttribute: (k: string) => k === 'data-facet-ignore' && Boolean(attrs.ignore),
 	};
 }
 
@@ -76,7 +76,7 @@ describe('form tracking', () => {
 		expect((submits[0] as { props: { form_id: string } }).props.form_id).toBe('signup');
 	});
 
-	it('ignores forms marked data-countless-ignore', async () => {
+	it('ignores forms marked data-facet-ignore', async () => {
 		const h = setup();
 		await import('../src/auto.js');
 		h.submit(form({ id: 'private', ignore: true }));

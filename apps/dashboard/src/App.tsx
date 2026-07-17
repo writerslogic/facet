@@ -1,7 +1,7 @@
 // Root dashboard component: KeyGate until credentials are stored, otherwise the app shell
 // with KPI cards, traffic chart, and breakdowns driven by the stats query.
 
-import type { StatsQuery } from '@countless/shared';
+import type { StatsQuery } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { useState } from 'react';
 import { Anomalies } from './components/Anomalies.js';

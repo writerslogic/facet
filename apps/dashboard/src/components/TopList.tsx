@@ -1,7 +1,7 @@
 // Top-N breakdown list: Plausible-style horizontal bars where each bar width is proportional
 // to the max count. Pure CSS/Tailwind, no chart lib.
 
-import type { CountRow } from '@countless/shared';
+import type { CountRow } from '@facet/shared';
 import type { ReactElement } from 'react';
 
 const numberFormat = new Intl.NumberFormat('en-US');

@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Countless are documented here. The format follows
+All notable changes to Facet are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -18,7 +18,7 @@ all strictly cookieless with no cross-session identity.
   extracted into a shared `ingestEvent` used by both endpoints.
 - **A/B experiments & feature flags** — admin-defined experiments (2–8 weighted variants) with
   privacy-first, **client-side** variant assignment (a random `localStorage` id, never sent as
-  identity). `window.countless.variant('flag_key')` buckets locally and fires one aggregate
+  identity). `window.facet.variant('flag_key')` buckets locally and fires one aggregate
   `$exposure` event. Results endpoint reports per-variant exposures, distinct-visitor conversions,
   and a two-proportion z-test `p_value` / significance flag vs. the control. New dashboard tab.
 - **Anomaly detection & root-cause autopsy** — `GET /api/stats/anomalies` scores the latest hour of
@@ -56,7 +56,7 @@ Phase 2/3 features: sessions, traffic channels, goals, conversions, and funnels.
   and a catalog read at `GET /api/stats/funnels`.
 - **Client form tracking** — the auto-init script tracks form submissions as a
   `form_submit` event (`form_id` / `form_name` / `action`, no field values); opt out with
-  `data-countless-ignore` on the `<form>`.
+  `data-facet-ignore` on the `<form>`.
 - **Dashboard** — funnels and conversions views for building/inspecting goals and funnels.
 
 ## [0.1.0] - 2026-07-16
@@ -77,11 +77,11 @@ Cloudflare Workers + D1.
   window for raw events, driven by a single cron job registry.
 - **Dashboard** — React 19 + Vite SPA (KPI cards, uPlot traffic chart, top-list breakdowns) served
   as static assets by the Worker with SPA fallback.
-- **Browser client** (`countless` on npm) — zero-dependency tracking snippet with an
+- **Browser client** (`@writerslogic/facet` on npm) — zero-dependency tracking snippet with an
   auto-init script tag, SPA navigation tracking, and a `window.umami`-compatible shim.
-- **CLI** (`countless-cli` on npm) — `init`, `migrate`, and `stats` commands for self-hosters.
+- **CLI** (`@writerslogic/facet-cli` on npm) — `init`, `migrate`, and `stats` commands for self-hosters.
 - **Docs** — usage, self-hosting, privacy model, and API reference.
 
-[0.3.0]: https://github.com/OWNER/countless/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/OWNER/countless/compare/v0.1.0...v0.2.0
-[0.1.0]: https://github.com/OWNER/countless/releases/tag/v0.1.0
+[0.3.0]: https://github.com/writerslogic/facet/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/writerslogic/facet/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/writerslogic/facet/releases/tag/v0.1.0

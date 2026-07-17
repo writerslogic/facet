@@ -2,7 +2,7 @@
 // API-key-authenticated dashboard list endpoints (so the dashboard can enumerate a site's goals
 // and funnels without the admin token). Reads only; no mutation.
 
-import type { Experiment, ExperimentVariant, Funnel, FunnelStep, Goal } from '@countless/shared';
+import type { Experiment, ExperimentVariant, Funnel, FunnelStep, Goal } from '@facet/shared';
 import { and, desc, eq } from 'drizzle-orm';
 import type { Env } from '../env.js';
 import { db } from './queries.js';

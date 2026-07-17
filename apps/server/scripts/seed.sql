@@ -1,5 +1,5 @@
--- Countless local seed data (deterministic, no randomness).
--- Referenced by docs/self-hosting.md. Apply with: pnpm --filter @countless/server seed:local
+-- Facet local seed data (deterministic, no randomness).
+-- Referenced by docs/self-hosting.md. Apply with: pnpm --filter @facet/server seed:local
 --
 -- IMPORTANT: This file contains ONLY INSERT statements. Do NOT add any DDL
 -- (CREATE TABLE / CREATE INDEX). The schema is owned exclusively by the D1

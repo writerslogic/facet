@@ -1,4 +1,4 @@
-// T035: `countless migrate` builds the correct wrangler argv (default --local, --remote when asked)
+// T035: `facet migrate` builds the correct wrangler argv (default --local, --remote when asked)
 // and resolves to the child exit code, via an injected spawner (no real wrangler call).
 
 import { describe, expect, it } from 'vitest';
@@ -20,16 +20,16 @@ function fakeSpawn(exitCode = 0) {
 describe('runMigrate', () => {
 	it('applies migrations remotely when --remote is passed', async () => {
 		const { spawn, calls } = fakeSpawn();
-		const code = await runMigrate(['--db', 'countless', '--remote'], spawn);
+		const code = await runMigrate(['--db', 'facet', '--remote'], spawn);
 		expect(code).toBe(0);
 		expect(calls[0]?.command).toBe('wrangler');
-		expect(calls[0]?.args).toEqual(['d1', 'migrations', 'apply', 'countless', '--remote']);
+		expect(calls[0]?.args).toEqual(['d1', 'migrations', 'apply', 'facet', '--remote']);
 	});
 
-	it('defaults to --local and the countless db', async () => {
+	it('defaults to --local and the facet db', async () => {
 		const { spawn, calls } = fakeSpawn(0);
 		await runMigrate([], spawn);
-		expect(calls[0]?.args).toEqual(['d1', 'migrations', 'apply', 'countless', '--local']);
+		expect(calls[0]?.args).toEqual(['d1', 'migrations', 'apply', 'facet', '--local']);
 	});
 
 	it('resolves to a non-zero child exit code', async () => {

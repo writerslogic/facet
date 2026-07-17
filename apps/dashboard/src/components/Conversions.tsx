@@ -1,6 +1,6 @@
 // Goal conversions: one row per goal with its conversion count and rate over the active range.
 
-import type { Goal } from '@countless/shared';
+import type { Goal } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { useConversions } from '../hooks/funnels.js';
 import type { Range } from '../state.js';

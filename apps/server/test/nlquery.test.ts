@@ -2,7 +2,7 @@
 // answerQuestion pipeline driven by a stub LlmRunner (no AI binding), and translateQuery fallback.
 
 import { env } from 'cloudflare:test';
-import type { QueryIntent } from '@countless/shared';
+import type { QueryIntent } from '@facet/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runQueryIntent } from '../src/db/nlquery.js';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';

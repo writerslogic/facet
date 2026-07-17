@@ -42,7 +42,7 @@ describe('variant', () => {
 
 	it('buckets deterministically for a fixed local id and fires one $exposure', async () => {
 		const store: Record<string, string> = {
-			'countless.exp': 'deadbeefdeadbeef',
+			'facet.exp': 'deadbeefdeadbeef',
 		};
 		stubEnv(store);
 		const sent: Array<Record<string, unknown>> = [];
@@ -118,7 +118,7 @@ describe('variant', () => {
 		// stored id each call; control (weight 3/4) should dominate.
 		let control = 0;
 		for (let i = 0; i < 400; i++) {
-			localStorage.setItem('countless.exp', `id-${i}-${i * 7}`);
+			localStorage.setItem('facet.exp', `id-${i}-${i * 7}`);
 			if (mod.variant('cta') === 'control') control++;
 		}
 		expect(control).toBeGreaterThan(240); // ~75% expected, allow slack

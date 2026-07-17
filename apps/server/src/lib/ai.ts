@@ -7,7 +7,7 @@ import {
 	type QueryIntent,
 	QueryIntentSchema,
 	type StatsFilter,
-} from '@countless/shared';
+} from '@facet/shared';
 import * as v from 'valibot';
 import { runQueryIntent } from '../db/nlquery.js';
 import type { Env } from '../env.js';

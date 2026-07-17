@@ -3,7 +3,7 @@
 // privacy-safe visitor hash, classifies the traffic channel, and writes a raw event + session.
 // The raw IP is used only to derive the hash and is never stored, logged, or returned.
 
-import type { EventProps } from '@countless/shared';
+import type { EventProps } from '@facet/shared';
 import { insertEvent, upsertSession } from '../db/queries.js';
 import type { Env } from '../env.js';
 import { isBot } from './bots.js';

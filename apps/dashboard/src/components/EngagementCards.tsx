@@ -1,6 +1,6 @@
 // Engagement KPI cards: sessions, bounce rate, pages/session, avg duration (m:ss).
 
-import type { EngagementSummary } from '@countless/shared';
+import type { EngagementSummary } from '@facet/shared';
 import type { ReactElement } from 'react';
 
 const numberFormat = new Intl.NumberFormat('en-US');

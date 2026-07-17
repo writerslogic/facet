@@ -1,11 +1,11 @@
 {
-	"name": "countless-cli",
+	"name": "@writerslogic/facet-cli",
 	"version": "0.3.0",
-	"description": "Countless CLI: init, migrate, and stats for self-hosted Countless.",
+	"description": "Facet CLI: init, migrate, and stats for self-hosted Facet.",
 	"license": "MIT",
 	"type": "module",
 	"bin": {
-		"countless": "./dist/index.js"
+		"facet": "./dist/index.js"
 	},
 	"files": ["dist"],
 	"scripts": {
@@ -18,7 +18,7 @@
 	},
 	"dependencies": {
 		"@clack/prompts": "0.9.1",
-		"@countless/shared": "workspace:*",
+		"@facet/shared": "workspace:*",
 		"picocolors": "1.1.1"
 	},
 	"devDependencies": {

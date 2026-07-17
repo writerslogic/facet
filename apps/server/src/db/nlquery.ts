@@ -3,7 +3,7 @@
 // otherwise a scalar metric. Breakdowns count pageview/event rows (or sessions for `channel`), which
 // approximate — not precisely reproduce — the chosen metric; this is acceptable for v1.
 
-import type { CountRow, NlQueryResult, QueryIntent, StatsFilter } from '@countless/shared';
+import type { CountRow, NlQueryResult, QueryIntent, StatsFilter } from '@facet/shared';
 import type { Env } from '../env.js';
 import {
 	channels,

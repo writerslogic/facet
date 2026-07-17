@@ -1,8 +1,8 @@
 {
-	"name": "@countless/dashboard",
+	"name": "@facet/dashboard",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Countless analytics dashboard: React 19 + Vite, served as static assets by the Worker.",
+	"description": "Facet analytics dashboard: React 19 + Vite, served as static assets by the Worker.",
 	"type": "module",
 	"scripts": {
 		"dev": "vite",
@@ -14,7 +14,7 @@
 		"test": "vitest run --passWithNoTests"
 	},
 	"dependencies": {
-		"@countless/shared": "workspace:*",
+		"@facet/shared": "workspace:*",
 		"@tanstack/react-query": "5.62.11",
 		"class-variance-authority": "0.7.1",
 		"clsx": "2.1.1",

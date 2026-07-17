@@ -3,7 +3,7 @@
 // `$exposure` event carrying `{ flag, variant }`). No server-side identity is used: conversions are
 // counted as DISTINCT visitor_hash within the range. All variant values bind as params.
 
-import type { Experiment, ExperimentResult, StatsFilter } from '@countless/shared';
+import type { Experiment, ExperimentResult, StatsFilter } from '@facet/shared';
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
 import type { Env } from '../env.js';
 import { db } from './queries.js';

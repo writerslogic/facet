@@ -1,7 +1,7 @@
 // API key issuance, hashing, listing, and revocation. Only key HASHES are ever stored; the
 // plaintext key is returned exactly once at issuance and is never retrievable again.
 
-import type { ApiKeyRecord } from '@countless/shared';
+import type { ApiKeyRecord } from '@facet/shared';
 import { and, desc, eq } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';

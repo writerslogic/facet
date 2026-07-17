@@ -1,6 +1,6 @@
 // Traffic-channels breakdown: reuses TopList fed by the sessions-derived channel counts.
 
-import type { CountRow } from '@countless/shared';
+import type { CountRow } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { TopList } from './TopList.js';
 

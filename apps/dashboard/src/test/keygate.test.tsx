@@ -53,8 +53,8 @@ describe('KeyGate', () => {
 		});
 		fireEvent.click(screen.getByRole('button', { name: 'View dashboard' }));
 
-		expect(localStorage.getItem('countless.key')).toBe('my-key');
-		expect(localStorage.getItem('countless.site')).toBe('example.com');
+		expect(localStorage.getItem('facet.key')).toBe('my-key');
+		expect(localStorage.getItem('facet.site')).toBe('example.com');
 
 		await waitFor(() =>
 			expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument(),
@@ -62,8 +62,8 @@ describe('KeyGate', () => {
 	});
 
 	it('switching the range preset updates the derived window', async () => {
-		localStorage.setItem('countless.key', 'my-key');
-		localStorage.setItem('countless.site', 'example.com');
+		localStorage.setItem('facet.key', 'my-key');
+		localStorage.setItem('facet.site', 'example.com');
 		renderApp();
 
 		await waitFor(() =>

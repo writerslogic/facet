@@ -1,4 +1,4 @@
-import type { CountRow } from '@countless/shared';
+import type { CountRow } from '@facet/shared';
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { TopList } from '../components/TopList.js';

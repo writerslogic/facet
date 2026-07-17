@@ -3,7 +3,7 @@
 // earlier hours via a sample z-score, and picks the dimension value that most drove the deviation.
 // The plain-language summary is a deterministic template (no LLM) so it is fully testable.
 
-import type { Anomaly, StatsFilter } from '@countless/shared';
+import type { Anomaly, StatsFilter } from '@facet/shared';
 import { type SQL, and, isNotNull, sql } from 'drizzle-orm';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { Env } from '../env.js';

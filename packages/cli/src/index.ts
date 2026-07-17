@@ -1,10 +1,10 @@
-// countless-cli entrypoint: dispatches `init`, `migrate`, and `stats` subcommands.
+// facet-cli entrypoint: dispatches `init`, `migrate`, and `stats` subcommands.
 
 import { runInit } from './commands/init.js';
 import { runMigrate } from './commands/migrate.js';
 import { runStats } from './commands/stats.js';
 
-const USAGE = 'Usage: countless <init|migrate|stats> [options]\n';
+const USAGE = 'Usage: facet <init|migrate|stats> [options]\n';
 
 export async function main(argv: string[]): Promise<number> {
 	const [command] = argv;

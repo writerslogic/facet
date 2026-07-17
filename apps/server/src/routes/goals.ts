@@ -1,7 +1,7 @@
 // T055: goals CRUD — admin-only insert/list/delete of site-scoped conversion goals, built via the
 // canonical crudRouter factory (no re-implemented CRUD block).
 
-import { GoalSchema } from '@countless/shared';
+import { GoalSchema } from '@facet/shared';
 import type { Hono } from 'hono';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';

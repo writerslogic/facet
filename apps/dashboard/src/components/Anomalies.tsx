@@ -2,7 +2,7 @@
 // plain-language autopsy summary, the metric, the %-change, and the largest contributor. Empty
 // state when nothing is flagged.
 
-import type { Anomaly } from '@countless/shared';
+import type { Anomaly } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { useAnomalies } from '../hooks/anomaly.js';
 import { cn } from '../lib/cn.js';
