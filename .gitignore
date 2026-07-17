@@ -30,3 +30,8 @@ coverage/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Planning / orchestrator artifacts (kept local, not published)
+DEVPLAN.md
+project.yaml
+.orchestrator/
