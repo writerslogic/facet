@@ -1,5 +1,12 @@
 <!-- Facet: privacy-first, Cloudflare-native analytics + experimentation. Project landing README. -->
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/logo-white.png">
+    <img alt="Facet" src="./assets/logo-black.png" width="140" height="140">
+  </picture>
+</p>
+
 # Facet
 
 [![CI](https://github.com/dcondrey/facet/actions/workflows/ci.yml/badge.svg)](https://github.com/dcondrey/facet/actions/workflows/ci.yml)
