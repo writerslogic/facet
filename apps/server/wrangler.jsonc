@@ -1,7 +1,7 @@
 {
-  // Countless Worker config: ingest + stats API + dashboard static assets + cron rollups.
+  // Facet Worker config: ingest + stats API + dashboard static assets + cron rollups.
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "countless",
+  "name": "facet",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -20,7 +20,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "countless",
+      "database_name": "facet",
       "database_id": "PLACEHOLDER_D1_DATABASE_ID",
       "migrations_dir": "migrations"
     }
@@ -42,13 +42,13 @@
   // Analytics Engine — high-cardinality event sink (10M+ writes/s, SQL over HTTP).
   // Alternative/complement to the D1 `events` table at very high volume.
   //   "analytics_engine_datasets": [
-  //     { "binding": "AE", "dataset": "countless_events" }
+  //     { "binding": "AE", "dataset": "facet_events" }
   //   ],
   //
   // Queues — decouple ingest from aggregation (at-least-once, retries).
   //   "queues": {
-  //     "producers": [{ "binding": "INGEST_QUEUE", "queue": "countless-ingest" }],
-  //     "consumers": [{ "queue": "countless-ingest", "max_batch_size": 100, "max_batch_timeout": 5 }]
+  //     "producers": [{ "binding": "INGEST_QUEUE", "queue": "facet-ingest" }],
+  //     "consumers": [{ "queue": "facet-ingest", "max_batch_size": 100, "max_batch_timeout": 5 }]
   //   },
   //
   // Durable Objects + alarms — exactly-once real-time aggregation (1 DO per
@@ -59,5 +59,5 @@
   //   "migrations": [{ "tag": "v2", "new_sqlite_classes": ["Aggregator"] }],
   //
   // R2 — CSV/Parquet exports and nightly AE→R2 archival (presigned URLs via S3 API).
-  //   "r2_buckets": [{ "binding": "EXPORTS", "bucket_name": "countless-exports" }],
+  //   "r2_buckets": [{ "binding": "EXPORTS", "bucket_name": "facet-exports" }],
 }

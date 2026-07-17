@@ -18,7 +18,7 @@ export const COLLECT_MAX_BODY_BYTES = 8192 as const;
 /** HTTP status code returned for a successful CORS preflight. */
 export const PREFLIGHT_STATUS = 204 as const;
 
-/** Prefix on every issued API key (Countless key). */
+/** Prefix on every issued API key (Facet key). */
 export const API_KEY_PREFIX = 'clk_' as const;
 
 /** Random bytes in an API key (rendered as hex after the prefix). */

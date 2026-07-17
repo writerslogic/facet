@@ -3,7 +3,7 @@
 // bucket is always computed under a single consistent salt (no cross-day lookback — see the
 // privacy model). Idempotent: re-running a bucket overwrites its row with identical counts.
 
-import type { Interval } from '@countless/shared';
+import type { Interval } from '@facet/shared';
 import { and, gte, lt, sql } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';

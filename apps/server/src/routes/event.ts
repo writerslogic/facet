@@ -3,7 +3,7 @@
 // content filters can't drop traffic. Same privacy model as the browser beacon: the raw IP is only
 // used to derive the visitor hash and is never stored.
 
-import { ServerEventSchema } from '@countless/shared';
+import { ServerEventSchema } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';

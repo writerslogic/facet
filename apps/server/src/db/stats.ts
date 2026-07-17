@@ -9,7 +9,7 @@ import type {
 	SeriesPoint,
 	StatsFilter,
 	StatsSummary,
-} from '@countless/shared';
+} from '@facet/shared';
 import { type SQL, and, desc, eq, gte, isNotNull, lt, ne, sql } from 'drizzle-orm';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { Env } from '../env.js';

@@ -3,7 +3,7 @@
 // not use the generic crudRouter — that factory is for the site-scoped child resources in later
 // phases (goals, funnels, experiments, sources).
 
-import { CreateSiteSchema, IssueKeySchema, type Site } from '@countless/shared';
+import { CreateSiteSchema, IssueKeySchema, type Site } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { desc } from 'drizzle-orm';
 import { Hono } from 'hono';

@@ -17,8 +17,8 @@ export type RangePreset = '24h' | '7d' | '30d' | '90d';
 
 export const RANGE_PRESETS: RangePreset[] = ['24h', '7d', '30d', '90d'];
 
-const KEY_STORAGE = 'countless.key';
-const SITE_STORAGE = 'countless.site';
+const KEY_STORAGE = 'facet.key';
+const SITE_STORAGE = 'facet.site';
 
 const PRESET_DAYS: Record<RangePreset, number> = {
 	'24h': 1,

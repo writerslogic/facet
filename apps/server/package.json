@@ -1,8 +1,8 @@
 {
-	"name": "@countless/server",
+	"name": "@facet/server",
 	"version": "0.0.0",
 	"private": true,
-	"description": "Countless Cloudflare Worker: ingest, stats API, cron rollups, and D1 schema.",
+	"description": "Facet Cloudflare Worker: ingest, stats API, cron rollups, and D1 schema.",
 	"type": "module",
 	"main": "src/index.ts",
 	"scripts": {
@@ -11,15 +11,15 @@
 		"lint": "biome check .",
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
-		"pretest": "pnpm --filter @countless/dashboard build",
+		"pretest": "pnpm --filter @facet/dashboard build",
 		"test": "vitest run",
 		"db:generate": "drizzle-kit generate",
-		"migrate:local": "wrangler d1 migrations apply countless --local",
-		"migrate:remote": "wrangler d1 migrations apply countless --remote",
-		"seed:local": "wrangler d1 execute countless --local --file=./scripts/seed.sql"
+		"migrate:local": "wrangler d1 migrations apply facet --local",
+		"migrate:remote": "wrangler d1 migrations apply facet --remote",
+		"seed:local": "wrangler d1 execute facet --local --file=./scripts/seed.sql"
 	},
 	"dependencies": {
-		"@countless/shared": "workspace:*",
+		"@facet/shared": "workspace:*",
 		"@hono/valibot-validator": "0.5.2",
 		"drizzle-orm": "0.38.3",
 		"hono": "4.6.14",

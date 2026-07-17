@@ -2,7 +2,7 @@
 // drops bot traffic, hashes the visitor privacy-safely, and writes a raw event + session upsert.
 // The raw IP is used only to derive the hash; it is never stored, logged, or returned.
 
-import { CollectPayloadSchema } from '@countless/shared';
+import { CollectPayloadSchema } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';

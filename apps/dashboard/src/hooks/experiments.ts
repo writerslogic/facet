@@ -1,7 +1,7 @@
 // React Query hooks for experiments: enumerate a site's experiments via the API-key catalog
 // endpoint, and fetch a single experiment's per-variant significance result for a chosen goal.
 
-import type { Experiment, ExperimentResult, Goal } from '@countless/shared';
+import type { Experiment, ExperimentResult, Goal } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api.js';
 import type { Range } from '../state.js';

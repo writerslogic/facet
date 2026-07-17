@@ -1,8 +1,8 @@
 {
-  "name": "countless-monorepo",
+  "name": "facet",
   "version": "0.3.0",
   "private": true,
-  "description": "Countless — privacy-first, Cloudflare-native web analytics.",
+  "description": "Facet — privacy-first, Cloudflare-native web analytics.",
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@11.12.0",
@@ -11,18 +11,18 @@
   },
   "scripts": {
     "dev": "wrangler dev",
-    "dev:web": "pnpm --filter @countless/dashboard dev",
-    "dev:worker": "pnpm --filter @countless/server dev",
+    "dev:web": "pnpm --filter @facet/dashboard dev",
+    "dev:worker": "pnpm --filter @facet/server dev",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "ci": "biome ci .",
-    "build": "pnpm --filter @countless/dashboard build && pnpm -r --filter '!@countless/dashboard' build",
-    "deploy": "pnpm --filter @countless/server deploy",
-    "db:generate": "pnpm --filter @countless/server db:generate",
-    "db:migrate": "pnpm --filter @countless/server migrate:local"
+    "build": "pnpm --filter @facet/dashboard build && pnpm -r --filter '!@facet/dashboard' build",
+    "deploy": "pnpm --filter @facet/server deploy",
+    "db:generate": "pnpm --filter @facet/server db:generate",
+    "db:migrate": "pnpm --filter @facet/server migrate:local"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",

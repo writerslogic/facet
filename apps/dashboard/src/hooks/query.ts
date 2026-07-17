@@ -1,7 +1,7 @@
 // React Query mutation for the natural-language analytics endpoint. POSTs the question + range and
 // returns the constrained NlQueryResult. A mutation (not a query) since it's user-triggered on submit.
 
-import type { NlQueryResult } from '@countless/shared';
+import type { NlQueryResult } from '@facet/shared';
 import { useMutation } from '@tanstack/react-query';
 import { apiPost } from '../api.js';
 import type { Range } from '../state.js';

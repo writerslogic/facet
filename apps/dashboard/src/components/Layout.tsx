@@ -14,7 +14,7 @@ export function Layout({ children }: { children: ReactNode }): ReactElement {
 			<header className="sticky top-0 z-10 border-b border-neutral-200 bg-white/80 backdrop-blur">
 				<div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-6 py-3">
 					<div className="flex items-baseline gap-3">
-						<span className="text-lg font-semibold tracking-tight">Countless</span>
+						<span className="text-lg font-semibold tracking-tight">Facet</span>
 						<span className="text-sm text-neutral-400">{siteId}</span>
 					</div>
 					<div className="flex items-center gap-3">

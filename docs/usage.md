@@ -2,7 +2,7 @@
 
 # Usage
 
-Add tracking to a site by dropping in the script tag, or by importing the `countless`
+Add tracking to a site by dropping in the script tag, or by importing the `@writerslogic/facet`
 package and calling `track()` yourself. Both send the same beacon to
 `POST /api/collect` on your deployment.
 
@@ -31,13 +31,13 @@ available, falling back to a `keepalive` `fetch`.
 Install the browser client:
 
 ```sh
-npm install countless
+npm install @writerslogic/facet
 ```
 
 Configure it once with `init(...)`, then call `track()`:
 
 ```ts
-import { init, track } from 'countless';
+import { init, track } from '@writerslogic/facet';
 
 init({
   host: 'https://your-deployment.example.com',
@@ -51,7 +51,7 @@ track();
 track('signup', { plan: 'pro' });
 ```
 
-`init` takes a `host` (the collect endpoint origin — Countless appends `/api/collect`)
+`init` takes a `host` (the collect endpoint origin — Facet appends `/api/collect`)
 and a `siteId`. Until `init` is called, `track()` is a no-op. `track()` reads
 `location.hostname`, `location.pathname`, and `document.referrer` from the browser, and
 appends any `utm_source` / `utm_medium` / `utm_campaign` query parameters as `utm`.
@@ -68,17 +68,17 @@ The client captures marketing attribution and form submissions with no extra cod
 - **Form submissions** — when loaded via the script tag, the client auto-tracks form
   submits as a `form_submit` event with props `form_id`, `form_name`, and `action` (any of
   which may be `null`). **No field values are ever read.** Opt a form out by adding
-  `data-countless-ignore` to the `<form>`:
+  `data-facet-ignore` to the `<form>`:
 
   ```html
-  <form data-countless-ignore>
+  <form data-facet-ignore>
     <!-- this form's submits are not tracked -->
   </form>
   ```
 
 ## umami compatibility
 
-Countless installs umami-compatible globals so existing umami sites migrate by swapping
+Facet installs umami-compatible globals so existing umami sites migrate by swapping
 a single script tag:
 
 ```js
@@ -86,10 +86,10 @@ a single script tag:
 window.umami.track('signup', { plan: 'pro' });
 
 // The native global exposes the same track (plus init):
-window.countless.track('signup', { plan: 'pro' });
+window.facet.track('signup', { plan: 'pro' });
 ```
 
-`window.umami.track(name, props)` and `window.countless.track(name, props)` both call
+`window.umami.track(name, props)` and `window.facet.track(name, props)` both call
 the same `track()`.
 
 ## Custom events with props

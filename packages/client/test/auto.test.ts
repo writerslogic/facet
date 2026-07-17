@@ -44,7 +44,7 @@ describe('auto-init', () => {
 		const { beacons } = setup();
 		await import('../src/auto.js');
 		expect(typeof window.umami?.track).toBe('function');
-		expect(typeof window.countless?.track).toBe('function');
+		expect(typeof window.facet?.track).toBe('function');
 		expect(beacons()).toBe(1);
 	});
 

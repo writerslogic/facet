@@ -5,7 +5,7 @@
   // of a live binding, and the /api/stats/query route returns 503 when `env.AI` is absent — which is
   // exactly the case here. Keep the D1/assets/vars in sync with wrangler.jsonc.
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "countless",
+  "name": "facet",
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
@@ -19,7 +19,7 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "countless",
+      "database_name": "facet",
       "database_id": "PLACEHOLDER_D1_DATABASE_ID",
       "migrations_dir": "migrations"
     }

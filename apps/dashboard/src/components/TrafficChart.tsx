@@ -2,7 +2,7 @@
 // series (x = bucket seconds), resizes with a ResizeObserver, and tears down on unmount.
 // uPlot needs canvas; if the mount throws (e.g. under jsdom) we fall back to an empty state.
 
-import type { SeriesPoint } from '@countless/shared';
+import type { SeriesPoint } from '@facet/shared';
 import { type ReactElement, useEffect, useRef } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';

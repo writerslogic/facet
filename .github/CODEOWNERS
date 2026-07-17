@@ -1,0 +1,13 @@
+# Default owner for everything
+* @writerslogic
+
+# Privacy- and security-critical code (visitor hashing, salts, auth, ingest)
+/apps/server/src/lib/crypto.ts @writerslogic
+/apps/server/src/lib/hash.ts @writerslogic
+/apps/server/src/lib/salt.ts @writerslogic
+/apps/server/src/lib/auth.ts @writerslogic
+/apps/server/src/lib/ingest.ts @writerslogic
+
+# CI/CD and security policy
+/.github/ @writerslogic
+/SECURITY.md @writerslogic

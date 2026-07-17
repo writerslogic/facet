@@ -2,7 +2,7 @@
 // (insert event, upsert session, read aggregates) hang off it so table/column types stay inferred.
 // Drizzle builds parameterized statements — no raw SQL strings here.
 
-import type { EventProps } from '@countless/shared';
+import type { EventProps } from '@facet/shared';
 import { drizzle } from 'drizzle-orm/d1';
 import type { Env } from '../env.js';
 import * as schema from './schema.js';

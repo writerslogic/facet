@@ -1,4 +1,4 @@
-# Release: on a v* tag, publish the public npm packages (countless, countless-cli) with provenance.
+# Release: on a v* tag, publish the public npm packages (@writerslogic/facet, @writerslogic/facet-cli) with provenance.
 # The first step fails fast if NPM_TOKEN is missing, so a mis-provisioned release never half-publishes.
 name: Release
 
@@ -42,7 +42,7 @@ jobs:
         run: pnpm build
 
       - name: Publish
-        run: pnpm publish --filter countless --filter countless-cli --access public --no-git-checks --provenance
+        run: pnpm publish --filter @writerslogic/facet --filter @writerslogic/facet-cli --access public --no-git-checks --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_PROVENANCE: 'true'

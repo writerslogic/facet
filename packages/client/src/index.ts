@@ -1,16 +1,16 @@
-// Public API for the `countless` npm package: the programmatic `track()` entrypoint and
+// Public API for the `facet` npm package: the programmatic `track()` entrypoint and
 // config. Zero dependencies.
 
-import type { EventProps } from '@countless/shared';
+import type { EventProps } from '@facet/shared';
 
-export interface CountlessConfig {
+export interface FacetConfig {
 	/** Collect endpoint origin, e.g. "https://analytics.example.com". */
 	host: string;
 	/** Site UUID. */
 	siteId: string;
 }
 
-let Config: CountlessConfig | undefined;
+let Config: FacetConfig | undefined;
 
 function parseUtmFromSearch(search: string): Record<string, string> | undefined {
 	const params = new URLSearchParams(search);
@@ -60,12 +60,12 @@ export function track(_name?: string, _props?: EventProps): void {
 }
 
 /** Configure the tracker (host + site id). Called by the auto-init shim. */
-export function init(_config_: CountlessConfig): void {
+export function init(_config_: FacetConfig): void {
 	Config = _config_;
 }
 
 /** The active config, or undefined before init(). Used by the experiments module. */
-export function getConfig(): CountlessConfig | undefined {
+export function getConfig(): FacetConfig | undefined {
 	return Config;
 }
 

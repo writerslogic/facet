@@ -2,7 +2,7 @@
 
 # Self-hosting
 
-Countless runs entirely on Cloudflare Workers + D1. One Worker serves ingest, the stats
+Facet runs entirely on Cloudflare Workers + D1. One Worker serves ingest, the stats
 API, the dashboard, and the hourly cron rollups.
 
 ## Prerequisites
@@ -14,8 +14,8 @@ API, the dashboard, and the hourly cron rollups.
 Clone the repo and install dependencies:
 
 ```sh
-git clone https://github.com/OWNER/countless.git
-cd countless
+git clone https://github.com/writerslogic/facet.git
+cd facet
 pnpm install
 ```
 
@@ -24,7 +24,7 @@ pnpm install
 ### 1. Create the D1 database
 
 ```sh
-wrangler d1 create countless
+wrangler d1 create facet
 ```
 
 This prints a `database_id`. Open `apps/server/wrangler.jsonc` and replace the
@@ -34,7 +34,7 @@ placeholder — it ships as `PLACEHOLDER_D1_DATABASE_ID`:
 "d1_databases": [
   {
     "binding": "DB",
-    "database_name": "countless",
+    "database_name": "facet",
     "database_id": "PLACEHOLDER_D1_DATABASE_ID", // ← paste your real id here
     "migrations_dir": "migrations"
   }
@@ -53,7 +53,7 @@ wrangler secret put ADMIN_TOKEN
 ### 3. Apply migrations
 
 ```sh
-pnpm --filter @countless/server migrate:remote
+pnpm --filter @facet/server migrate:remote
 ```
 
 ### 4. Build the dashboard
@@ -61,13 +61,13 @@ pnpm --filter @countless/server migrate:remote
 The Worker serves the built dashboard from `apps/dashboard/dist` as static assets:
 
 ```sh
-pnpm --filter @countless/dashboard build
+pnpm --filter @facet/dashboard build
 ```
 
 ### 5. Deploy the Worker
 
 ```sh
-pnpm --filter @countless/server deploy
+pnpm --filter @facet/server deploy
 ```
 
 Your Worker now serves the dashboard at its root and the API under `/api`.
@@ -127,8 +127,8 @@ See the [API reference](./api.md) for the full admin surface (`GET /api/sites`,
 Apply migrations to the local D1 database, then load the demo seed:
 
 ```sh
-pnpm --filter @countless/server migrate:local
-pnpm --filter @countless/server seed:local
+pnpm --filter @facet/server migrate:local
+pnpm --filter @facet/server seed:local
 ```
 
 `seed:local` inserts a demo site (`Demo` / `demo.local`, id
@@ -142,7 +142,7 @@ clk_localdevkey
 Run the Worker locally:
 
 ```sh
-pnpm --filter @countless/server dev
+pnpm --filter @facet/server dev
 ```
 
 Then query the local stats API with the dev key:

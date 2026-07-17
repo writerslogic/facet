@@ -1,4 +1,4 @@
-// `countless migrate`: apply D1 migrations by shelling out to wrangler. The spawner is injectable
+// `facet migrate`: apply D1 migrations by shelling out to wrangler. The spawner is injectable
 // so tests assert the built argv without running wrangler.
 
 import { type SpawnOptions, spawn } from 'node:child_process';
@@ -20,7 +20,7 @@ export function runMigrate(args: string[], spawnImpl: SpawnLike = spawn): Promis
 		allowPositionals: false,
 	});
 
-	const db = values.db ?? 'countless';
+	const db = values.db ?? 'facet';
 	const argv = ['d1', 'migrations', 'apply', db, values.remote ? '--remote' : '--local'];
 
 	return new Promise((resolve) => {

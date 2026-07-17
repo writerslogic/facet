@@ -1,7 +1,7 @@
 // React Query hooks for goals, funnels, conversions, and funnel reports. All go through apiFetch
 // (bearer API key). Enabled only once the key + relevant id are present.
 
-import type { Funnel, FunnelReportResult, Goal, GoalConversionResult } from '@countless/shared';
+import type { Funnel, FunnelReportResult, Goal, GoalConversionResult } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api.js';
 import type { Range } from '../state.js';

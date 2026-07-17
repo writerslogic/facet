@@ -1,7 +1,7 @@
 // React Query hook for the stats endpoint. Keyed on the full query so preset/range changes
 // refetch automatically; disabled until an API key is present.
 
-import type { StatsQuery, StatsResponse } from '@countless/shared';
+import type { StatsQuery, StatsResponse } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, qs } from '../api.js';
 

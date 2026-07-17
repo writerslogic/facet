@@ -3,7 +3,7 @@
 // client-facing flag definitions (flag_key + variants) so the browser can bucket locally. No
 // server-side identity is involved — the server only stores aggregate exposure/conversion events.
 
-import { type Experiment, ExperimentSchema, type ExperimentVariant } from '@countless/shared';
+import { type Experiment, ExperimentSchema, type ExperimentVariant } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';

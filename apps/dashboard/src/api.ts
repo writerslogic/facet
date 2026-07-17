@@ -1,8 +1,8 @@
-// Dashboard API client: typed fetch wrappers around the Countless stats endpoints. Uses the
+// Dashboard API client: typed fetch wrappers around the Facet stats endpoints. Uses the
 // shared response types so the UI and Worker never drift. Every network call goes through
 // apiFetch so auth + error handling stay in one place.
 
-import type { StatsQuery, StatsResponse } from '@countless/shared';
+import type { StatsQuery, StatsResponse } from '@facet/shared';
 
 /** Serialize a StatsQuery to a querystring, omitting optional params when unset. */
 export function qs(query: StatsQuery): string {

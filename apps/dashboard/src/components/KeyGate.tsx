@@ -24,9 +24,7 @@ export function KeyGate(): ReactElement {
 				onSubmit={onSubmit}
 				className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm"
 			>
-				<h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
-					Countless
-				</h1>
+				<h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Facet</h1>
 				<p className="mt-1 text-sm text-neutral-500">
 					Enter your API key and site to view analytics.
 				</p>

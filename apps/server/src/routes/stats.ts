@@ -1,7 +1,7 @@
 // GET /api/stats — API-key authenticated read endpoint. Validates the range, enforces that the key
 // owns the requested site, and assembles the full stats response from the T021 helpers.
 
-import { type Goal, StatsQuerySchema, type StatsResponse } from '@countless/shared';
+import { type Goal, StatsQuerySchema, type StatsResponse } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';

@@ -16,8 +16,8 @@ function renderApp() {
 }
 
 describe('App', () => {
-	it('renders the Countless heading', () => {
+	it('renders the Facet heading', () => {
 		renderApp();
-		expect(screen.getByRole('heading', { name: 'Countless' })).toBeInTheDocument();
+		expect(screen.getByRole('heading', { name: 'Facet' })).toBeInTheDocument();
 	});
 });

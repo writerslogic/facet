@@ -1,7 +1,7 @@
 {
-	"name": "countless",
+	"name": "@writerslogic/facet",
 	"version": "0.3.0",
-	"description": "Countless browser tracking snippet: zero-dependency, umami-compatible.",
+	"description": "Facet browser tracking snippet: zero-dependency, umami-compatible.",
 	"license": "MIT",
 	"type": "module",
 	"main": "./dist/index.js",
@@ -23,7 +23,7 @@
 		"test": "vitest run --passWithNoTests"
 	},
 	"devDependencies": {
-		"@countless/shared": "workspace:*",
+		"@facet/shared": "workspace:*",
 		"tsup": "8.3.5",
 		"typescript": "5.7.3",
 		"vitest": "2.1.8"

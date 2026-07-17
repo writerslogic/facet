@@ -2,7 +2,7 @@
 
 # Privacy model
 
-Countless is cookieless and stores no personal identifiers. There are no cookies, no
+Facet is cookieless and stores no personal identifiers. There are no cookies, no
 `localStorage`, and no cross-site or cross-day identifiers. **Raw IP addresses are never
 stored, logged, or returned** — an IP is read only inside the hash function below and is
 discarded immediately after.

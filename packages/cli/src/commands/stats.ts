@@ -1,8 +1,8 @@
-// `countless stats`: fetch summary stats from a running Countless deployment with an API key and
+// `facet stats`: fetch summary stats from a running Facet deployment with an API key and
 // print a compact table. The JSON fetcher is injectable so tests assert output without HTTP.
 
 import { parseArgs } from 'node:util';
-import type { StatsResponse } from '@countless/shared';
+import type { StatsResponse } from '@facet/shared';
 import pc from 'picocolors';
 import { fetchJson, printError } from '../util.js';
 
@@ -47,7 +47,7 @@ export async function runStats(args: string[], fetchImpl: FetchJson = fetchJson)
 			headers: { Authorization: `Bearer ${key}` },
 		});
 		const { pageviews, visitors, events } = data.summary;
-		process.stdout.write(`${pc.bold('Countless stats')} (${range})\n`);
+		process.stdout.write(`${pc.bold('Facet stats')} (${range})\n`);
 		process.stdout.write(`  Pageviews: ${pageviews}\n`);
 		process.stdout.write(`  Visitors:  ${visitors}\n`);
 		process.stdout.write(`  Events:    ${events}\n`);

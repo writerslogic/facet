@@ -8,7 +8,7 @@ declare global {
 	interface Window {
 		/** umami-compatible global: window.umami.track(name, props). */
 		umami?: { track: typeof track };
-		countless?: {
+		facet?: {
 			track: typeof track;
 			init: typeof init;
 			variant: typeof variant;
@@ -46,13 +46,12 @@ function boot(): void {
 			};
 		}
 	}
-	// Auto-track form submissions (no field values are ever read). Opt out with data-countless-ignore.
+	// Auto-track form submissions (no field values are ever read). Opt out with data-facet-ignore.
 	document.addEventListener(
 		'submit',
 		(event) => {
 			const form = event.target as HTMLFormElement | null;
-			if (!form || form.tagName !== 'FORM' || form.hasAttribute('data-countless-ignore'))
-				return;
+			if (!form || form.tagName !== 'FORM' || form.hasAttribute('data-facet-ignore')) return;
 			track('form_submit', {
 				form_id: form.id || null,
 				form_name: form.getAttribute('name') || null,
@@ -65,7 +64,7 @@ function boot(): void {
 	if (typeof window !== 'undefined') {
 		window.addEventListener('popstate', () => track());
 		window.umami = { track };
-		window.countless = { track, init, variant };
+		window.facet = { track, init, variant };
 	}
 }
 

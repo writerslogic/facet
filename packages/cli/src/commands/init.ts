@@ -1,4 +1,4 @@
-// `countless init`: scaffold a wrangler.jsonc + .dev.vars for a self-hosted deployment. Prompts for
+// `facet init`: scaffold a wrangler.jsonc + .dev.vars for a self-hosted deployment. Prompts for
 // any missing required value (skipped under --dry-run). Never makes network or wrangler calls.
 
 import { randomBytes } from 'node:crypto';
@@ -54,17 +54,17 @@ export async function runInit(args: string[]): Promise<number> {
 
 	const dryRun = Boolean(values['dry-run']);
 	const dir = values.dir ?? '.';
-	const db = values.db ?? 'countless';
+	const db = values.db ?? 'facet';
 	let name = values.name;
 
 	if (!name) {
 		if (dryRun) {
-			name = 'countless';
+			name = 'facet';
 		} else {
 			const answer = await p.text({
 				message: 'Worker name',
-				placeholder: 'countless',
-				defaultValue: 'countless',
+				placeholder: 'facet',
+				defaultValue: 'facet',
 			});
 			if (p.isCancel(answer)) {
 				return 1;
