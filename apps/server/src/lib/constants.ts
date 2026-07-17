@@ -41,3 +41,6 @@ export const ANOMALY_Z = 3.0 as const;
 
 /** Minimum number of baseline buckets required before an anomaly can be scored. */
 export const ANOMALY_MIN_BASELINE = 3 as const;
+
+/** Maximum rows a single breakdown export may request (bounded output). */
+export const EXPORT_MAX_ROWS = 1000 as const;

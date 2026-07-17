@@ -1,7 +1,7 @@
 // GET /api/stats — API-key authenticated read endpoint. Validates the range, enforces that the key
 // owns the requested site, and assembles the full stats response from the T021 helpers.
 
-import { type Goal, StatsQuerySchema, type StatsResponse } from '@facet/shared';
+import { type CountRow, type Goal, StatsQuerySchema, type StatsResponse } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -27,7 +27,8 @@ import {
 import type { AppEnv } from '../env.js';
 import { aiRunner, answerQuestion } from '../lib/ai.js';
 import { requireApiKey } from '../lib/auth.js';
-import { DAY_MS, HOUR_MS, MAX_RANGE_DAYS } from '../lib/constants.js';
+import { DAY_MS, EXPORT_MAX_ROWS, HOUR_MS, MAX_RANGE_DAYS } from '../lib/constants.js';
+import { toCsv } from '../lib/csv.js';
 import { ApiError } from '../lib/http.js';
 
 export const statsRoutes = new Hono<AppEnv>();
@@ -192,6 +193,87 @@ statsRoutes.get(
 		return c.json({ interactions: await topInteractions(c.env, f) });
 	},
 );
+
+// Authenticated read-only export of a series or a breakdown as CSV or JSON. Same site-scoping and
+// range validation as the other stats reads; output is bounded (series by range, breakdown by limit)
+// and CSV cells are formula-injection-safe.
+type ExportFilter = { siteId: string; start: number; end: number };
+const EXPORT_DIMENSIONS: Record<
+	string,
+	(env: AppEnv['Bindings'], f: ExportFilter) => Promise<CountRow[]>
+> = {
+	path: (env, f) => topPaths(env, f, EXPORT_MAX_ROWS),
+	referrer: (env, f) => topReferrers(env, f, EXPORT_MAX_ROWS),
+	country: (env, f) => topCountries(env, f, EXPORT_MAX_ROWS),
+	device: (env, f) => topDevices(env, f),
+	event: (env, f) => topEvents(env, f, EXPORT_MAX_ROWS),
+	channel: (env, f) => channels(env, f),
+};
+
+statsRoutes.get('/stats/export', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	const start = Number(c.req.query('start'));
+	const end = Number(c.req.query('end'));
+	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+		throw new ApiError('bad_range', 400);
+	}
+	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
+		throw new ApiError('range_too_large', 400);
+	}
+	const format = c.req.query('format') ?? 'csv';
+	if (format !== 'csv' && format !== 'json') {
+		throw new ApiError('bad_request', 400, 'format must be csv or json');
+	}
+	const kind = c.req.query('kind') ?? 'series';
+	const f = { siteId, start, end };
+
+	let columns: string[];
+	let rows: (string | number)[][];
+	let name: string;
+
+	if (kind === 'series') {
+		const q = c.req.query('interval');
+		const interval =
+			q === 'hour' || q === 'day' ? q : end - start <= 48 * HOUR_MS ? 'hour' : 'day';
+		const points = await series(c.env, f, interval);
+		columns = ['bucket_start_iso', 'bucket_start_ms', 'pageviews', 'visitors'];
+		rows = points.map((p) => [new Date(p.t).toISOString(), p.t, p.pageviews, p.visitors]);
+		name = `facet-series-${start}-${end}`;
+	} else if (kind === 'breakdown') {
+		const dimension = c.req.query('dimension') ?? '';
+		const load = EXPORT_DIMENSIONS[dimension];
+		if (!load) {
+			throw new ApiError('bad_request', 400, 'unknown or missing dimension');
+		}
+		const limitRaw = c.req.query('limit');
+		if (limitRaw !== undefined) {
+			const limit = Number(limitRaw);
+			if (!Number.isInteger(limit) || limit < 1 || limit > EXPORT_MAX_ROWS) {
+				throw new ApiError('bad_request', 400, `limit must be 1..${EXPORT_MAX_ROWS}`);
+			}
+		}
+		const limit = limitRaw !== undefined ? Number(limitRaw) : 100;
+		const data = (await load(c.env, f)).slice(0, limit);
+		columns = ['key', 'count'];
+		rows = data.map((r) => [r.key, r.count]);
+		name = `facet-${dimension}-${start}-${end}`;
+	} else {
+		throw new ApiError('bad_request', 400, 'kind must be series or breakdown');
+	}
+
+	if (format === 'json') {
+		return c.json({ columns, rows });
+	}
+	return new Response(toCsv(columns, rows), {
+		headers: {
+			'content-type': 'text/csv; charset=utf-8',
+			'content-disposition': `attachment; filename="${name}.csv"`,
+		},
+	});
+});
 
 statsRoutes.get(
 	'/stats/anomalies',
