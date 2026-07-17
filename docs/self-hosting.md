@@ -183,6 +183,55 @@ Raw events, sessions, and daily salts are purged past a rolling window controlle
 rollups are durable and never deleted. The purge runs on the hourly cron. See the
 [privacy model](./privacy.md) for details.
 
+## Operations
+
+### Backups (D1 export)
+
+Facet stores everything in D1. Export a full SQL snapshot with Wrangler:
+
+```sh
+wrangler d1 export facet --remote --output facet-backup.sql
+```
+
+Store snapshots off-site and on a cadence that matches your tolerance for data loss (e.g. daily).
+To restore into a fresh database, create it, apply migrations, then execute the dump:
+
+```sh
+wrangler d1 create facet
+# set the new database_id (see `facet config set-db-id`), then:
+pnpm --filter @facet/server migrate:remote
+wrangler d1 execute facet --remote --file facet-backup.sql
+```
+
+Aggregated `event_rollups` are durable; raw events/sessions/salts are subject to the retention
+window above, so a backup captures only data still inside that window.
+
+### Observability & logs
+
+The Worker emits structured JSON log lines (level, message, request/handler context) with IPs
+stripped, and Cloudflare **Workers observability** is enabled in `wrangler.jsonc`
+(`observability.enabled = true`). View and query logs in the Cloudflare dashboard or with
+`wrangler tail`.
+
+### Anomaly alerting (optional webhook)
+
+The cron job runs anomaly detection over each site's last completed hour and can POST an alert to a
+webhook. It is **disabled unless configured** and is never a dependency of ingestion:
+
+```sh
+# The endpoint that receives the alerts (a var):
+wrangler secret put WEBHOOK_URL      # or set as a var in wrangler.jsonc
+# Optional shared secret used to HMAC-sign each delivery:
+wrangler secret put WEBHOOK_SECRET
+```
+
+Each delivery is a JSON body `{ type: "anomaly", site_id, metric, bucket, direction, z, value,
+baseline_mean, summary, delivered_at }`, signed (when a secret is set) with header
+`X-Facet-Signature: sha256=<hmac>` — verify it before trusting the payload. Delivery is
+time-bounded (5s) and best-effort; the hourly cadence means each anomalous `(site_id, bucket)` is
+sent at most once, but consumers should still dedupe on those fields. If you prefer polling, use
+`GET /api/stats/anomalies` instead.
+
 ## Test Worker config
 
 `apps/server/wrangler.test.jsonc` is **generated** from `wrangler.jsonc` by

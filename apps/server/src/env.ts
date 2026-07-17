@@ -19,6 +19,10 @@ export interface Env {
 	ADMIN_TOKEN: string;
 	/** Workers AI binding, used to translate natural-language analytics questions. */
 	AI: Ai;
+	/** Optional anomaly-alert webhook URL (var). When unset, anomaly webhooks are disabled. */
+	WEBHOOK_URL?: string;
+	/** Optional secret (Worker secret) used to HMAC-sign anomaly webhook payloads. */
+	WEBHOOK_SECRET?: string;
 }
 
 /** App-wide Hono environment: bindings plus request-scoped variables (set by auth middleware). */
