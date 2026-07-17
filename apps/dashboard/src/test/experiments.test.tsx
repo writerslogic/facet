@@ -82,7 +82,12 @@ describe('Experiments', () => {
 	it('renders the variant table with stat columns and a significance badge', () => {
 		render(
 			withQuery(
-				<Experiments apiKey="clk_test" siteId="site-1" range={{ start: 0, end: 1 }} />,
+				<Experiments
+					apiKey="clk_test"
+					siteId="site-1"
+					range={{ start: 0, end: 1 }}
+					onOpenSettings={() => {}}
+				/>,
 			),
 		);
 		expect(screen.getByText('Exposures')).toBeInTheDocument();

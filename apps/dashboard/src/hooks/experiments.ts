@@ -26,7 +26,7 @@ export function useExperimentResult(
 	range: Range,
 ) {
 	return useQuery({
-		queryKey: ['experiment-result', experimentId, goal?.id, range],
+		queryKey: ['experiment-result', siteId, experimentId, goal?.id, range],
 		queryFn: () =>
 			apiFetch<ExperimentResult>(
 				`/api/stats/experiment?site_id=${siteId}&experiment_id=${experimentId}&goal_type=${goal?.type}&goal_value=${encodeURIComponent(goal?.match_value ?? '')}&start=${range.start}&end=${range.end}`,

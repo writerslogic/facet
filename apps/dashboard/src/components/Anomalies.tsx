@@ -6,7 +6,9 @@ import type { Anomaly } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { useAnomalies } from '../hooks/anomaly.js';
 import { cn } from '../lib/cn.js';
+import { isAuthError } from '../lib/status.js';
 import type { Range } from '../state.js';
+import { AuthErrorBanner, CardSkeletons, EmptyState, ErrorState } from './StatusStates.js';
 
 /** Percent change of the anomalous bucket vs. its baseline mean, rounded. */
 function pctChange(a: Anomaly): number {
@@ -64,23 +66,28 @@ export function Anomalies({
 	siteId: string;
 	range: Range;
 }): ReactElement {
-	const { data, error } = useAnomalies(apiKey, siteId, range);
+	const { data, error, isLoading } = useAnomalies(apiKey, siteId, range);
 	const anomalies = data?.anomalies ?? [];
+
+	if (error && isAuthError(error)) {
+		return <AuthErrorBanner />;
+	}
 
 	if (error) {
 		return (
-			<p className="rounded-xl border border-neutral-200 bg-white p-5 text-center text-sm text-neutral-400 shadow-sm">
-				{error instanceof Error ? error.message : 'Failed to load anomalies.'}
-			</p>
+			<ErrorState
+				message="Could not load anomalies"
+				detail={error instanceof Error ? error.message : null}
+			/>
 		);
 	}
 
+	if (isLoading || !data) {
+		return <CardSkeletons count={2} />;
+	}
+
 	if (anomalies.length === 0) {
-		return (
-			<p className="rounded-xl border border-neutral-200 bg-white p-5 text-center text-sm text-neutral-400 shadow-sm">
-				No anomalies detected.
-			</p>
-		);
+		return <EmptyState title="No anomalies detected" />;
 	}
 
 	return (

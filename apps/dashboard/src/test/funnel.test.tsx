@@ -43,6 +43,7 @@ describe('Conversions', () => {
 					apiKey="clk_test"
 					siteId="site-1"
 					range={{ start: 0, end: 1 }}
+					onOpenSettings={() => {}}
 					goals={[
 						{
 							id: 'g1',

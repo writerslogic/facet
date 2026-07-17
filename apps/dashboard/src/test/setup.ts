@@ -3,9 +3,9 @@ import { cleanup } from '@testing-library/react';
 import { afterEach } from 'vitest';
 
 // jsdom in this config does not expose Storage; provide a minimal in-memory implementation.
-if (!('localStorage' in globalThis) || globalThis.localStorage == null) {
+function makeStorage(): Storage {
 	const store = new Map<string, string>();
-	const storage: Storage = {
+	return {
 		get length() {
 			return store.size;
 		},
@@ -19,8 +19,18 @@ if (!('localStorage' in globalThis) || globalThis.localStorage == null) {
 			store.set(key, String(value));
 		},
 	};
+}
+
+if (!('localStorage' in globalThis) || globalThis.localStorage == null) {
 	Object.defineProperty(globalThis, 'localStorage', {
-		value: storage,
+		value: makeStorage(),
+		configurable: true,
+	});
+}
+
+if (!('sessionStorage' in globalThis) || globalThis.sessionStorage == null) {
+	Object.defineProperty(globalThis, 'sessionStorage', {
+		value: makeStorage(),
 		configurable: true,
 	});
 }
