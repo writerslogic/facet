@@ -41,7 +41,11 @@ by swapping a single script tag.
 - **A/B experiments & feature flags.** Privacy-first, client-side variant assignment; two-proportion significance testing in the dashboard.
 - **Anomaly detection & autopsy.** Automatic z-score detection with a plain-language root-cause summary (largest-contributing segment).
 - **Ask in plain English.** Natural-language queries over your stats via Workers AI, translated to a constrained, safe query intent.
+- **Realtime.** Active-visitor snapshot over a 5-minute window (distinct daily hashes; no cookies or persistent id).
 - **Ad-block-resilient.** First-party `POST /api/event` server-to-server ingest — no client script to block.
+- **Visitor opt-out & Do-Not-Track.** Honors browser DNT and a per-visitor opt-out; ignored visitors are never recorded.
+- **CSV / JSON export.** Export any series or breakdown from the API or dashboard; CSV is spreadsheet formula-injection-safe.
+- **In-dashboard admin.** A Settings tab manages sites and API keys, with one-click multi-site switching.
 - **Free, self-issued API keys** and **unlimited, first-class multi-site.**
 
 ## How privacy works
@@ -106,8 +110,10 @@ pnpm typecheck && pnpm lint && pnpm test
 ## Dashboard
 
 The dashboard is a React SPA served by the Worker at the root path. Enter an API key + site id to
-view Overview (KPIs, traffic chart, top-lists, channels), Funnels & conversions, Experiments, and
-Anomalies, plus an "Ask" tab for natural-language queries.
+view Overview (KPIs, traffic chart, top-lists, channels, realtime), Funnels & conversions,
+Experiments, and Anomalies, plus an "Ask" tab for natural-language queries. Custom date ranges with
+period-over-period comparison and CSV/JSON export are available throughout. A **Settings** tab
+(admin token) manages sites and API keys, with one-click multi-site switching.
 
 ## Documentation
 
