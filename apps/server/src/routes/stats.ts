@@ -1,7 +1,14 @@
 // GET /api/stats — API-key authenticated read endpoint. Validates the range, enforces that the key
 // owns the requested site, and assembles the full stats response.
 
-import { type CountRow, type Goal, StatsQuerySchema, type StatsResponse } from '@facet/shared';
+import {
+	type CountRow,
+	type Goal,
+	type StatsFilter,
+	type StatsQueryInput,
+	StatsQuerySchema,
+	type StatsResponse,
+} from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -40,6 +47,30 @@ import { ApiError } from '../lib/http.js';
 
 export const statsRoutes = new Hono<AppEnv>();
 
+/** Reject an empty range or one exceeding the maximum queryable span. */
+function assertRange(start: number, end: number): void {
+	if (end <= start) {
+		throw new ApiError('bad_range', 400);
+	}
+	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
+		throw new ApiError('range_too_large', 400);
+	}
+}
+
+/** Validate a stats query against the key's site + range, returning the internal filter. */
+function toStatsFilter(query: StatsQueryInput, siteId: string): StatsFilter {
+	if (query.site_id !== siteId) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	assertRange(query.start, query.end);
+	return {
+		siteId: query.site_id,
+		hostname: query.hostname,
+		start: query.start,
+		end: query.end,
+	};
+}
+
 statsRoutes.get(
 	'/stats',
 	requireApiKey,
@@ -50,23 +81,9 @@ statsRoutes.get(
 	}),
 	async (c) => {
 		const query = c.req.valid('query');
-		if (query.site_id !== c.get('siteId')) {
-			throw new ApiError('site_mismatch', 403);
-		}
-		if (query.end <= query.start) {
-			throw new ApiError('bad_range', 400);
-		}
-		if (query.end - query.start > MAX_RANGE_DAYS * DAY_MS) {
-			throw new ApiError('range_too_large', 400);
-		}
+		const f = toStatsFilter(query, c.get('siteId'));
 		const interval =
 			query.interval ?? (query.end - query.start <= 48 * HOUR_MS ? 'hour' : 'day');
-		const f = {
-			siteId: query.site_id,
-			hostname: query.hostname,
-			start: query.start,
-			end: query.end,
-		};
 		const [
 			summaryResult,
 			seriesResult,
@@ -115,22 +132,7 @@ statsRoutes.get(
 		}
 	}),
 	async (c) => {
-		const query = c.req.valid('query');
-		if (query.site_id !== c.get('siteId')) {
-			throw new ApiError('site_mismatch', 403);
-		}
-		if (query.end <= query.start) {
-			throw new ApiError('bad_range', 400);
-		}
-		if (query.end - query.start > MAX_RANGE_DAYS * DAY_MS) {
-			throw new ApiError('range_too_large', 400);
-		}
-		const f = {
-			siteId: query.site_id,
-			hostname: query.hostname,
-			start: query.start,
-			end: query.end,
-		};
+		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
 		return c.json({
 			engagement: await engagement(c.env, f),
 			meta: await sessionFreshness(c.env, f),
@@ -147,22 +149,7 @@ statsRoutes.get(
 		}
 	}),
 	async (c) => {
-		const query = c.req.valid('query');
-		if (query.site_id !== c.get('siteId')) {
-			throw new ApiError('site_mismatch', 403);
-		}
-		if (query.end <= query.start) {
-			throw new ApiError('bad_range', 400);
-		}
-		if (query.end - query.start > MAX_RANGE_DAYS * DAY_MS) {
-			throw new ApiError('range_too_large', 400);
-		}
-		const f = {
-			siteId: query.site_id,
-			hostname: query.hostname,
-			start: query.start,
-			end: query.end,
-		};
+		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
 		return c.json({
 			channels: await channels(c.env, f),
 			meta: await sessionFreshness(c.env, f),
@@ -181,22 +168,7 @@ statsRoutes.get(
 		}
 	}),
 	async (c) => {
-		const query = c.req.valid('query');
-		if (query.site_id !== c.get('siteId')) {
-			throw new ApiError('site_mismatch', 403);
-		}
-		if (query.end <= query.start) {
-			throw new ApiError('bad_range', 400);
-		}
-		if (query.end - query.start > MAX_RANGE_DAYS * DAY_MS) {
-			throw new ApiError('range_too_large', 400);
-		}
-		const f = {
-			siteId: query.site_id,
-			hostname: query.hostname,
-			start: query.start,
-			end: query.end,
-		};
+		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
 		return c.json({ interactions: await topInteractions(c.env, f) });
 	},
 );
@@ -234,12 +206,10 @@ statsRoutes.get('/stats/export', requireApiKey, async (c) => {
 	}
 	const start = Number(c.req.query('start'));
 	const end = Number(c.req.query('end'));
-	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+	if (!Number.isInteger(start) || !Number.isInteger(end)) {
 		throw new ApiError('bad_range', 400);
 	}
-	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
-		throw new ApiError('range_too_large', 400);
-	}
+	assertRange(start, end);
 	const format = c.req.query('format') ?? 'csv';
 	if (format !== 'csv' && format !== 'json') {
 		throw new ApiError('bad_request', 400, 'format must be csv or json');
@@ -301,22 +271,7 @@ statsRoutes.get(
 		}
 	}),
 	async (c) => {
-		const query = c.req.valid('query');
-		if (query.site_id !== c.get('siteId')) {
-			throw new ApiError('site_mismatch', 403);
-		}
-		if (query.end <= query.start) {
-			throw new ApiError('bad_range', 400);
-		}
-		if (query.end - query.start > MAX_RANGE_DAYS * DAY_MS) {
-			throw new ApiError('range_too_large', 400);
-		}
-		const f = {
-			siteId: query.site_id,
-			hostname: query.hostname,
-			start: query.start,
-			end: query.end,
-		};
+		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
 		return c.json({
 			anomalies: await detectAnomalies(c.env, f, Date.now()),
 		});
@@ -344,12 +299,10 @@ statsRoutes.post('/stats/query', requireApiKey, async (c) => {
 	}
 	const start = Number(body.start);
 	const end = Number(body.end);
-	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+	if (!Number.isInteger(start) || !Number.isInteger(end)) {
 		throw new ApiError('bad_range', 400);
 	}
-	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
-		throw new ApiError('range_too_large', 400);
-	}
+	assertRange(start, end);
 	if (!c.env.AI) {
 		return c.json({ error: 'ai_unavailable' }, 503);
 	}
@@ -365,12 +318,10 @@ statsRoutes.get('/stats/conversions', requireApiKey, async (c) => {
 	}
 	const start = Number(c.req.query('start'));
 	const end = Number(c.req.query('end'));
-	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+	if (!Number.isInteger(start) || !Number.isInteger(end)) {
 		throw new ApiError('bad_range', 400);
 	}
-	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
-		throw new ApiError('range_too_large', 400);
-	}
+	assertRange(start, end);
 	const row = await db(c.env)
 		.select()
 		.from(schema.goals)
@@ -433,12 +384,10 @@ statsRoutes.get('/stats/experiment', requireApiKey, async (c) => {
 	}
 	const start = Number(c.req.query('start'));
 	const end = Number(c.req.query('end'));
-	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+	if (!Number.isInteger(start) || !Number.isInteger(end)) {
 		throw new ApiError('bad_range', 400);
 	}
-	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
-		throw new ApiError('range_too_large', 400);
-	}
+	assertRange(start, end);
 	const goalType = c.req.query('goal_type');
 	if (goalType !== 'event' && goalType !== 'path') {
 		throw new ApiError('bad_goal', 400);
