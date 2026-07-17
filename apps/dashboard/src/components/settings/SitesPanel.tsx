@@ -124,7 +124,7 @@ function SiteRow({
 				className={cn(
 					'shrink-0 rounded-md border px-3 py-1 text-xs font-medium transition',
 					active
-						? 'border-sky-500 bg-sky-50 text-sky-700'
+						? 'border-accent-500 bg-accent-50 text-accent-700'
 						: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
 				)}
 			>

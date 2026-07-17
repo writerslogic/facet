@@ -141,7 +141,7 @@ export function ExperimentsPanel({
 						<button
 							type="button"
 							onClick={() => setVariants((prev) => [...prev, emptyVariant()])}
-							className="inline-flex items-center gap-1 text-xs font-medium text-sky-600 hover:text-sky-800"
+							className="inline-flex items-center gap-1 text-xs font-medium text-accent-600 hover:text-accent-800"
 						>
 							<Plus className="h-3.5 w-3.5" aria-hidden="true" />
 							Add variant

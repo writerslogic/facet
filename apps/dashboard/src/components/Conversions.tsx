@@ -75,7 +75,7 @@ export function Conversions({
 					<button
 						type="button"
 						onClick={onOpenSettings}
-						className="font-medium text-sky-600 underline hover:text-sky-800"
+						className="font-medium text-accent-600 underline hover:text-accent-800"
 					>
 						Create a goal in Settings
 					</button>

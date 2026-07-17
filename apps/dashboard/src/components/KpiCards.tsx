@@ -1,34 +1,56 @@
-// KPI summary cards: pageviews, unique visitors, custom events, formatted with Intl.
+// Top KPI cards: pageviews, unique visitors, custom events — with optional period-over-period deltas
+// and a tiny sparkline drawn from the primary series.
 
-import type { StatsSummary } from '@facet/shared';
+import type { SeriesPoint, StatsSummary } from '@facet/shared';
 import type { ReactElement } from 'react';
+import { computeDelta, formatNumber } from '../lib/format.js';
+import { KpiCard } from './KpiCard.js';
 
-const numberFormat = new Intl.NumberFormat('en-US');
+export function KpiCards({
+	summary,
+	compare,
+	series,
+}: {
+	summary: StatsSummary;
+	compare?: StatsSummary | null;
+	series?: SeriesPoint[];
+}): ReactElement {
+	const pv = series?.map((p) => p.pageviews) ?? [];
+	const vis = series?.map((p) => p.visitors) ?? [];
 
-interface Kpi {
-	label: string;
-	value: number;
-}
-
-export function KpiCards({ summary }: { summary: StatsSummary }): ReactElement {
-	const cards: Kpi[] = [
-		{ label: 'Pageviews', value: summary.pageviews },
-		{ label: 'Unique Visitors', value: summary.visitors },
-		{ label: 'Custom Events', value: summary.events },
+	const cards = [
+		{
+			label: 'Pageviews',
+			value: summary.pageviews,
+			prev: compare?.pageviews,
+			spark: pv,
+			stroke: '#0f172a',
+		},
+		{
+			label: 'Unique Visitors',
+			value: summary.visitors,
+			prev: compare?.visitors,
+			spark: vis,
+			stroke: '#6366f1',
+		},
+		{
+			label: 'Custom Events',
+			value: summary.events,
+			prev: compare?.events,
+		},
 	];
 
 	return (
 		<div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
 			{cards.map((card) => (
-				<div
+				<KpiCard
 					key={card.label}
-					className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm"
-				>
-					<div className="text-sm font-medium text-neutral-500">{card.label}</div>
-					<div className="mt-2 text-3xl font-semibold tracking-tight text-neutral-900 tabular-nums">
-						{numberFormat.format(card.value)}
-					</div>
-				</div>
+					label={card.label}
+					value={formatNumber(card.value)}
+					delta={card.prev != null ? computeDelta(card.value, card.prev, 'up') : null}
+					sparkline={card.spark}
+					sparklineStroke={card.stroke}
+				/>
 			))}
 		</div>
 	);

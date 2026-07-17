@@ -32,7 +32,7 @@ export function SiteSwitcher(): ReactElement {
 				id="site-switcher"
 				value={activeProfileId}
 				onChange={(e) => setActiveProfile(e.target.value)}
-				className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-800 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+				className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-800 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
 			>
 				{profiles.map((p) => (
 					<option key={p.id} value={p.id}>

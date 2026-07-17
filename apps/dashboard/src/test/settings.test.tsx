@@ -1,4 +1,4 @@
-// C.9: Settings admin area. Entering an admin token enables Settings; create refreshes the list;
+// Settings admin area. Entering an admin token enables Settings; create refreshes the list;
 // delete confirms then removes; the admin token lives in sessionStorage (never localStorage) and
 // never appears in a non-admin request; "forget token" clears it.
 

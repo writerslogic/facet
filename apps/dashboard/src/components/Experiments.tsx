@@ -84,7 +84,7 @@ export function Experiments({
 				<button
 					type="button"
 					onClick={onOpenSettings}
-					className="font-medium text-sky-600 underline hover:text-sky-800"
+					className="font-medium text-accent-600 underline hover:text-accent-800"
 				>
 					Create an experiment in Settings
 				</button>
@@ -100,7 +100,7 @@ export function Experiments({
 					<button
 						type="button"
 						onClick={onOpenSettings}
-						className="font-medium text-sky-600 underline hover:text-sky-800"
+						className="font-medium text-accent-600 underline hover:text-accent-800"
 					>
 						Create a goal in Settings
 					</button>
@@ -124,7 +124,7 @@ export function Experiments({
 						id="exp-select"
 						value={experimentId}
 						onChange={(e) => setSelectedExp(e.target.value)}
-						className="mt-1 block w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-neutral-800 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+						className="mt-1 block w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-neutral-800 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
 					>
 						{expList.map((exp) => (
 							<option key={exp.id} value={exp.id}>
@@ -144,7 +144,7 @@ export function Experiments({
 						id="goal-select"
 						value={goalId}
 						onChange={(e) => setSelectedGoal(e.target.value)}
-						className="mt-1 block w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-neutral-800 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+						className="mt-1 block w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-neutral-800 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
 					>
 						{goalList.map((g) => (
 							<option key={g.id} value={g.id}>

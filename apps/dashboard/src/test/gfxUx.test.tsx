@@ -1,4 +1,4 @@
-// C.11: goals/funnels/experiments UX. Missing prerequisites link to Settings; the Experiments view
+// goals/funnels/experiments UX. Missing prerequisites link to Settings; the Experiments view
 // exposes explicit experiment + goal selectors and refetches on change; a deleted selection degrades.
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -114,7 +114,7 @@ function renderExperiments(onOpenSettings = () => {}) {
 	);
 }
 
-describe('Experiments UX (C.11)', () => {
+describe('Experiments UX', () => {
 	it('no experiments -> CTA to Settings', () => {
 		experimentsMock.mockReturnValue({
 			data: { experiments: [] },

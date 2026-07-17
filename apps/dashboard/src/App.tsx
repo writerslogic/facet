@@ -13,10 +13,13 @@ import { Breakdowns } from './components/Breakdowns.js';
 import { ChannelsPanel } from './components/ChannelsPanel.js';
 import { EngagementCards } from './components/EngagementCards.js';
 import { Experiments } from './components/Experiments.js';
+import { ExportButton } from './components/ExportButton.js';
 import { FunnelsView } from './components/FunnelsView.js';
+import { InteractionsPanel } from './components/InteractionsPanel.js';
 import { KeyGate } from './components/KeyGate.js';
 import { KpiCards } from './components/KpiCards.js';
 import { Layout } from './components/Layout.js';
+import { Realtime } from './components/Realtime.js';
 import { Settings } from './components/Settings.js';
 import {
 	AuthErrorBanner,
@@ -27,12 +30,12 @@ import {
 	Skeleton,
 } from './components/StatusStates.js';
 import { TrafficChart } from './components/TrafficChart.js';
-import { useStats } from './hooks/stats.js';
+import { useCompareStats, useStats } from './hooks/stats.js';
 import { cn } from './lib/cn.js';
 import { isAuthError } from './lib/status.js';
 import { useDashboard } from './state.js';
 
-type View = 'overview' | 'funnels' | 'experiments' | 'anomalies' | 'ask';
+type View = 'overview' | 'realtime' | 'funnels' | 'experiments' | 'anomalies' | 'ask';
 
 /** True when a react-query key references the given site id, as a direct element or a nested site_id. */
 function queryKeyReferencesSite(key: readonly unknown[], siteId: string): boolean {
@@ -48,6 +51,7 @@ function queryKeyReferencesSite(key: readonly unknown[], siteId: string): boolea
 
 const TABS: { id: View; label: string }[] = [
 	{ id: 'overview', label: 'Overview' },
+	{ id: 'realtime', label: 'Realtime' },
 	{ id: 'funnels', label: 'Funnels' },
 	{ id: 'experiments', label: 'Experiments' },
 	{ id: 'anomalies', label: 'Anomalies' },
@@ -59,16 +63,24 @@ function Overview({
 }: {
 	onOpenSettings: () => void;
 }): ReactElement {
-	const { apiKey, siteId, preset, range } = useDashboard();
+	const { apiKey, siteId, preset, range, compare, compareRange } = useDashboard();
+	const interval = preset === '24h' ? 'hour' : 'day';
 
 	const query: StatsQuery = {
 		site_id: siteId,
 		start: range.start,
 		end: range.end,
-		interval: preset === '24h' ? 'hour' : 'day',
+		interval,
 	};
 
 	const { data, isLoading, error } = useStats(apiKey, query);
+	const compareQuery: StatsQuery = {
+		site_id: siteId,
+		start: compareRange?.start ?? 0,
+		end: compareRange?.end ?? 0,
+		interval,
+	};
+	const compareStats = useCompareStats(apiKey, compareQuery, Boolean(compare && compareRange));
 
 	if (error && isAuthError(error)) {
 		return <AuthErrorBanner />;
@@ -95,12 +107,13 @@ function Overview({
 
 	const summary = data.summary;
 	const isEmpty = summary.pageviews === 0 && summary.visitors === 0 && summary.events === 0;
+	const cmp = compare ? (compareStats.data ?? null) : null;
 
 	return (
 		<div className="space-y-6">
 			{data.meta?.pending ? <PendingNotice /> : null}
-			<KpiCards summary={summary} />
-			<EngagementCards engagement={data.engagement} />
+			<KpiCards summary={summary} compare={cmp?.summary} series={data.series} />
+			<EngagementCards engagement={data.engagement} compare={cmp?.engagement} />
 			<TrafficChart series={data.series} loading={false} error={null} />
 			{isEmpty && data.series.length === 0 ? (
 				<EmptyState title="No data yet">
@@ -109,7 +122,7 @@ function Overview({
 						<button
 							type="button"
 							onClick={onOpenSettings}
-							className="font-medium text-sky-600 underline hover:text-sky-800"
+							className="font-medium text-accent-600 underline hover:text-accent-800"
 						>
 							Set up a site in Settings
 						</button>
@@ -119,6 +132,9 @@ function Overview({
 			) : (
 				<>
 					<ChannelsPanel channels={data.channels} />
+					<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+						<InteractionsPanel apiKey={apiKey} siteId={siteId} range={range} />
+					</div>
 					<Breakdowns stats={data} />
 				</>
 			)}
@@ -127,7 +143,7 @@ function Overview({
 }
 
 function Dashboard(): ReactElement {
-	const { apiKey, siteId, range } = useDashboard();
+	const { apiKey, siteId, preset, range } = useDashboard();
 	const [view, setView] = useState<View>('overview');
 	const [showSettings, setShowSettings] = useState(false);
 	const queryClient = useQueryClient();
@@ -135,8 +151,7 @@ function Dashboard(): ReactElement {
 
 	// Switching site profile must not show the previous site's cached read data. Every read query is
 	// keyed by site id, so a new site never reads another site's cache. On an actual switch we also
-	// drop the PREVIOUS site's cached read queries so nothing stale lingers; the just-activated site's
-	// own in-flight queries are untouched so the current fetch is never cancelled.
+	// drop the PREVIOUS site's cached read queries so nothing stale lingers.
 	useEffect(() => {
 		const prevSite = prevSiteRef.current;
 		if (prevSite === siteId) return;
@@ -150,6 +165,16 @@ function Dashboard(): ReactElement {
 		<Layout
 			settingsActive={showSettings}
 			onToggleSettings={() => setShowSettings((prev) => !prev)}
+			headerExtra={
+				showSettings ? null : (
+					<ExportButton
+						apiKey={apiKey}
+						siteId={siteId}
+						range={range}
+						interval={preset === '24h' ? 'hour' : 'day'}
+					/>
+				)
+			}
 		>
 			{showSettings ? (
 				<Settings />
@@ -164,7 +189,7 @@ function Dashboard(): ReactElement {
 								className={cn(
 									'-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors',
 									view === tab.id
-										? 'border-sky-500 text-neutral-900'
+										? 'border-accent-500 text-neutral-900'
 										: 'border-transparent text-neutral-500 hover:text-neutral-800',
 								)}
 							>
@@ -174,6 +199,8 @@ function Dashboard(): ReactElement {
 					</div>
 					{view === 'overview' ? (
 						<Overview onOpenSettings={() => setShowSettings(true)} />
+					) : view === 'realtime' ? (
+						<Realtime apiKey={apiKey} siteId={siteId} />
 					) : view === 'funnels' ? (
 						<FunnelsView
 							apiKey={apiKey}

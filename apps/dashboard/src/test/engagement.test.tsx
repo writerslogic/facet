@@ -1,4 +1,4 @@
-// T051: engagement KPI cards format their four metrics, and the channels panel renders one row
+// engagement KPI cards format their four metrics, and the channels panel renders one row
 // per channel.
 
 import { render, screen } from '@testing-library/react';

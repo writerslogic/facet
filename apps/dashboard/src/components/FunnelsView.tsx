@@ -85,7 +85,7 @@ export function FunnelsView({
 									className={cn(
 										'rounded-md border px-3 py-1.5 text-sm transition-colors',
 										funnel.id === activeFunnelId
-											? 'border-sky-500 bg-sky-50 text-sky-700'
+											? 'border-accent-500 bg-accent-50 text-accent-700'
 											: 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50',
 									)}
 								>
@@ -105,7 +105,7 @@ export function FunnelsView({
 						<button
 							type="button"
 							onClick={onOpenSettings}
-							className="font-medium text-sky-600 underline hover:text-sky-800"
+							className="font-medium text-accent-600 underline hover:text-accent-800"
 						>
 							Create a funnel in Settings
 						</button>

@@ -11,10 +11,12 @@ export function Layout({
 	children,
 	onToggleSettings,
 	settingsActive,
+	headerExtra,
 }: {
 	children: ReactNode;
 	onToggleSettings: () => void;
 	settingsActive: boolean;
+	headerExtra?: ReactNode;
 }): ReactElement {
 	return (
 		<div className="min-h-screen bg-neutral-50 text-neutral-900">
@@ -24,8 +26,9 @@ export function Layout({
 						<span className="text-lg font-semibold tracking-tight">Facet</span>
 						<SiteSwitcher />
 					</div>
-					<div className="flex items-center gap-3">
+					<div className="flex flex-wrap items-center gap-3">
 						{settingsActive ? null : <DateRange />}
+						{headerExtra}
 						<button
 							type="button"
 							onClick={onToggleSettings}
@@ -33,7 +36,7 @@ export function Layout({
 							className={cn(
 								'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
 								settingsActive
-									? 'border-sky-500 bg-sky-50 text-sky-700'
+									? 'border-accent-500 bg-accent-50 text-accent-700'
 									: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
 							)}
 						>

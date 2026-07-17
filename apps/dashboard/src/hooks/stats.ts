@@ -14,6 +14,15 @@ export function useStats(apiKey: string, query: StatsQuery) {
 	});
 }
 
+/** Same shape as useStats, but for a comparison window; only runs when `enabled`. */
+export function useCompareStats(apiKey: string, query: StatsQuery, enabled: boolean) {
+	return useQuery({
+		queryKey: ['stats-compare', query],
+		queryFn: () => apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, apiKey),
+		enabled: Boolean(apiKey) && enabled,
+	});
+}
+
 /** Session-materialization freshness for a site/range, sourced from the main stats endpoint. */
 export function useFreshness(apiKey: string, siteId: string, range: Range) {
 	return useQuery({

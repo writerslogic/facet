@@ -1,4 +1,4 @@
-// Self-service admin area (C.9). Manages sites, API keys, goals, funnels, and experiments via the
+// Self-service admin area. Manages sites, API keys, goals, funnels, and experiments via the
 // admin API. The ADMIN_TOKEN is entered here and kept in memory/sessionStorage only (never mixed
 // with the site-credential store, never in a URL/log). All mutations invalidate the relevant list.
 
