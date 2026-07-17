@@ -58,7 +58,7 @@ export function FunnelChart({
 								</div>
 								<div className="h-2.5 w-full overflow-hidden rounded-full bg-neutral-100">
 									<div
-										className="h-full rounded-full bg-sky-500"
+										className="h-full rounded-full bg-accent-500"
 										style={{ width: `${width}%` }}
 										data-testid="funnel-bar"
 									/>

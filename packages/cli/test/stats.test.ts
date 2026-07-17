@@ -1,5 +1,4 @@
-// T036: `facet stats` prints the summary totals + top-5 paths from an injected fetcher, and
-// returns 1 when the fetch throws.
+// `facet stats` prints summary totals + top paths, and returns 1 when the fetch throws.
 
 import type { StatsResponse } from '@facet/shared';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,6 +1,5 @@
-// Canonical admin CRUD factory for site-scoped child resources (goals, funnels, experiments,
-// sources — built ONLY via this factory, no re-implemented CRUD blocks; see the DRY mandate). Each
-// produced router is guarded by requireAdmin and follows the fixed insert/list/delete contract.
+// Admin CRUD factory for site-scoped child resources (goals, funnels, experiments). Each produced
+// router is guarded by requireAdmin and follows the fixed insert/list/delete contract.
 
 import { vValidator } from '@hono/valibot-validator';
 import { and, desc, eq } from 'drizzle-orm';

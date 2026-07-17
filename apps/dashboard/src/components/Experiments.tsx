@@ -1,12 +1,21 @@
-// Experiments view: pick an experiment + a conversion goal, then render a per-variant table of
-// exposures / conversions / rate / p-value with a "significant" badge (vs. the control variant).
+// Experiments view: explicit, labeled experiment AND goal selectors (never a silent first pick),
+// then a per-variant table of exposures / conversions / rate / p-value with a "significant" badge.
+// Missing prerequisites link to Settings; a deleted/unavailable selection degrades without crashing.
 
 import type { ReactElement } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useExperimentResult, useExperiments } from '../hooks/experiments.js';
 import { useGoals } from '../hooks/funnels.js';
-import { cn } from '../lib/cn.js';
+import { useFreshness } from '../hooks/stats.js';
+import { isAuthError } from '../lib/status.js';
 import type { Range } from '../state.js';
+import {
+	AuthErrorBanner,
+	CardSkeletons,
+	EmptyState,
+	ErrorState,
+	PendingNotice,
+} from './StatusStates.js';
 
 const numberFormat = new Intl.NumberFormat('en-US');
 const percentFormat = new Intl.NumberFormat('en-US', {
@@ -18,73 +27,141 @@ export function Experiments({
 	apiKey,
 	siteId,
 	range,
+	onOpenSettings,
 }: {
 	apiKey: string;
 	siteId: string;
 	range: Range;
+	onOpenSettings: () => void;
 }): ReactElement {
 	const experiments = useExperiments(apiKey, siteId);
 	const goals = useGoals(apiKey, siteId);
+	const freshness = useFreshness(apiKey, siteId, range);
 	const [selectedExp, setSelectedExp] = useState<string | null>(null);
 	const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
 
-	const experimentId = selectedExp ?? experiments.data?.experiments[0]?.id ?? '';
+	const expList = experiments.data?.experiments ?? [];
 	const goalList = goals.data?.goals ?? [];
-	const goalId = selectedGoal ?? goalList[0]?.id ?? '';
+
+	// Preserve the selection while it exists; fall back safely if it was deleted.
+	const expExists = selectedExp != null && expList.some((e) => e.id === selectedExp);
+	const goalExists = selectedGoal != null && goalList.some((g) => g.id === selectedGoal);
+	const experimentId = expExists ? selectedExp : (expList[0]?.id ?? '');
+	const goalId = goalExists ? selectedGoal : (goalList[0]?.id ?? '');
 	const goal = goalList.find((g) => g.id === goalId) ?? null;
 	const result = useExperimentResult(apiKey, siteId, experimentId, goal, range);
 
-	if (experiments.data && experiments.data.experiments.length === 0) {
+	useEffect(() => {
+		if (selectedExp != null && !expExists) setSelectedExp(null);
+	}, [selectedExp, expExists]);
+	useEffect(() => {
+		if (selectedGoal != null && !goalExists) setSelectedGoal(null);
+	}, [selectedGoal, goalExists]);
+
+	if (
+		(experiments.error && isAuthError(experiments.error)) ||
+		(goals.error && isAuthError(goals.error))
+	) {
+		return <AuthErrorBanner />;
+	}
+
+	if (experiments.isLoading || goals.isLoading) {
+		return <CardSkeletons count={2} />;
+	}
+
+	if (experiments.error) {
 		return (
-			<p className="rounded-xl border border-neutral-200 bg-white p-5 text-center text-sm text-neutral-400 shadow-sm">
-				No experiments defined. Create one with the admin API.
-			</p>
+			<ErrorState
+				message="Could not load experiments"
+				detail={experiments.error instanceof Error ? experiments.error.message : null}
+			/>
+		);
+	}
+
+	if (expList.length === 0) {
+		return (
+			<EmptyState title="No experiments yet">
+				<button
+					type="button"
+					onClick={onOpenSettings}
+					className="font-medium text-accent-600 underline hover:text-accent-800"
+				>
+					Create an experiment in Settings
+				</button>
+			</EmptyState>
+		);
+	}
+
+	if (goalList.length === 0) {
+		return (
+			<EmptyState title="A goal is required">
+				<span>
+					Measuring an experiment needs a conversion goal.{' '}
+					<button
+						type="button"
+						onClick={onOpenSettings}
+						className="font-medium text-accent-600 underline hover:text-accent-800"
+					>
+						Create a goal in Settings
+					</button>
+					.
+				</span>
+			</EmptyState>
 		);
 	}
 
 	return (
 		<div className="space-y-6">
-			<div className="flex flex-wrap gap-2">
-				{experiments.data?.experiments.map((exp) => (
-					<button
-						key={exp.id}
-						type="button"
-						onClick={() => setSelectedExp(exp.id)}
-						className={cn(
-							'rounded-md border px-3 py-1.5 text-sm transition-colors',
-							exp.id === experimentId
-								? 'border-sky-500 bg-sky-50 text-sky-700'
-								: 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50',
-						)}
+			<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+				<div>
+					<label
+						htmlFor="exp-select"
+						className="block text-xs font-medium text-neutral-600"
 					>
-						{exp.name}
-					</button>
-				))}
+						Experiment
+					</label>
+					<select
+						id="exp-select"
+						value={experimentId}
+						onChange={(e) => setSelectedExp(e.target.value)}
+						className="mt-1 block w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-neutral-800 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+					>
+						{expList.map((exp) => (
+							<option key={exp.id} value={exp.id}>
+								{exp.name}
+							</option>
+						))}
+					</select>
+				</div>
+				<div>
+					<label
+						htmlFor="goal-select"
+						className="block text-xs font-medium text-neutral-600"
+					>
+						Conversion goal
+					</label>
+					<select
+						id="goal-select"
+						value={goalId}
+						onChange={(e) => setSelectedGoal(e.target.value)}
+						className="mt-1 block w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-neutral-800 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+					>
+						{goalList.map((g) => (
+							<option key={g.id} value={g.id}>
+								{g.name}
+							</option>
+						))}
+					</select>
+				</div>
 			</div>
 
-			<section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-				<div className="mb-3 flex items-center justify-between">
-					<h3 className="text-sm font-medium text-neutral-500">Variant Results</h3>
-					{goalList.length > 0 ? (
-						<select
-							value={goalId}
-							onChange={(e) => setSelectedGoal(e.target.value)}
-							className="rounded-md border border-neutral-200 px-2 py-1 text-sm text-neutral-700"
-						>
-							{goalList.map((g) => (
-								<option key={g.id} value={g.id}>
-									{g.name}
-								</option>
-							))}
-						</select>
-					) : null}
-				</div>
+			{freshness.data?.pending ? <PendingNotice /> : null}
 
-				{goalList.length === 0 ? (
-					<p className="py-6 text-center text-sm text-neutral-400">
-						Define a goal to measure conversions.
-					</p>
-				) : result.data ? (
+			<section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+				<h3 className="mb-3 text-sm font-medium text-neutral-500">Variant Results</h3>
+				{result.isLoading || !result.data ? (
+					<CardSkeletons count={2} />
+				) : (
 					<table className="w-full text-sm">
 						<thead>
 							<tr className="text-left text-xs uppercase tracking-wide text-neutral-400">
@@ -125,8 +202,6 @@ export function Experiments({
 							))}
 						</tbody>
 					</table>
-				) : (
-					<p className="py-6 text-center text-sm text-neutral-400">Loading…</p>
 				)}
 			</section>
 		</div>

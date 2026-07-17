@@ -4,6 +4,48 @@ All notable changes to Facet are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-17
+
+1.0 hardening: privacy controls, ingest resilience, new analytics reads, richer tooling, and a
+substantially upgraded dashboard — all still strictly cookieless with no cross-session identity.
+
+### Added
+
+- **Visitor opt-out & Do-Not-Track** — the browser client honors the browser's DNT signal and a
+  per-visitor opt-out; ignored visitors are never recorded.
+- **Event-endpoint rate limiting** — the first-party `POST /api/event` ingest is now rate-limited
+  alongside the public beacon.
+- **Internal-event filtering & interactions** — internal/system events (`$exposure`, `form_submit`,
+  and any other `$`-prefixed name) are excluded from the custom-events KPI and `top_events`, and
+  surfaced separately at the new `GET /api/stats/interactions`.
+- **Session-freshness metadata** — `GET /api/stats`, `/api/stats/sessions`, and `/api/stats/channels`
+  return a backward-compatible `meta: { materialization: "hourly", pending }` block so callers can
+  distinguish "no data" from session-derived analytics that the hourly cron has not materialized yet.
+- **CSV / JSON export** — `GET /api/stats/export` streams any time series or top-N breakdown as CSV
+  (with `Content-Disposition: attachment`) or JSON. CSV cells are spreadsheet formula-injection-safe.
+- **Realtime metric** — `GET /api/stats/realtime` reports active visitors and pageviews over a
+  trailing 5-minute window using distinct daily visitor hashes (no cookies or persistent id).
+- **Natural-language series intent** — `POST /api/stats/query` intents may set `series: true` with an
+  `interval` to return a `result.kind: "series"` trend, in addition to `scalar` and `breakdown`.
+- **Experiment client helpers** — `window.facet.whenReady()` resolves once flag config has loaded,
+  and `assignment(flag_key)` returns the bucketed variant without firing an exposure.
+- **CLI resource commands & config helpers** — `facet` gains admin-API resource groups
+  (`sites` / `keys` / `goals` / `funnels` / `experiments`, each with `--json`) plus
+  `config set-db-id` and `config check` to write and verify the D1 `database_id` in `wrangler.jsonc`.
+- **Generated `wrangler.test.jsonc`** for the test environment, and a CI check that fails on
+  placeholder links in the docs.
+- **Optional signed anomaly webhook** — when `WEBHOOK_URL` is set the hourly cron delivers each new
+  anomaly as a best-effort, time-bounded POST, HMAC-SHA256 signed via `X-Facet-Signature` when
+  `WEBHOOK_SECRET` is configured. Added backup and observability documentation.
+- **Dashboard upgrades** — an admin **Settings** tab for managing sites and API keys, one-click
+  multi-site switching, a realtime panel, an interactions panel, CSV/JSON export controls, refined
+  visualizations, and custom date ranges with period-over-period comparison.
+
+### Fixed
+
+- **Anomaly completed-hours** — anomaly detection now scores only completed hourly buckets, so an
+  in-progress (partial) current hour no longer registers as a false drop.
+
 ## [0.3.0] - 2026-07-16
 
 Advanced analytics: server-side ingest, experiments, anomaly detection, and natural-language query —
@@ -82,6 +124,7 @@ Cloudflare Workers + D1.
 - **CLI** (`@writerslogic/facet-cli` on npm) — `init`, `migrate`, and `stats` commands for self-hosters.
 - **Docs** — usage, self-hosting, privacy model, and API reference.
 
+[0.4.0]: https://github.com/dcondrey/facet/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/dcondrey/facet/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/dcondrey/facet/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/dcondrey/facet/releases/tag/v0.1.0

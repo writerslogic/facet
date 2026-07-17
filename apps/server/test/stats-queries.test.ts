@@ -1,4 +1,4 @@
-// T021: stats helpers over a fixed seeded set — exact aggregates, hostname filtering, zero-fill.
+// Stats helpers over a fixed seeded set: exact aggregates, hostname filtering, zero-fill.
 
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';

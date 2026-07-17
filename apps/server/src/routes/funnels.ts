@@ -1,7 +1,4 @@
-// T058 + T059: funnels. CRUD mirrors crudRouter but serializes `steps` to JSON on insert and parses
-// it back on list (the TEXT `steps` column can't take the validated array verbatim, so the generic
-// factory doesn't fit); create/list/delete otherwise follow the same admin contract. The report
-// endpoint is API-key authed and reuses funnelReport.
+// Funnels: admin CRUD (steps serialized to/from JSON) plus an API-key-authed report endpoint.
 
 import { type Funnel, FunnelSchema, type FunnelStep } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';

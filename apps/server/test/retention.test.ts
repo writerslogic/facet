@@ -1,4 +1,4 @@
-// T030: retention cleanup — only rows older than the cutoff are deleted; event_rollups untouched.
+// Retention cleanup: only rows older than the cutoff are deleted; event_rollups untouched.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

@@ -1,4 +1,4 @@
-// T055: goals CRUD — admin create -> list -> delete round-trip via the mounted /api/goals router.
+// Goals CRUD: admin create -> list -> delete round-trip via the mounted /api/goals router.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

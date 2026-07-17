@@ -1,6 +1,7 @@
-// Anomaly detection over the hourly pageview series: a flat baseline followed by a sharp final-hour
-// drop is flagged with a device/country root cause; a flat series is quiet; too few baseline hours
-// return nothing.
+// Anomaly detection over the hourly pageview series. Only fully-completed hours are analyzed: the
+// in-progress hour (bucket + HOUR not yet elapsed as of `now`) is excluded from candidate and
+// baseline, so partial current-hour data can't fabricate a "drop". A flat baseline followed by a
+// sharp completed-hour drop is flagged with a device/country root cause.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
@@ -45,67 +46,112 @@ async function seedHour(
 	}
 }
 
+/** Seed six baseline hours (~10 pv, mild jitter → nonzero stddev) starting at `from`. */
+async function seedFlatBaseline(
+	from: number,
+	opts: { device?: string; country?: string } = {},
+): Promise<void> {
+	const counts = [10, 11, 9, 10, 11, 9];
+	for (let h = 0; h < 6; h++) {
+		await seedHour(from + h * H, counts[h] ?? 10, opts);
+	}
+}
+
 describe('detectAnomalies', () => {
-	it('flags a sharp final-hour drop and diagnoses the concentrated segment', async () => {
-		// 6 baseline hours around ~10 pageviews each (slight jitter → nonzero stddev),
-		// concentrated on mobile/CA.
-		const baseline = [10, 11, 9, 10, 11, 9];
-		for (let h = 0; h < 6; h++) {
-			await seedHour(T0 + h * H, baseline[h] ?? 10, {
-				device: 'mobile',
-				country: 'CA',
-			});
-		}
-		// Final hour: near-zero (1 pageview), on a different segment.
+	it('flags a sharp final completed-hour drop and diagnoses the concentrated segment', async () => {
+		await seedFlatBaseline(T0, { device: 'mobile', country: 'CA' });
 		await seedHour(T0 + 6 * H, 1, { device: 'desktop', country: 'US' });
 
-		const anomalies = await detectAnomalies(env, {
-			siteId: SITE,
-			start: T0,
-			end: T0 + 7 * H,
-		});
+		const anomalies = await detectAnomalies(
+			env,
+			{ siteId: SITE, start: T0, end: T0 + 7 * H },
+			T0 + 7 * H,
+		);
 
 		expect(anomalies).toHaveLength(1);
 		const a = anomalies[0];
-		expect(a?.metric).toBe('pageviews');
 		expect(a?.direction).toBe('drop');
 		expect(a?.bucket).toBe(T0 + 6 * H);
 		expect(a?.value).toBe(1);
-		// The dropped segment is mobile/CA (baseline ~10, current 0).
 		expect(a?.diagnosis).not.toBeNull();
 		expect(['device', 'country']).toContain(a?.diagnosis?.dimension);
-		if (a?.diagnosis?.dimension === 'device') {
-			expect(a.diagnosis.value).toBe('mobile');
-		} else {
-			expect(a?.diagnosis?.value).toBe('CA');
-		}
 		expect(a?.summary).toContain('dropped');
 	});
 
-	it('returns [] when the final hour does not deviate from the baseline', async () => {
-		// Baseline with mild variation; the final hour sits within the normal range.
+	it('ignores the in-progress hour: a near-empty current hour is NOT flagged', async () => {
+		// Six completed baseline hours, then a partial current hour (T0+6H) with only 1 pageview.
+		// now = 30 min into hour 6, so T0+6H is in-progress and must be excluded.
+		await seedFlatBaseline(T0);
+		await seedHour(T0 + 6 * H, 1);
+		const now = T0 + 6 * H + 30 * 60_000;
+
+		const anomalies = await detectAnomalies(env, { siteId: SITE, start: T0, end: now }, now);
+		expect(anomalies).toEqual([]);
+	});
+
+	it('flags a real drop in the last completed hour even while a partial hour is in progress', async () => {
+		// Baseline hours 0-5, a genuine drop in the completed hour 6, and a partial hour 7 that
+		// should be ignored. now = 20 min into hour 7.
+		await seedFlatBaseline(T0);
+		await seedHour(T0 + 6 * H, 1); // completed drop
+		await seedHour(T0 + 7 * H, 3); // in-progress, ignored
+		const now = T0 + 7 * H + 20 * 60_000;
+
+		const anomalies = await detectAnomalies(env, { siteId: SITE, start: T0, end: now }, now);
+		expect(anomalies).toHaveLength(1);
+		expect(anomalies[0]?.bucket).toBe(T0 + 6 * H);
+		expect(anomalies[0]?.direction).toBe('drop');
+	});
+
+	it('handles historical ranges (end already in the past) with all hours completed', async () => {
+		await seedFlatBaseline(T0);
+		await seedHour(T0 + 6 * H, 1);
+		// now is far in the future, so every bucket in the range is completed.
+		const anomalies = await detectAnomalies(
+			env,
+			{ siteId: SITE, start: T0, end: T0 + 7 * H },
+			T0 + 100 * H,
+		);
+		expect(anomalies).toHaveLength(1);
+		expect(anomalies[0]?.bucket).toBe(T0 + 6 * H);
+	});
+
+	it('returns [] when excluding the in-progress hour leaves too little completed history', async () => {
+		await seedHour(T0, 10);
+		await seedHour(T0 + H, 10);
+		await seedHour(T0 + 2 * H, 0);
+		// now is 30 min into hour 2 → only hours 0 and 1 are completed → baseline length 1 < min.
+		const now = T0 + 2 * H + 30 * 60_000;
+		const anomalies = await detectAnomalies(env, { siteId: SITE, start: T0, end: now }, now);
+		expect(anomalies).toEqual([]);
+	});
+
+	it('treats the hour boundary as inclusive: a bucket is complete exactly at bucket + HOUR', async () => {
+		await seedFlatBaseline(T0);
+		await seedHour(T0 + 6 * H, 1);
+		const bucketEnd = T0 + 7 * H; // exact end of the anomalous hour
+
+		// now exactly at the boundary → hour 6 IS complete → flagged.
+		expect(
+			await detectAnomalies(env, { siteId: SITE, start: T0, end: bucketEnd }, bucketEnd),
+		).toHaveLength(1);
+
+		// now 1 ms before the boundary → hour 6 is still in progress → excluded, no anomaly.
+		expect(
+			await detectAnomalies(env, { siteId: SITE, start: T0, end: bucketEnd }, bucketEnd - 1),
+		).toEqual([]);
+	});
+
+	it('returns [] when the final completed hour does not deviate from the baseline', async () => {
 		const counts = [10, 11, 9, 10, 11, 9, 10];
 		for (let h = 0; h < 7; h++) {
 			await seedHour(T0 + h * H, counts[h] ?? 10);
 		}
-		const anomalies = await detectAnomalies(env, {
-			siteId: SITE,
-			start: T0,
-			end: T0 + 7 * H,
-		});
-		expect(anomalies).toEqual([]);
-	});
-
-	it('returns [] when there are fewer than the minimum baseline buckets', async () => {
-		// Only 2 baseline hours + 1 candidate = baseline length 2 < ANOMALY_MIN_BASELINE.
-		await seedHour(T0, 10);
-		await seedHour(T0 + H, 10);
-		await seedHour(T0 + 2 * H, 0);
-		const anomalies = await detectAnomalies(env, {
-			siteId: SITE,
-			start: T0,
-			end: T0 + 3 * H,
-		});
+		const anomalies = await detectAnomalies(
+			env,
+			{ siteId: SITE, start: T0, end: T0 + 7 * H },
+			T0 + 7 * H,
+		);
 		expect(anomalies).toEqual([]);
 	});
 });

@@ -11,7 +11,8 @@
 		".": {
 			"types": "./dist/index.d.ts",
 			"import": "./dist/index.js"
-		}
+		},
+		"./package.json": "./package.json"
 	},
 	"files": ["dist"],
 	"sideEffects": ["./dist/auto.js"],
@@ -20,10 +21,13 @@
 		"lint": "biome check .",
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
-		"test": "vitest run --passWithNoTests"
+		"test": "vitest run --passWithNoTests",
+		"check:package": "publint && attw --pack . --ignore-rules cjs-resolves-to-esm"
 	},
 	"devDependencies": {
+		"@arethetypeswrong/cli": "0.18.5",
 		"@facet/shared": "workspace:*",
+		"publint": "0.3.5",
 		"tsup": "8.3.5",
 		"typescript": "5.7.3",
 		"vitest": "2.1.8"

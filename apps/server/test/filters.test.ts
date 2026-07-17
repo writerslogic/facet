@@ -1,4 +1,4 @@
-// T021: buildEventWhere — the canonical site/hostname/[start,end) predicate over `events`.
+// buildEventWhere: the canonical site/hostname/[start,end) predicate over `events`.
 
 import { env } from 'cloudflare:test';
 import { sql } from 'drizzle-orm';

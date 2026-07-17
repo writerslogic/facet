@@ -86,10 +86,39 @@ export interface AnomaliesResponse {
 export interface NlQueryResult {
 	intent: QueryIntent;
 	answer: string;
-	result: { kind: 'scalar'; value: number } | { kind: 'breakdown'; rows: CountRow[] };
+	result:
+		| { kind: 'scalar'; value: number }
+		| { kind: 'breakdown'; rows: CountRow[] }
+		| { kind: 'series'; points: SeriesPoint[] };
 }
 
-/** Response body for `GET /api/stats`. */
+/**
+ * Freshness metadata for session-derived analytics. Sessions/engagement/channels are materialized
+ * from raw events by an hourly cron, so very recent activity may not be reflected yet.
+ */
+export interface Freshness {
+	/** Materialization cadence for session-derived analytics. */
+	materialization: 'hourly';
+	/** True when raw events exist in the range but no sessions are materialized yet (still pending). */
+	pending: boolean;
+}
+
+/**
+ * Realtime snapshot over a trailing window. `visitors` is the count of distinct daily visitor
+ * hashes seen in the window — a privacy-safe proxy for "active visitors" (no cookies, no persistent
+ * id). It is an approximation: a visitor is de-duplicated only within the current UTC day.
+ */
+export interface RealtimeSnapshot {
+	/** Trailing window width in milliseconds. */
+	window_ms: number;
+	/** Distinct visitor hashes seen in the window (active-visitor proxy). */
+	visitors: number;
+	/** Pageviews in the window. */
+	pageviews: number;
+	/** End of the window (unix ms) — effectively "as of" time. */
+	until: number;
+}
+
 export interface StatsResponse {
 	summary: StatsSummary;
 	series: SeriesPoint[];
@@ -100,4 +129,6 @@ export interface StatsResponse {
 	top_devices: CountRow[];
 	engagement: EngagementSummary;
 	channels: CountRow[];
+	/** Session-data freshness. Optional for backward compatibility. */
+	meta?: Freshness;
 }

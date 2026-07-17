@@ -1,6 +1,5 @@
-// Shared experiment (A/B test + feature flag) types: the stored experiment row, its variant shape,
-// and the per-variant significance result. Variant assignment is client-side; the server only ever
-// stores aggregate exposure/conversion events (no server-side per-user identity).
+// Experiment (A/B test + feature flag) types. The server stores only aggregate exposure/conversion
+// events, never per-user identity.
 
 /** One variant of an experiment: a stable key and a non-negative bucketing weight. */
 export interface ExperimentVariant {

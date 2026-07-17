@@ -1,4 +1,4 @@
-// T060: the funnel chart renders one bar per step (width proportional to the first step) with the
+// the funnel chart renders one bar per step (width proportional to the first step) with the
 // overall rate, and the conversions list renders one row per goal.
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -43,6 +43,7 @@ describe('Conversions', () => {
 					apiKey="clk_test"
 					siteId="site-1"
 					range={{ start: 0, end: 1 }}
+					onOpenSettings={() => {}}
 					goals={[
 						{
 							id: 'g1',

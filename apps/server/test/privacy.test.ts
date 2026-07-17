@@ -1,5 +1,5 @@
-// T038: privacy guarantees pinned as tests. If any of these fail, the hashing/ingest design is
-// wrong and must be fixed before shipping.
+// Privacy guarantees pinned as tests. If any of these fail, the hashing/ingest design is wrong
+// and must be fixed before shipping.
 
 import { env } from 'cloudflare:test';
 import { afterEach, describe, expect, it, vi } from 'vitest';

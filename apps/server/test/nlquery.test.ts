@@ -62,6 +62,22 @@ describe('runQueryIntent', () => {
 		expect(r.result).toEqual({ kind: 'scalar', value: 3 });
 	});
 
+	it('returns a time-series for a trend (series) intent', async () => {
+		const r = await runQueryIntent(
+			env,
+			S,
+			{ metric: 'pageviews', series: true, interval: 'hour' },
+			f,
+		);
+		expect(r.result.kind).toBe('series');
+		if (r.result.kind === 'series') {
+			expect(r.result.points.length).toBeGreaterThan(0);
+			expect(r.result.points[0]).toHaveProperty('pageviews');
+			expect(r.result.points[0]).toHaveProperty('t');
+		}
+		expect(r.answer).toContain('Trend');
+	});
+
 	it('returns a top-paths breakdown for a path dimension', async () => {
 		const intent: QueryIntent = { metric: 'pageviews', dimension: 'path' };
 		const r = await runQueryIntent(env, S, intent, f);

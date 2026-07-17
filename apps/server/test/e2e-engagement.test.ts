@@ -1,7 +1,7 @@
-// T052: end-to-end engagement — a scripted visitor journey (3 pageviews within the timeout, a
-// >30-min gap, then 1 more) is seeded with controlled timestamps, sessionized, and read back
-// through the authed /stats/sessions + /stats/channels endpoints. Events are inserted directly
-// because POST /api/collect stamps Date.now(), which can't produce a controlled session gap.
+// End-to-end engagement: a scripted visitor journey is seeded with controlled timestamps,
+// sessionized, and read back through the authed /stats/sessions + /stats/channels endpoints.
+// Events are inserted directly because POST /api/collect stamps Date.now(), which can't produce a
+// controlled session gap.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

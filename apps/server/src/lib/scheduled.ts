@@ -1,6 +1,5 @@
 // Scheduled-job registry. The cron handler iterates `JOBS`, running each inside its own try/catch
-// so one job's failure never skips another. Later cron work registers a job here instead of
-// editing `runScheduled` (see the DRY mandate).
+// so one job's failure never skips another.
 
 import type { Env } from '../env.js';
 import { HOUR_MS } from './constants.js';
@@ -9,6 +8,7 @@ import { enforceRetention } from './retention.js';
 import { runRollups } from './rollups.js';
 import { dayKey } from './salt.js';
 import { buildSessions } from './sessions.js';
+import { notifyAnomalies } from './webhook.js';
 
 /** A unit of scheduled work: a stable name and an idempotent run function. */
 export interface ScheduledJob {
@@ -34,6 +34,11 @@ registerJob({
 registerJob({
 	name: 'retention',
 	run: (env, now) => enforceRetention(env, now),
+});
+// Optional: deliver anomaly-alert webhooks. No-op unless WEBHOOK_URL is configured.
+registerJob({
+	name: 'anomaly-alerts',
+	run: (env, now) => notifyAnomalies(env, now),
 });
 
 /** Run every registered job, isolating failures so one bad job never blocks the rest. */

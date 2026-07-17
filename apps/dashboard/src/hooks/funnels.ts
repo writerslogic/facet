@@ -25,7 +25,7 @@ export function useFunnels(apiKey: string, siteId: string) {
 
 export function useConversions(apiKey: string, siteId: string, goalId: string, range: Range) {
 	return useQuery({
-		queryKey: ['conversions', goalId, range],
+		queryKey: ['conversions', siteId, goalId, range],
 		queryFn: () =>
 			apiFetch<GoalConversionResult>(
 				`/api/stats/conversions?site_id=${siteId}&goal_id=${goalId}&start=${range.start}&end=${range.end}`,
@@ -37,7 +37,7 @@ export function useConversions(apiKey: string, siteId: string, goalId: string, r
 
 export function useFunnelReport(apiKey: string, siteId: string, funnelId: string, range: Range) {
 	return useQuery({
-		queryKey: ['funnel-report', funnelId, range],
+		queryKey: ['funnel-report', siteId, funnelId, range],
 		queryFn: () =>
 			apiFetch<FunnelReportResult>(
 				`/api/funnels/${funnelId}/report?site_id=${siteId}&start=${range.start}&end=${range.end}`,

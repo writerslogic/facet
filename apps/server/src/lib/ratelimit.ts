@@ -3,13 +3,11 @@
 // `rate_limited` ApiError (429) carrying `Retry-After: 60`, rendered by the app's error handler.
 
 import type { Context, MiddlewareHandler } from 'hono';
-import type { Env } from '../env.js';
+import type { AppEnv } from '../env.js';
 import { ApiError } from './http.js';
 
-/** Build rate-limit middleware keyed by `keyFn` (e.g. client IP for the public beacon). */
-export function rateLimit(
-	keyFn: (c: Context<{ Bindings: Env }>) => string,
-): MiddlewareHandler<{ Bindings: Env }> {
+/** Build rate-limit middleware keyed by `keyFn` (client IP for the beacon, site id for events). */
+export function rateLimit(keyFn: (c: Context<AppEnv>) => string): MiddlewareHandler<AppEnv> {
 	return async (c, next) => {
 		const rl = c.env.RATE_LIMITER;
 		if (!rl) {

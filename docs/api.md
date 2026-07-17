@@ -9,8 +9,10 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
 - `POST /api/collect` — **public**, no auth (CORS-open, rate-limited).
 - `POST /api/event` — **API key**: first-party server-to-server ingest (`Authorization: Bearer <clk_...>`).
 - `GET /api/experiments/active` — **public**: client-facing feature-flag config.
-- `GET /api/stats/anomalies`, `GET /api/stats/experiments`, `GET /api/stats/experiment` — **API key**.
+- `GET /api/stats/anomalies`, `GET /api/stats/experiments`, `GET /api/stats/experiment`,
+  `POST /api/stats/query` — **API key**.
 - `GET /api/stats`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
+  `GET /api/stats/interactions`, `GET /api/stats/realtime`, `GET /api/stats/export`,
   `GET /api/stats/conversions`, `GET /api/stats/goals`, `GET /api/stats/funnels`,
   `GET /api/funnels/:id/report` — **API key**: `Authorization: Bearer <clk_...>`
   (site-scoped; a key that does not own the requested `site_id` gets `403 site_mismatch`).
@@ -175,13 +177,24 @@ every bucket; the `top_*` lists are `{ key, count }` rows sorted by count descen
   "channels": [
     { "key": "organic", "count": 8 },
     { "key": "direct", "count": 4 }
-  ]
+  ],
+  "meta": { "materialization": "hourly", "pending": false }
 }
 ```
 
 - `summary.pageviews` counts events with no `name`; `summary.events` counts named events;
   `summary.visitors` is `COUNT(DISTINCT visitor_hash)` over the range (see the
   [privacy model](./privacy.md) for daily-uniques semantics).
+- `summary.events` and `top_events` count **marketer-facing custom events only**;
+  internal/system interactions (`$exposure`, `form_submit`, and any other `$`-prefixed name)
+  are excluded and surfaced separately at [`GET /api/stats/interactions`](#get-apistatsinteractionssite_idstartend-api-key).
+- `meta` is a **backward-compatible** freshness signal for session-derived analytics
+  (`engagement`, `channels`, and the `/sessions` and `/channels` endpoints). Those are
+  materialized from raw events by an hourly cron, so `meta.materialization` is always
+  `"hourly"`, and `meta.pending` is `true` when raw events exist in the range but no sessions
+  have been materialized yet (the cron has not caught up) — letting a caller distinguish
+  "no data" from "not built yet". `GET /api/stats/sessions` and `GET /api/stats/channels`
+  return the same `meta` block.
 
 ---
 
@@ -221,7 +234,8 @@ curl "https://your-deployment.example.com/api/stats/sessions?site_id=11111111-11
     "bounce_rate": 0.42,
     "pages_per_session": 2.1,
     "avg_duration_ms": 48200
-  }
+  },
+  "meta": { "materialization": "hourly", "pending": false }
 }
 ```
 
@@ -252,6 +266,98 @@ curl "https://your-deployment.example.com/api/stats/channels?site_id=11111111-11
     { "key": "organic", "count": 8 },
     { "key": "direct", "count": 4 },
     { "key": "referral", "count": 2 }
+  ],
+  "meta": { "materialization": "hourly", "pending": false }
+}
+```
+
+---
+
+## Interactions, realtime & export
+
+These reads are all **API key** authenticated (`Authorization: Bearer <clk_...>`),
+site-scoped (a key that does not own `site_id` gets `403 site_mismatch`), and — where a range
+applies — enforce the same `bad_range` / `range_too_large` rules as `GET /api/stats`
+(`end > start`, range ≤ 90 days).
+
+### `GET /api/stats/interactions?site_id&start&end` (API key)
+
+Internal/system interactions counted separately from marketer-facing custom events.
+`$exposure` (experiment exposure), `form_submit`, and any other `$`-prefixed event name are
+**excluded** from `top_events` and the custom-events KPI and reported here instead. Returns
+`{ key, count }` rows sorted by count descending.
+
+```sh
+curl "https://your-deployment.example.com/api/stats/interactions?site_id=11111111-1111-4111-8111-111111111111&start=1704067200000&end=1704672000000" \
+  -H "Authorization: Bearer clk_localdevkey"
+```
+
+```json
+{
+  "interactions": [
+    { "key": "$exposure", "count": 210 },
+    { "key": "form_submit", "count": 34 }
+  ]
+}
+```
+
+### `GET /api/stats/realtime?site_id` (API key)
+
+Active-visitor snapshot over a fixed trailing **5-minute** window (`window_ms` is `300000`).
+`visitors` is the count of distinct **daily visitor hashes** seen in the window — a
+privacy-safe proxy for "active visitors" with **no cookies and no persistent id**. It is an
+**approximation**: a visitor is de-duplicated only within the window (and within the current
+UTC day, after which the salt rotates). `until` is the "as of" time (unix ms). Only `site_id`
+is required; there is no range.
+
+```sh
+curl "https://your-deployment.example.com/api/stats/realtime?site_id=11111111-1111-4111-8111-111111111111" \
+  -H "Authorization: Bearer clk_localdevkey"
+```
+
+```json
+{ "window_ms": 300000, "visitors": 7, "pageviews": 12, "until": 1704672000000 }
+```
+
+### `GET /api/stats/export?site_id&start&end&kind=series|breakdown&dimension=&format=csv|json&interval=&limit=` (API key)
+
+Read-only export of a time series or a top-N breakdown as CSV or JSON. Output is bounded
+(series by range, breakdown by `limit`) and CSV cells are **formula-injection-safe** (a cell
+beginning with `=`, `+`, `-`, `@`, tab, or CR is prefixed with a single quote so a spreadsheet
+renders it as literal text).
+
+| Param | Required | Notes |
+| --- | --- | --- |
+| `site_id` | yes | UUID; key-owned (else `403 site_mismatch`). |
+| `start` | yes | Inclusive range start, unix ms. |
+| `end` | yes | Exclusive range end, unix ms. `> start` (else `400 bad_range`); range ≤ 90 days (else `400 range_too_large`). |
+| `kind` | no | `series` (default) or `breakdown`. |
+| `dimension` | for `breakdown` | One of `path`, `referrer`, `country`, `device`, `event`, `channel`. |
+| `format` | no | `csv` (default) or `json`. |
+| `interval` | no | `hour` or `day` (series only). Defaults to `hour` when range ≤ 48h, otherwise `day`. |
+| `limit` | no | Breakdown row cap, `1`–`1000` (default `100`). |
+
+For `kind=series` the columns are `bucket_start_iso,bucket_start_ms,pageviews,visitors`; for
+`kind=breakdown` they are `key,count`. A CSV response is served with
+`Content-Disposition: attachment` (e.g. `filename="facet-series-<start>-<end>.csv"`); a JSON
+response is `{ "columns": [...], "rows": [...] }`.
+
+```sh
+# CSV time series (downloads as an attachment)
+curl "https://your-deployment.example.com/api/stats/export?site_id=11111111-1111-4111-8111-111111111111&start=1704067200000&end=1704672000000&kind=series&interval=day&format=csv" \
+  -H "Authorization: Bearer clk_localdevkey"
+
+# JSON breakdown of top paths
+curl "https://your-deployment.example.com/api/stats/export?site_id=11111111-1111-4111-8111-111111111111&start=1704067200000&end=1704672000000&kind=breakdown&dimension=path&format=json&limit=50" \
+  -H "Authorization: Bearer clk_localdevkey"
+```
+
+```json
+{
+  "columns": ["key", "count"],
+  "rows": [
+    ["/", 14],
+    ["/pricing", 6]
   ]
 }
 ```
@@ -508,6 +614,51 @@ is anomalous or the baseline is too short. **API key**; key must own `site_id`. 
       "summary": "Pageviews dropped 93% in the last hour (z=-4.1). Largest contributor: device=mobile (1 vs ~25 typical)."
     }
   ]
+}
+```
+
+---
+
+## `POST /api/stats/query` (API key)
+
+Natural-language analytics query. A plain-English question is translated **via Workers AI**
+into a constrained, validated query **intent** (never raw SQL) and executed over the existing
+aggregate stats helpers. **API key**: `Authorization: Bearer <clk_...>`; the site is taken
+from the key and the body's `site_id` must match it (else `403 site_mismatch`). Requires the
+`AI` binding; without it the endpoint returns `503 ai_unavailable`.
+
+**Body:** `{ "site_id": UUID, "question": string (1–500 chars), "start": ms, "end": ms }`
+(`> start`, range ≤ 90 days).
+
+The intent chooses a `metric` (`pageviews` / `visitors` / `events` / `sessions` /
+`bounce_rate`) and, optionally, a `dimension` (`path` / `referrer` / `country` / `device` /
+`channel`) with a `limit`. An intent may instead set `"series": true` with an
+`"interval": "hour" | "day"` to request a trend. The `result` is therefore one of three
+shapes:
+
+- `{ "kind": "scalar", "value": number }` — a single total.
+- `{ "kind": "breakdown", "rows": [{ "key", "count" }] }` — a top-N breakdown by dimension.
+- `{ "kind": "series", "points": [{ "t", "pageviews", "visitors" }] }` — a time series
+  (`series: true` in the intent; ignored if a dimension is set).
+
+```sh
+curl -X POST https://your-deployment.example.com/api/stats/query \
+  -H "Authorization: Bearer clk_localdevkey" \
+  -H "content-type: application/json" \
+  -d '{"site_id":"11111111-1111-4111-8111-111111111111","question":"pageviews per day this week","start":1704067200000,"end":1704672000000}'
+```
+
+```json
+{
+  "intent": { "metric": "pageviews", "series": true, "interval": "day" },
+  "answer": "Pageviews are trending up over the range.",
+  "result": {
+    "kind": "series",
+    "points": [
+      { "t": 1704067200000, "pageviews": 4, "visitors": 3 },
+      { "t": 1704153600000, "pageviews": 5, "visitors": 4 }
+    ]
+  }
 }
 ```
 

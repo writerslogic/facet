@@ -1,4 +1,4 @@
-// T058: funnels CRUD — create -> list (steps parsed back to an array) -> delete; a 1-step funnel
+// Funnels CRUD: create -> list (steps parsed back to an array) -> delete; a 1-step funnel
 // fails validation with 400 validation_failed.
 
 import { env } from 'cloudflare:test';

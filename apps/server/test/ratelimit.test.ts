@@ -1,9 +1,9 @@
-// T013: rate-limit middleware — denies over-limit keys with 429 + Retry-After, isolates keys,
-// and no-ops when the RATE_LIMITER binding is absent.
+// Rate-limit middleware: denies over-limit keys with 429 + Retry-After, isolates keys, and
+// no-ops when the RATE_LIMITER binding is absent.
 
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';
-import type { Env } from '../src/env.js';
+import type { AppEnv, Env } from '../src/env.js';
 import { ApiError, toErrorBody } from '../src/lib/http.js';
 import { rateLimit } from '../src/lib/ratelimit.js';
 
@@ -20,7 +20,7 @@ function makeLimiter(): Env['RATE_LIMITER'] {
 }
 
 function makeApp() {
-	const app = new Hono<{ Bindings: Env }>();
+	const app = new Hono<AppEnv>();
 	app.use(
 		'/hit',
 		rateLimit((c) => c.req.header('x-key') ?? 'default'),
@@ -35,7 +35,7 @@ function makeApp() {
 	return app;
 }
 
-function hit(app: Hono<{ Bindings: Env }>, key: string, limiter?: Env['RATE_LIMITER']) {
+function hit(app: Hono<AppEnv>, key: string, limiter?: Env['RATE_LIMITER']) {
 	return app.request('/hit', { headers: { 'x-key': key } }, {
 		RATE_LIMITER: limiter,
 	} as Env);

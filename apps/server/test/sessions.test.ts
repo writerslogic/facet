@@ -1,4 +1,4 @@
-// T048: sessionization — consecutive events per visitor split into sessions on a >30-min gap;
+// Sessionization: consecutive events per visitor split into sessions on a >30-min gap;
 // bounce detection; deterministic idempotent upsert.
 
 import { env } from 'cloudflare:test';

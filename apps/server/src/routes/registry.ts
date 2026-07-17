@@ -1,6 +1,5 @@
-// Canonical route table. `app.ts` iterates `ROUTES` to mount every sub-router, so a new route
-// task appends one entry here and never edits `app.ts` (this removes the app.ts serialization
-// chain — see the DRY mandate). Health lives here too, as the smallest router.
+// Route table. `app.ts` iterates `ROUTES` to mount every sub-router; new routes append an entry
+// here rather than editing `app.ts`. Health lives here too, as the smallest router.
 
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';

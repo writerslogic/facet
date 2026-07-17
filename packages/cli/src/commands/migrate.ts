@@ -1,5 +1,4 @@
-// `facet migrate`: apply D1 migrations by shelling out to wrangler. The spawner is injectable
-// so tests assert the built argv without running wrangler.
+// `facet migrate`: apply D1 migrations via wrangler. The spawner is injectable for testing.
 
 import { type SpawnOptions, spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';

@@ -1,6 +1,4 @@
-// T057: goal conversions. A session "converts" when it contains at least one event matching the
-// goal within the session's [startedAt, endedAt] window for that (site, visitor). Match is by event
-// name (`type='event'`) or path (`type='path'`). rate = conversions / sessions (0 when no sessions).
+// Goal conversions over materialized sessions.
 
 import type { Goal, StatsFilter } from '@facet/shared';
 import { and, eq, gte, lt, sql } from 'drizzle-orm';

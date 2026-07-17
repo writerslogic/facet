@@ -5,7 +5,9 @@
 import type {
 	CountRow,
 	EngagementSummary,
+	Freshness,
 	Interval,
+	RealtimeSnapshot,
 	SeriesPoint,
 	StatsFilter,
 	StatsSummary,
@@ -18,8 +20,15 @@ import { buildEventWhere } from './filters.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
 
+// Internal/system events (experiment `$exposure`, any `$`-prefixed name, and the auto-generated
+// `form_submit` interaction) are excluded from marketer-facing "custom event" metrics. They remain
+// in the raw `events` table for experiments/conversions/diagnostics and are surfaced separately via
+// `topInteractions`. Keep this predicate and its complement in sync.
+const isCustomEvent = sql`${schema.events.name} IS NOT NULL AND ${schema.events.name} NOT LIKE '$%' AND ${schema.events.name} <> 'form_submit'`;
+const isInteraction = sql`${schema.events.name} IS NOT NULL AND (${schema.events.name} LIKE '$%' OR ${schema.events.name} = 'form_submit')`;
+
 const pageviewCount = sql<number>`SUM(CASE WHEN ${schema.events.name} IS NULL THEN 1 ELSE 0 END)`;
-const eventCount = sql<number>`SUM(CASE WHEN ${schema.events.name} IS NOT NULL THEN 1 ELSE 0 END)`;
+const eventCount = sql<number>`SUM(CASE WHEN ${isCustomEvent} THEN 1 ELSE 0 END)`;
 const visitorCount = sql<number>`COUNT(DISTINCT ${schema.events.visitorHash})`;
 
 /** Pageviews (name IS NULL), custom events (name IS NOT NULL), and distinct visitors. */
@@ -74,7 +83,12 @@ async function topByColumn(
 	env: Env,
 	f: StatsFilter,
 	column: SQLiteColumn,
-	opts: { excludeNull?: boolean; excludeEmpty?: boolean; limit?: number } = {},
+	opts: {
+		excludeNull?: boolean;
+		excludeEmpty?: boolean;
+		limit?: number;
+		extra?: SQL;
+	} = {},
 ): Promise<CountRow[]> {
 	const conditions: SQL[] = [buildEventWhere(f)];
 	if (opts.excludeNull) {
@@ -82,6 +96,9 @@ async function topByColumn(
 	}
 	if (opts.excludeEmpty) {
 		conditions.push(ne(column, ''));
+	}
+	if (opts.extra) {
+		conditions.push(opts.extra);
 	}
 	const count = sql<number>`COUNT(*)`;
 	const rows = await db(env)
@@ -105,8 +122,22 @@ export function topReferrers(env: Env, f: StatsFilter, limit = 10): Promise<Coun
 	});
 }
 
+/** Marketer-facing custom events only ($-prefixed internals and form_submit are excluded). */
 export function topEvents(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
-	return topByColumn(env, f, schema.events.name, { excludeNull: true, limit });
+	return topByColumn(env, f, schema.events.name, {
+		excludeNull: true,
+		limit,
+		extra: isCustomEvent,
+	});
+}
+
+/** Internal/system interactions ($exposure, other $-prefixed events, form_submit), shown separately. */
+export function topInteractions(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
+	return topByColumn(env, f, schema.events.name, {
+		excludeNull: true,
+		limit,
+		extra: isInteraction,
+	});
 }
 
 export function topCountries(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
@@ -127,6 +158,63 @@ function buildSessionWhere(f: StatsFilter): SQL {
 		gte(schema.eventSessions.startedAt, f.start),
 		lt(schema.eventSessions.startedAt, f.end),
 	) as SQL;
+}
+
+/**
+ * Freshness signal for session-derived analytics. `pending` is true when raw events exist in the
+ * range but no sessions have been materialized yet (the hourly cron has not caught up), so a caller
+ * can distinguish "no data" from "not built yet".
+ */
+export async function sessionFreshness(env: Env, f: StatsFilter): Promise<Freshness> {
+	const [rawRow, sessionRow] = await Promise.all([
+		db(env)
+			.select({ n: sql<number>`COUNT(*)` })
+			.from(schema.events)
+			.where(buildEventWhere(f))
+			.get(),
+		db(env)
+			.select({ n: sql<number>`COUNT(*)` })
+			.from(schema.eventSessions)
+			.where(buildSessionWhere(f))
+			.get(),
+	]);
+	const rawEvents = Number(rawRow?.n ?? 0);
+	const sessions = Number(sessionRow?.n ?? 0);
+	return {
+		materialization: 'hourly',
+		pending: rawEvents > 0 && sessions === 0,
+	};
+}
+
+/**
+ * Realtime snapshot: distinct visitor hashes and pageviews over the trailing `[now - windowMs, now)`
+ * window for a site. Bounded (small window, indexed by created_at). Privacy-safe: no cookies or
+ * persistent ids — just the daily visitor hash, de-duplicated within the window.
+ */
+export async function realtime(
+	env: Env,
+	siteId: string,
+	now: number,
+	windowMs: number,
+): Promise<RealtimeSnapshot> {
+	const start = now - windowMs;
+	const row = await db(env)
+		.select({ visitors: visitorCount, pageviews: pageviewCount })
+		.from(schema.events)
+		.where(
+			and(
+				eq(schema.events.siteId, siteId),
+				gte(schema.events.createdAt, start),
+				lt(schema.events.createdAt, now),
+			),
+		)
+		.get();
+	return {
+		window_ms: windowMs,
+		visitors: Number(row?.visitors ?? 0),
+		pageviews: Number(row?.pageviews ?? 0),
+		until: now,
+	};
 }
 
 /** Session engagement metrics over the range; all zero when there are no sessions. */

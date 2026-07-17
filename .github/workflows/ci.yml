@@ -28,11 +28,17 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Release-link check (no placeholder repo slugs)
+        run: pnpm check:links
+
       - name: Typecheck
         run: pnpm typecheck
 
       - name: Build
         run: pnpm build
+
+      - name: Package check (publint + attw)
+        run: pnpm --filter @writerslogic/facet check:package
 
       - name: Test
         run: pnpm test

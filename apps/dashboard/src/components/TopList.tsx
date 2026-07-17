@@ -1,50 +1,54 @@
-// Top-N breakdown list: Plausible-style horizontal bars where each bar width is proportional
-// to the max count. Pure CSS/Tailwind, no chart lib.
+// Top-N breakdown list: proportional horizontal bars whose width tracks the max count. Values are
+// right-aligned and tabular; long keys truncate with a title tooltip. Pure CSS/Tailwind, no chart lib.
 
 import type { CountRow } from '@facet/shared';
 import type { ReactElement } from 'react';
-
-const numberFormat = new Intl.NumberFormat('en-US');
+import { formatNumber } from '../lib/format.js';
+import { Card, CardHeading } from './Card.js';
 
 interface TopListProps {
 	title: string;
 	rows: CountRow[];
+	action?: ReactElement;
 }
 
-export function TopList({ title, rows }: TopListProps): ReactElement {
+export function TopList({ title, rows, action }: TopListProps): ReactElement {
 	const max = rows.reduce((acc, row) => Math.max(acc, row.count), 0);
 
 	return (
-		<section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-			<h3 className="mb-3 text-sm font-medium text-neutral-500">{title}</h3>
+		<Card>
+			<CardHeading action={action}>{title}</CardHeading>
 			{rows.length === 0 ? (
 				<p className="py-6 text-center text-sm text-neutral-400">No data yet</p>
 			) : (
-				<ul className="space-y-1">
+				<ul className="space-y-0.5">
 					{rows.map((row) => {
 						const width = max > 0 ? (row.count / max) * 100 : 0;
 						return (
 							<li
 								key={row.key}
-								className="relative flex items-center justify-between overflow-hidden rounded-md px-2 py-1.5 text-sm"
+								className="group relative flex items-center justify-between gap-3 overflow-hidden rounded-lg px-2.5 py-2 text-sm transition-colors hover:bg-neutral-50/80"
 							>
 								<span
-									className="absolute inset-y-0 left-0 rounded-md bg-sky-100"
+									className="absolute inset-y-1 left-0 rounded-md bg-accent-100/70 transition-[width] duration-500 ease-out group-hover:bg-accent-200/70"
 									style={{ width: `${width}%` }}
 									data-testid="toplist-bar"
 									aria-hidden="true"
 								/>
-								<span className="relative z-10 truncate text-neutral-800">
+								<span
+									className="relative z-10 truncate font-medium text-neutral-700"
+									title={row.key}
+								>
 									{row.key}
 								</span>
-								<span className="relative z-10 pl-3 font-medium text-neutral-600 tabular-nums">
-									{numberFormat.format(row.count)}
+								<span className="relative z-10 shrink-0 font-semibold text-neutral-900 tabular-nums">
+									{formatNumber(row.count)}
 								</span>
 							</li>
 						);
 					})}
 				</ul>
 			)}
-		</section>
+		</Card>
 	);
 }

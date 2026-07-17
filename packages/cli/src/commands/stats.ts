@@ -1,5 +1,4 @@
-// `facet stats`: fetch summary stats from a running Facet deployment with an API key and
-// print a compact table. The JSON fetcher is injectable so tests assert output without HTTP.
+// `facet stats`: fetch summary stats with an API key and print a compact table. Fetcher is injectable.
 
 import { parseArgs } from 'node:util';
 import type { StatsResponse } from '@facet/shared';

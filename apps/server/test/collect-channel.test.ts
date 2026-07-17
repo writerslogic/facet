@@ -1,4 +1,4 @@
-// T047: the collect handler classifies and persists the traffic channel + UTM columns.
+// The collect handler classifies and persists the traffic channel + UTM columns.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

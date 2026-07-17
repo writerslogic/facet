@@ -1,4 +1,4 @@
-// T008: daily salt — stable per UTC day (one row, race-safe), distinct across days.
+// Daily salt: stable per UTC day (one row, race-safe), distinct across days.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

@@ -1,6 +1,4 @@
-// Canonical WHERE-builder for the `events` table. Every stats helper composes `buildEventWhere`
-// for the site/hostname/time predicate so no helper hand-writes its own WHERE (see the DRY mandate;
-// extended in T082 with path/country/device/channel filters).
+// Canonical WHERE-builder for the `events` table: shared site/hostname/time predicate.
 
 import type { StatsFilter } from '@facet/shared';
 import { type SQL, and, eq, gte, lt } from 'drizzle-orm';

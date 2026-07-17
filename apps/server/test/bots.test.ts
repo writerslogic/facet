@@ -1,4 +1,4 @@
-// T010: bot filtering — known crawlers and empty/whitespace UAs are bots; real browsers are not.
+// Bot filtering: known crawlers and empty/whitespace UAs are bots; real browsers are not.
 
 import { describe, expect, it } from 'vitest';
 import { isBot } from '../src/lib/bots.js';

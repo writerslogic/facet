@@ -1,5 +1,5 @@
-// T014: POST /api/collect — valid beacon writes one event + session, bots are dropped, malformed
-// bodies are rejected, and repeat visits in a UTC day yield many events but one session.
+// POST /api/collect: valid beacon writes one event + session, bots are dropped, malformed bodies
+// are rejected, and repeat visits in a UTC day yield many events but one session.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

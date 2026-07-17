@@ -1,17 +1,31 @@
-// Time-series chart: thin React wrapper around uPlot. Feeds pageviews + visitors as two
-// series (x = bucket seconds), resizes with a ResizeObserver, and tears down on unmount.
-// uPlot needs canvas; if the mount throws (e.g. under jsdom) we fall back to an empty state.
+// Time-series chart: a thin React wrapper around uPlot. Plots pageviews + visitors as area-filled
+// series with a hovering cursor, readable UTC date/number axes, and a subtle grid. Resizes with a
+// ResizeObserver. uPlot needs canvas; if the mount throws (e.g. under jsdom) it degrades gracefully.
 
 import type { SeriesPoint } from '@facet/shared';
-import { type ReactElement, useEffect, useRef } from 'react';
+import { type ReactElement, useEffect, useMemo, useRef } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+import { Card } from './Card.js';
 
 interface TrafficChartProps {
 	series: SeriesPoint[];
 	loading?: boolean;
 	error?: string | null;
+	title?: string;
+	height?: number;
 }
+
+const ACCENT = '#6366f1';
+const INK = '#0f172a';
+const GRID = '#f1f0ee';
+const AXIS = '#a3a3a3';
+
+const numberFmt = new Intl.NumberFormat('en-US');
+const compactFmt = new Intl.NumberFormat('en-US', {
+	notation: 'compact',
+	maximumFractionDigits: 1,
+});
 
 function buildData(series: SeriesPoint[]): uPlot.AlignedData {
 	const x: number[] = [];
@@ -25,51 +39,93 @@ function buildData(series: SeriesPoint[]): uPlot.AlignedData {
 	return [x, pageviews, visitors];
 }
 
-function ChartCanvas({ series }: { series: SeriesPoint[] }): ReactElement {
+function fill(
+	ctx: CanvasRenderingContext2D,
+	from: string,
+	to: string,
+	height: number,
+): CanvasGradient {
+	const grad = ctx.createLinearGradient(0, 0, 0, height);
+	grad.addColorStop(0, from);
+	grad.addColorStop(1, to);
+	return grad;
+}
+
+function ChartCanvas({
+	series,
+	height,
+}: {
+	series: SeriesPoint[];
+	height: number;
+}): ReactElement {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const data = useMemo(() => buildData(series), [series]);
 
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
 
 		const opts: uPlot.Options = {
-			width: container.clientWidth || 600,
-			height: 280,
-			cursor: { y: false },
-			legend: { show: true },
+			width: container.clientWidth || 640,
+			height,
+			padding: [12, 8, 0, 8],
+			cursor: {
+				y: false,
+				points: { size: 6 },
+			},
+			legend: { show: true, live: true },
 			series: [
-				{},
+				{
+					value: (_u, v) => (v == null ? '—' : new Date(v * 1000).toUTCString()),
+				},
 				{
 					label: 'Pageviews',
-					stroke: '#171717',
+					stroke: INK,
 					width: 2,
-					fill: 'rgba(23,23,23,0.06)',
+					fill: (u) => fill(u.ctx, 'rgba(15,23,42,0.10)', 'rgba(15,23,42,0.00)', height),
+					points: { show: false },
+					value: (_u, v) => (v == null ? '—' : numberFmt.format(v)),
 				},
 				{
 					label: 'Visitors',
-					stroke: '#0ea5e9',
+					stroke: ACCENT,
 					width: 2,
-					fill: 'rgba(14,165,233,0.06)',
+					fill: (u) =>
+						fill(u.ctx, 'rgba(99,102,241,0.16)', 'rgba(99,102,241,0.00)', height),
+					points: { show: false },
+					value: (_u, v) => (v == null ? '—' : numberFmt.format(v)),
 				},
 			],
 			axes: [
-				{ stroke: '#a3a3a3', grid: { stroke: '#f5f5f5' } },
-				{ stroke: '#a3a3a3', grid: { stroke: '#f5f5f5' } },
+				{
+					stroke: AXIS,
+					grid: { show: false },
+					ticks: { stroke: GRID, size: 4 },
+					font: '11px Inter, sans-serif',
+					space: 64,
+				},
+				{
+					stroke: AXIS,
+					grid: { stroke: GRID, width: 1 },
+					ticks: { show: false },
+					font: '11px Inter, sans-serif',
+					size: 44,
+					values: (_u, splits) => splits.map((v) => compactFmt.format(v)),
+				},
 			],
 			scales: { x: { time: true } },
 		};
 
 		let chart: uPlot | null = null;
 		try {
-			chart = new uPlot(opts, buildData(series), container);
+			chart = new uPlot(opts, data, container);
 		} catch {
-			// jsdom / no-canvas environments: skip live rendering, wrapper still mounts.
 			return;
 		}
 
 		const observer = new ResizeObserver((entries) => {
 			const entry = entries[0];
-			if (entry && chart) chart.setSize({ width: entry.contentRect.width, height: 280 });
+			if (entry && chart) chart.setSize({ width: entry.contentRect.width, height });
 		});
 		observer.observe(container);
 
@@ -77,28 +133,50 @@ function ChartCanvas({ series }: { series: SeriesPoint[] }): ReactElement {
 			observer.disconnect();
 			chart?.destroy();
 		};
-	}, [series]);
+	}, [data, height]);
 
 	return <div ref={containerRef} className="uplot-container w-full" />;
 }
 
-export function TrafficChart({ series, loading, error }: TrafficChartProps): ReactElement {
+export function TrafficChart({
+	series,
+	loading,
+	error,
+	title = 'Traffic over time',
+	height = 280,
+}: TrafficChartProps): ReactElement {
 	return (
-		<section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-			<h2 className="mb-4 text-sm font-medium text-neutral-500">Traffic over time</h2>
+		<Card>
+			<div className="mb-4 flex items-center justify-between">
+				<h3 className="text-[13px] font-semibold uppercase tracking-wide text-neutral-500">
+					{title}
+				</h3>
+				<span className="text-xs text-neutral-400">UTC</span>
+			</div>
 			{loading ? (
-				<div className="h-[280px] w-full animate-pulse rounded-lg bg-neutral-100" />
+				<div
+					className="w-full animate-pulse rounded-xl bg-neutral-100"
+					style={{ height }}
+					aria-hidden="true"
+				/>
 			) : error ? (
-				<div className="flex h-[280px] items-center justify-center text-sm text-red-600">
+				<div
+					className="flex items-center justify-center text-sm text-red-600"
+					style={{ height }}
+					role="alert"
+				>
 					{error}
 				</div>
 			) : series.length === 0 ? (
-				<div className="flex h-[280px] items-center justify-center text-sm text-neutral-400">
+				<div
+					className="flex items-center justify-center text-sm text-neutral-400"
+					style={{ height }}
+				>
 					No data yet
 				</div>
 			) : (
-				<ChartCanvas series={series} />
+				<ChartCanvas series={series} height={height} />
 			)}
-		</section>
+		</Card>
 	);
 }

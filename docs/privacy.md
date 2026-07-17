@@ -2,8 +2,11 @@
 
 # Privacy model
 
-Facet is cookieless and stores no personal identifiers. There are no cookies, no
-`localStorage`, and no cross-site or cross-day identifiers. **Raw IP addresses are never
+Facet is cookieless and stores no personal identifiers. There are no cookies and no cross-site or
+cross-day identifiers; the only client-side storage is a local-only opt-out switch and, when
+experiments are used, a local A/B bucketing id (see
+[Visitor opt-out & Do Not Track](#visitor-opt-out--do-not-track)), neither of which is sent as
+identity. **Raw IP addresses are never
 stored, logged, or returned** — an IP is read only inside the hash function below and is
 discarded immediately after.
 
@@ -57,6 +60,30 @@ UTM values (`utm_source`, `utm_medium`, `utm_campaign`) are **site-supplied mark
 tags** taken verbatim from the page URL. They are stored only in their own declared columns
 and used to classify each event's traffic channel; they are not identifiers and are not
 mixed into the visitor hash.
+
+## Visitor opt-out & Do Not Track
+
+**Do Not Track is honored by default.** When the browser signals DNT
+(`navigator.doNotTrack === '1'`, `window.doNotTrack === '1'`, `navigator.doNotTrack === 'yes'`, or
+`navigator.msDoNotTrack === '1'`) the client sends nothing: no pageview, no SPA navigation events,
+no `form_submit`, no UTM read, and no experiment fetch, bucketing, or `$exposure`.
+
+Opt-out state has a single precedence chain (highest first):
+
+1. **`localStorage['facet.optout']`** — the visitor's persistent switch and their override.
+   `'1'`/`'true'` opts out; `'0'`/`'false'` is an explicit opt-in that **overrides Do Not Track**,
+   because it is a deliberate per-visitor choice and takes priority over the browser default.
+2. **`data-facet-optout`** on the script tag — opts out unless set to a false-like value
+   (`false`/`0`/`no`/`off`).
+3. **Do Not Track** browser signals.
+4. Otherwise opted in.
+
+The only client-side storage Facet uses is local-only and never sent as identity: the opt-out
+switch `localStorage['facet.optout']` and, when experiments are used, the per-experiment bucketing
+id `localStorage['facet.exp']` (a random value used solely to compute local A/B assignment; only an
+aggregate `$exposure` carrying `{ flag, variant }` reaches the server). Neither is a cookie, a
+cross-site identifier, or linkable across days. Storage access is wrapped so a blocked or disabled
+`localStorage` never throws.
 
 ## Retention
 

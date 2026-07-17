@@ -59,6 +59,6 @@ describe('Anomalies', () => {
 		render(
 			withQuery(<Anomalies apiKey="clk_test" siteId="site-1" range={{ start: 0, end: 1 }} />),
 		);
-		expect(screen.getByText('No anomalies detected.')).toBeInTheDocument();
+		expect(screen.getByText('No anomalies detected')).toBeInTheDocument();
 	});
 });

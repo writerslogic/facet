@@ -1,4 +1,4 @@
-// T050: GET /stats/sessions + /stats/channels and the extended /stats — authed reads over seeded
+// GET /stats/sessions + /stats/channels and the extended /stats: authed reads over seeded
 // event_sessions; site-scope enforcement.
 
 import { env } from 'cloudflare:test';
@@ -109,7 +109,10 @@ describe('GET /stats/sessions', () => {
 	it('returns engagement for the authed site', async () => {
 		const res = await get('/api/stats/sessions', RANGE, apiKey);
 		expect(res.status).toBe(200);
-		expect(await res.json()).toEqual({ engagement: EXPECTED_ENGAGEMENT });
+		expect(await res.json()).toEqual({
+			engagement: EXPECTED_ENGAGEMENT,
+			meta: { materialization: 'hourly', pending: false },
+		});
 	});
 
 	it('rejects a mismatched site with 403', async () => {
@@ -127,7 +130,10 @@ describe('GET /stats/channels', () => {
 	it('returns channels for the authed site', async () => {
 		const res = await get('/api/stats/channels', RANGE, apiKey);
 		expect(res.status).toBe(200);
-		expect(await res.json()).toEqual({ channels: EXPECTED_CHANNELS });
+		expect(await res.json()).toEqual({
+			channels: EXPECTED_CHANNELS,
+			meta: { materialization: 'hourly', pending: false },
+		});
 	});
 
 	it('rejects a mismatched site with 403', async () => {
