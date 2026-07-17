@@ -18,8 +18,15 @@ import { buildEventWhere } from './filters.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
 
+// Internal/system events (experiment `$exposure`, any `$`-prefixed name, and the auto-generated
+// `form_submit` interaction) are excluded from marketer-facing "custom event" metrics. They remain
+// in the raw `events` table for experiments/conversions/diagnostics and are surfaced separately via
+// `topInteractions`. Keep this predicate and its complement in sync.
+const isCustomEvent = sql`${schema.events.name} IS NOT NULL AND ${schema.events.name} NOT LIKE '$%' AND ${schema.events.name} <> 'form_submit'`;
+const isInteraction = sql`${schema.events.name} IS NOT NULL AND (${schema.events.name} LIKE '$%' OR ${schema.events.name} = 'form_submit')`;
+
 const pageviewCount = sql<number>`SUM(CASE WHEN ${schema.events.name} IS NULL THEN 1 ELSE 0 END)`;
-const eventCount = sql<number>`SUM(CASE WHEN ${schema.events.name} IS NOT NULL THEN 1 ELSE 0 END)`;
+const eventCount = sql<number>`SUM(CASE WHEN ${isCustomEvent} THEN 1 ELSE 0 END)`;
 const visitorCount = sql<number>`COUNT(DISTINCT ${schema.events.visitorHash})`;
 
 /** Pageviews (name IS NULL), custom events (name IS NOT NULL), and distinct visitors. */
@@ -74,7 +81,12 @@ async function topByColumn(
 	env: Env,
 	f: StatsFilter,
 	column: SQLiteColumn,
-	opts: { excludeNull?: boolean; excludeEmpty?: boolean; limit?: number } = {},
+	opts: {
+		excludeNull?: boolean;
+		excludeEmpty?: boolean;
+		limit?: number;
+		extra?: SQL;
+	} = {},
 ): Promise<CountRow[]> {
 	const conditions: SQL[] = [buildEventWhere(f)];
 	if (opts.excludeNull) {
@@ -82,6 +94,9 @@ async function topByColumn(
 	}
 	if (opts.excludeEmpty) {
 		conditions.push(ne(column, ''));
+	}
+	if (opts.extra) {
+		conditions.push(opts.extra);
 	}
 	const count = sql<number>`COUNT(*)`;
 	const rows = await db(env)
@@ -105,8 +120,22 @@ export function topReferrers(env: Env, f: StatsFilter, limit = 10): Promise<Coun
 	});
 }
 
+/** Marketer-facing custom events only ($-prefixed internals and form_submit are excluded). */
 export function topEvents(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
-	return topByColumn(env, f, schema.events.name, { excludeNull: true, limit });
+	return topByColumn(env, f, schema.events.name, {
+		excludeNull: true,
+		limit,
+		extra: isCustomEvent,
+	});
+}
+
+/** Internal/system interactions ($exposure, other $-prefixed events, form_submit), shown separately. */
+export function topInteractions(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
+	return topByColumn(env, f, schema.events.name, {
+		excludeNull: true,
+		limit,
+		extra: isInteraction,
+	});
 }
 
 export function topCountries(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
