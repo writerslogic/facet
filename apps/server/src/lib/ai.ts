@@ -22,10 +22,11 @@ const DEFAULT_INTENT: QueryIntent = { metric: 'pageviews' };
 
 const SYSTEM_PROMPT = `You translate an analytics question into a JSON query intent.
 Respond with ONLY a JSON object, no prose and no code fences.
-Shape: { "metric": <metric>, "dimension"?: <dimension>, "limit"?: <1-50> }
+Shape: { "metric": <metric>, "dimension"?: <dimension>, "limit"?: <1-50>, "series"?: <bool>, "interval"?: "hour"|"day" }
 metric is one of: "pageviews", "visitors", "events", "sessions", "bounce_rate".
 dimension (optional, include only for a top-N breakdown) is one of: "path", "referrer", "country", "device", "channel".
-limit (optional, breakdowns only) is an integer between 1 and 50.`;
+limit (optional, breakdowns only) is an integer between 1 and 50.
+series (optional): set true for a trend/over-time question (ignored when a dimension is set); interval is "hour" or "day".`;
 
 /** Production runner wrapping the Workers AI binding. */
 export function aiRunner(env: Env): LlmRunner {

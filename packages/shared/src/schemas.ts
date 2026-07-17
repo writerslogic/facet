@@ -79,6 +79,9 @@ export const QueryIntentSchema = v.object({
 	metric: v.picklist(['pageviews', 'visitors', 'events', 'sessions', 'bounce_rate']),
 	dimension: v.optional(v.picklist(['path', 'referrer', 'country', 'device', 'channel'])),
 	limit: v.optional(v.pipe(v.number(), v.integer(), v.minValue(1), v.maxValue(50))),
+	/** When true, return a time-series/trend instead of a scalar (ignored if a dimension is set). */
+	series: v.optional(v.boolean()),
+	interval: v.optional(v.picklist(['hour', 'day'])),
 });
 
 export const CreateSiteSchema = v.object({

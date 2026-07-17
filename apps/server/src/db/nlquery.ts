@@ -5,9 +5,11 @@
 
 import type { CountRow, NlQueryResult, QueryIntent, StatsFilter } from '@facet/shared';
 import type { Env } from '../env.js';
+import { HOUR_MS } from '../lib/constants.js';
 import {
 	channels,
 	engagement,
+	series,
 	summary,
 	topCountries,
 	topDevices,
@@ -61,6 +63,16 @@ export async function runQueryIntent(
 ): Promise<NlQueryResult> {
 	// Force the executed filter to the caller's site — the query is always scoped to `siteId`.
 	const scoped: StatsFilter = { ...f, siteId };
+	if (intent.series && !intent.dimension) {
+		const interval =
+			intent.interval ?? (scoped.end - scoped.start <= 48 * HOUR_MS ? 'hour' : 'day');
+		const points = await series(env, scoped, interval);
+		return {
+			intent,
+			answer: `Trend of ${intent.metric} over time (${interval})`,
+			result: { kind: 'series', points },
+		};
+	}
 	if (intent.dimension) {
 		const limit = intent.limit ?? 10;
 		const rows = await breakdownRows(env, scoped, intent.dimension, limit);

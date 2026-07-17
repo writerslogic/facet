@@ -86,7 +86,10 @@ export interface AnomaliesResponse {
 export interface NlQueryResult {
 	intent: QueryIntent;
 	answer: string;
-	result: { kind: 'scalar'; value: number } | { kind: 'breakdown'; rows: CountRow[] };
+	result:
+		| { kind: 'scalar'; value: number }
+		| { kind: 'breakdown'; rows: CountRow[] }
+		| { kind: 'series'; points: SeriesPoint[] };
 }
 
 /** Response body for `GET /api/stats`. */

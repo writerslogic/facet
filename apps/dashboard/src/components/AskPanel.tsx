@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useNlQuery } from '../hooks/query.js';
 import type { Range } from '../state.js';
 import { TopList } from './TopList.js';
+import { TrafficChart } from './TrafficChart.js';
 
 const numberFormat = new Intl.NumberFormat('en-US');
 
@@ -72,11 +73,13 @@ export function AskPanel({
 								{numberFormat.format(result.result.value)}
 							</p>
 						</div>
-					) : (
+					) : result.result.kind === 'breakdown' ? (
 						<TopList
 							title={`Top ${result.intent.dimension ?? ''}`}
 							rows={result.result.rows}
 						/>
+					) : (
+						<TrafficChart series={result.result.points} />
 					)}
 				</section>
 			) : (
