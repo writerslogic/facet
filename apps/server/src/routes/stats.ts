@@ -176,7 +176,9 @@ statsRoutes.get(
 			start: query.start,
 			end: query.end,
 		};
-		return c.json({ anomalies: await detectAnomalies(c.env, f) });
+		return c.json({
+			anomalies: await detectAnomalies(c.env, f, Date.now()),
+		});
 	},
 );
 

@@ -73,11 +73,16 @@ function meanStddev(xs: number[]): { mean: number; stddev: number } {
 
 /**
  * Detect a pageview anomaly in the most recent hour of [f.start, f.end). Returns a single-element
- * array when the last bucket deviates by at least ANOMALY_Z from the baseline of earlier buckets,
- * else [].
+ * array when the last completed bucket deviates by at least ANOMALY_Z from the baseline, else [].
+ *
+ * The in-progress hour (any bucket whose full `HOUR_MS` has not elapsed as of `now`) is excluded
+ * from both the candidate and the baseline, so partial current-hour data can't fabricate a "drop".
+ * `now` is a deterministic UTC-ms clock, passed explicitly for testability; for purely historical
+ * ranges (end already in the past) the filter is a no-op.
  */
-export async function detectAnomalies(env: Env, f: StatsFilter): Promise<Anomaly[]> {
-	const points = await hourlyPageviews(env, f);
+export async function detectAnomalies(env: Env, f: StatsFilter, now: number): Promise<Anomaly[]> {
+	const all = await hourlyPageviews(env, f);
+	const points = all.filter((p) => p.bucket + HOUR_MS <= now);
 	if (points.length < 1) {
 		return [];
 	}
@@ -152,7 +157,12 @@ async function diagnose(
 			}
 			if (Math.abs(delta) > bestDelta) {
 				bestDelta = Math.abs(delta);
-				best = { dimension, value, current: cur, baseline_avg: baselineAvg };
+				best = {
+					dimension,
+					value,
+					current: cur,
+					baseline_avg: baselineAvg,
+				};
 			}
 		}
 	}
