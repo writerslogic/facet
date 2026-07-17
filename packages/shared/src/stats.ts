@@ -90,6 +90,17 @@ export interface NlQueryResult {
 }
 
 /** Response body for `GET /api/stats`. */
+/**
+ * Freshness metadata for session-derived analytics. Sessions/engagement/channels are materialized
+ * from raw events by an hourly cron, so very recent activity may not be reflected yet.
+ */
+export interface Freshness {
+	/** Materialization cadence for session-derived analytics. */
+	materialization: 'hourly';
+	/** True when raw events exist in the range but no sessions are materialized yet (still pending). */
+	pending: boolean;
+}
+
 export interface StatsResponse {
 	summary: StatsSummary;
 	series: SeriesPoint[];
@@ -100,4 +111,6 @@ export interface StatsResponse {
 	top_devices: CountRow[];
 	engagement: EngagementSummary;
 	channels: CountRow[];
+	/** Session-data freshness. Optional for backward compatibility. */
+	meta?: Freshness;
 }

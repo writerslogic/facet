@@ -15,6 +15,7 @@ import {
 	channels,
 	engagement,
 	series,
+	sessionFreshness,
 	summary,
 	topCountries,
 	topDevices,
@@ -68,6 +69,7 @@ statsRoutes.get(
 			devices,
 			engagementResult,
 			channelsResult,
+			freshness,
 		] = await Promise.all([
 			summary(c.env, f),
 			series(c.env, f, interval),
@@ -78,6 +80,7 @@ statsRoutes.get(
 			topDevices(c.env, f),
 			engagement(c.env, f),
 			channels(c.env, f),
+			sessionFreshness(c.env, f),
 		]);
 		const body: StatsResponse = {
 			summary: summaryResult,
@@ -89,6 +92,7 @@ statsRoutes.get(
 			top_devices: devices,
 			engagement: engagementResult,
 			channels: channelsResult,
+			meta: freshness,
 		};
 		return c.json(body);
 	},
@@ -119,7 +123,10 @@ statsRoutes.get(
 			start: query.start,
 			end: query.end,
 		};
-		return c.json({ engagement: await engagement(c.env, f) });
+		return c.json({
+			engagement: await engagement(c.env, f),
+			meta: await sessionFreshness(c.env, f),
+		});
 	},
 );
 
@@ -148,7 +155,10 @@ statsRoutes.get(
 			start: query.start,
 			end: query.end,
 		};
-		return c.json({ channels: await channels(c.env, f) });
+		return c.json({
+			channels: await channels(c.env, f),
+			meta: await sessionFreshness(c.env, f),
+		});
 	},
 );
 

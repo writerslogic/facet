@@ -5,6 +5,7 @@
 import type {
 	CountRow,
 	EngagementSummary,
+	Freshness,
 	Interval,
 	SeriesPoint,
 	StatsFilter,
@@ -156,6 +157,32 @@ function buildSessionWhere(f: StatsFilter): SQL {
 		gte(schema.eventSessions.startedAt, f.start),
 		lt(schema.eventSessions.startedAt, f.end),
 	) as SQL;
+}
+
+/**
+ * Freshness signal for session-derived analytics. `pending` is true when raw events exist in the
+ * range but no sessions have been materialized yet (the hourly cron has not caught up), so a caller
+ * can distinguish "no data" from "not built yet".
+ */
+export async function sessionFreshness(env: Env, f: StatsFilter): Promise<Freshness> {
+	const [rawRow, sessionRow] = await Promise.all([
+		db(env)
+			.select({ n: sql<number>`COUNT(*)` })
+			.from(schema.events)
+			.where(buildEventWhere(f))
+			.get(),
+		db(env)
+			.select({ n: sql<number>`COUNT(*)` })
+			.from(schema.eventSessions)
+			.where(buildSessionWhere(f))
+			.get(),
+	]);
+	const rawEvents = Number(rawRow?.n ?? 0);
+	const sessions = Number(sessionRow?.n ?? 0);
+	return {
+		materialization: 'hourly',
+		pending: rawEvents > 0 && sessions === 0,
+	};
 }
 
 /** Session engagement metrics over the range; all zero when there are no sessions. */
