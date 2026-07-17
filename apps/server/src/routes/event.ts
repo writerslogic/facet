@@ -9,13 +9,18 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { requireApiKey } from '../lib/auth.js';
 import { ingestEvent } from '../lib/ingest.js';
+import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, device } from '../lib/request-meta.js';
 
 export const eventRoute = new Hono<AppEnv>();
 
+// Auth runs first so only an authenticated caller ever consumes a bucket (an invalid key is rejected
+// before rate limiting). The bucket is keyed per authenticated site, so a leaked/abused key is
+// capped per customer and cannot drain another customer's quota.
 eventRoute.post(
 	'/',
 	requireApiKey,
+	rateLimit((c) => `event:${c.get('siteId')}`),
 	vValidator('json', ServerEventSchema, (result, c) => {
 		if (!result.success) {
 			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
