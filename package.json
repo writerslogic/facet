@@ -17,6 +17,7 @@
     "test": "pnpm -r test",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
+    "check:links": "node scripts/check-release-links.mjs",
     "format": "biome format --write .",
     "ci": "biome ci .",
     "build": "pnpm --filter @facet/dashboard build && pnpm -r --filter '!@facet/dashboard' build",
