@@ -110,3 +110,98 @@ track('purchase', {
 
 A payload that violates these limits is rejected with `400 validation_failed`; see the
 [API reference](./api.md).
+
+## Visitor opt-out & Do Not Track
+
+Facet honors **Do Not Track by default**: if the browser sends a DNT signal
+(`navigator.doNotTrack === '1'`, `window.doNotTrack === '1'`, `navigator.doNotTrack === 'yes'`,
+or `navigator.msDoNotTrack === '1'`) the visitor is treated as opted out, and no beacons are
+sent — no pageview, no SPA navigations, no `form_submit`, no UTM read, and no experiment fetch,
+bucketing, or `$exposure`.
+
+There are three controls, in precedence order (highest first):
+
+1. **`localStorage['facet.optout']`** — the visitor's persistent choice. `'1'`/`'true'` opts out;
+   `'0'`/`'false'` is an explicit opt-in that **overrides Do Not Track** (a deliberate per-visitor
+   decision wins over the browser default).
+2. **`data-facet-optout`** on the script tag — opts out when present and not a false-like value.
+3. **Do Not Track** browser signals.
+
+Opt a whole site's script out (e.g. for a self-hosted embed you only want on consent):
+
+```html
+<script
+  defer
+  src="https://your-deployment.example.com/script.js"
+  data-site-id="YOUR_SITE_ID"
+  data-facet-optout
+></script>
+```
+
+A false-like value (`false`, `0`, `no`, `off`) leaves tracking **on**:
+
+```html
+<!-- tracking stays enabled -->
+<script ... data-facet-optout="false"></script>
+```
+
+Give visitors a persistent toggle from your own UI. The effect is immediate:
+
+```ts
+import { optOut, optIn, isOptedOut } from '@writerslogic/facet';
+// or window.facet.optOut() / optIn() / isOptedOut() with the script tag.
+
+optOut(); // sets localStorage['facet.optout'] = '1'; all collection stops now
+optIn(); //  sets '0'; re-enables tracking and overrides Do Not Track
+isOptedOut(); // current effective state (re-read on every call)
+```
+
+Storage access is wrapped so a blocked or unavailable `localStorage` (private mode, disabled
+storage) never throws — it degrades to an in-memory value for the page load.
+
+## Experiments: variant() and assignment()
+
+Read a flag's assigned variant with `variant(flagKey)`. Bucketing is computed locally; only an
+aggregate `$exposure` event is sent (see [privacy](./privacy.md)).
+
+```ts
+import { variant } from '@writerslogic/facet';
+const v = variant('cta'); // 'control' | 'blue' | …
+```
+
+`variant()` is **synchronous and always returns a string**. Before the experiment config has
+loaded (or when the flag is unknown, the fetch failed, or the visitor is opted out) it returns a
+safe fallback — the flag's control/first variant if known, else `'control'` — and does **not** fire
+an exposure. That fallback is **not a confirmed assignment**: rendering on it directly can flash the
+control variant before the real assignment loads.
+
+To render without a flash, gate on `whenReady()`, which resolves once init and the experiments
+fetch have settled (it never rejects):
+
+```ts
+import { whenReady, variant } from '@writerslogic/facet';
+
+await whenReady(); // resolves on success OR failure of the /active fetch
+render(variant('cta')); // now a confirmed assignment (or a genuine fallback on failure)
+```
+
+When you need to distinguish a real assignment from a pending/failed/opted-out state, use
+`assignment()`:
+
+```ts
+import { assignment } from '@writerslogic/facet';
+
+const a = assignment('cta');
+// { variant: string; participating: boolean;
+//   status: 'assigned' | 'pending' | 'unavailable' | 'opted-out' }
+if (a.participating) {
+  // status === 'assigned': a genuine bucketing; an exposure fired exactly once for this flag.
+  render(a.variant);
+}
+```
+
+`participating` is `true` only for a genuine bucketed assignment, so an opted-out or still-loading
+state is never misreported as a real control.
+
+Repeated `whenReady()` calls return the same promise; calling it (or `variant()`/`assignment()`)
+before `init()` is safe.

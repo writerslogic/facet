@@ -2,6 +2,7 @@
 // config. Zero dependencies.
 
 import type { EventProps } from '@facet/shared';
+import { isOptedOut } from './optout.js';
 
 export interface FacetConfig {
 	/** Collect endpoint origin, e.g. "https://analytics.example.com". */
@@ -27,7 +28,7 @@ function parseUtmFromSearch(search: string): Record<string, string> | undefined 
 
 /** Track a pageview (no name) or a named custom event. */
 export function track(_name?: string, _props?: EventProps): void {
-	if (!Config) return;
+	if (!Config || isOptedOut()) return;
 	const { host, siteId } = Config;
 	const hostname = typeof location !== 'undefined' ? location.hostname : '';
 	const path = typeof location !== 'undefined' ? location.pathname : '/';
@@ -69,4 +70,5 @@ export function getConfig(): FacetConfig | undefined {
 	return Config;
 }
 
-export { variant } from './experiments.js';
+export { assignment, variant, whenReady } from './experiments.js';
+export { isOptedOut, optIn, optOut } from './optout.js';
