@@ -1,5 +1,4 @@
-// facet-cli entrypoint: dispatches setup subcommands (`init`, `migrate`, `stats`, `config`) and the
-// admin-API resource groups (`sites`, `keys`, `goals`, `funnels`, `experiments`).
+// facet-cli entrypoint: dispatches setup subcommands and the admin-API resource groups.
 
 import { runConfig } from './commands/config.js';
 import { runInit } from './commands/init.js';

@@ -1,4 +1,4 @@
-// T028: the Worker serves the built dashboard for non-API routes (with SPA fallback), while API
+// The Worker serves the built dashboard for non-API routes (with SPA fallback), while API
 // routes keep returning JSON.
 
 import { env } from 'cloudflare:test';

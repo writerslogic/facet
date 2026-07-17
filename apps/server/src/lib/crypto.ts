@@ -1,5 +1,4 @@
-// Canonical encoding / digest primitives. The single source for hex, SHA-256, random-hex, and
-// constant-time hex comparison — no other module re-implements these (see the DRY mandate).
+// Encoding / digest primitives: hex, SHA-256, random-hex, and constant-time hex comparison.
 
 /** Lowercase-hex encode a byte array. */
 export function toHex(bytes: Uint8Array): string {

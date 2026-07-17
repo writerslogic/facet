@@ -1,6 +1,5 @@
-// T061: end-to-end conversions & funnels — create a goal + a 3-step funnel (admin), seed sessions
-// that complete 0/1/2/3 steps (events inserted directly with controlled created_at, then
-// buildSessions), then assert /stats/conversions rate and /funnels/:id/report counts + overall_rate.
+// End-to-end conversions & funnels: seed sessions completing 0/1/2/3 steps, then assert
+// /stats/conversions rate and /funnels/:id/report counts + overall_rate.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

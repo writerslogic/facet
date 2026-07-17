@@ -1,4 +1,4 @@
-// T020: crudRouter factory — generic insert-with-uuid / list-by-site / delete, behind requireAdmin.
+// crudRouter factory: generic insert-with-uuid / list-by-site / delete, behind requireAdmin.
 // Exercised against an ephemeral `widgets` table so it stands alone from later resource migrations.
 
 import { env } from 'cloudflare:test';

@@ -1,4 +1,4 @@
-// T016: the auto-init bundle reads data-* attributes, installs the umami shim, fires one initial
+// The auto-init bundle reads data-* attributes, installs the umami shim, fires one initial
 // pageview, and auto-tracks a subsequent history.pushState navigation.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';

@@ -1,4 +1,4 @@
-// T018: API key issuance/hashing/listing/revocation — hashes only, plaintext shown once.
+// API key issuance/hashing/listing/revocation: hashes only, plaintext shown once.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

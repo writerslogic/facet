@@ -1,5 +1,5 @@
-// T049: engagement + channels helpers over a fixed seeded set of event_sessions — exact metrics,
-// channel grouping/sorting, and `internal` exclusion.
+// Engagement + channels helpers over seeded event_sessions: exact metrics, channel
+// grouping/sorting, and `internal` exclusion.
 
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';

@@ -1,7 +1,5 @@
-// `facet config`: D1 bootstrap helpers over a wrangler.jsonc.
-//   set-db-id  — write the D1 `database_id` via a targeted string replace that PRESERVES comments
-//                and unrelated config (no JSON reparse/rewrite). Refuses to overwrite a real id.
-//   check      — exit nonzero if `database_id` is missing or still the placeholder.
+// `facet config`: D1 bootstrap helpers over a wrangler.jsonc. set-db-id writes database_id via a
+// targeted string replace (no JSON reparse) so comments and unrelated config survive byte-for-byte.
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
@@ -68,8 +66,6 @@ function setDbId(args: string[]): number {
 		return 1;
 	}
 
-	// Targeted replace of only the value between the quotes; the surrounding text (comments, other
-	// fields, formatting) is left byte-for-byte intact.
 	const updated = source.replace(DB_ID_RE, `$1${values.id}$3`);
 	writeFileSync(path, updated);
 	process.stdout.write(`Set database_id in ${path}.\n`);

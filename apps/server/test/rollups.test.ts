@@ -1,4 +1,4 @@
-// T029: rollup aggregation — one event_rollups row per (site, hostname) with exact counts, and
+// Rollup aggregation: one event_rollups row per (site, hostname) with exact counts, and
 // idempotence (a second run produces identical rows, no duplication or drift).
 
 import { env } from 'cloudflare:test';

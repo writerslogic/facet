@@ -1,5 +1,4 @@
-// `facet init`: scaffold a wrangler.jsonc + .dev.vars for a self-hosted deployment. Prompts for
-// any missing required value (skipped under --dry-run). Never makes network or wrangler calls.
+// `facet init`: scaffold a wrangler.jsonc + .dev.vars. Never makes network or wrangler calls.
 
 import { randomBytes } from 'node:crypto';
 import { mkdirSync, writeFileSync } from 'node:fs';

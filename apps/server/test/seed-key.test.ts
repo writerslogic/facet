@@ -1,4 +1,4 @@
-// T037 guard: the documented local-dev key must hash to the value stored in scripts/seed.sql, so
+// Guard: the documented local-dev key must hash to the value stored in scripts/seed.sql, so
 // `clk_localdevkey` actually authenticates against a freshly seeded database.
 
 import { describe, expect, it } from 'vitest';

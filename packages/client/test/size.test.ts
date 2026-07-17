@@ -1,6 +1,5 @@
-// T017: the drop-in script bundle must stay tiny. Reads the built dist/script.js, gzips it, and
-// asserts the byte length is within budget. Skips (does not fail) when the artifact is absent so
-// unit runs without a prior build still pass.
+// The drop-in script bundle must stay tiny: reads the built dist/script.js, gzips it, and asserts
+// the byte length is within budget. Skips when the artifact is absent so unit runs still pass.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';

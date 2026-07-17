@@ -1,5 +1,5 @@
-// T032: the cron handler runs rollups + retention in one pass, and isolates job failures so a
-// thrown error in one job still lets the others run.
+// The cron handler runs rollups + retention in one pass, and isolates job failures so a thrown
+// error in one job still lets the others run.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

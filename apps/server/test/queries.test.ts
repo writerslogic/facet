@@ -1,4 +1,4 @@
-// T012: event insert (props JSON round-trip, UUID id) and idempotent session upsert.
+// Event insert (props JSON round-trip, UUID id) and idempotent session upsert.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

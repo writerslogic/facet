@@ -1,7 +1,7 @@
 // Rollup aggregation: fold raw `events` into `event_rollups` (hourly + daily). Every bucket lies
 // entirely within one UTC day and therefore one salt, so COUNT(DISTINCT visitor_hash) inside a
-// bucket is always computed under a single consistent salt (no cross-day lookback — see the
-// privacy model). Idempotent: re-running a bucket overwrites its row with identical counts.
+// bucket is always computed under a single consistent salt (no cross-day lookback).
+// Idempotent: re-running a bucket overwrites its row with identical counts.
 
 import type { Interval } from '@facet/shared';
 import { and, gte, lt, sql } from 'drizzle-orm';

@@ -1,8 +1,6 @@
-// Resource-management commands driving the admin API (sites, keys, goals, funnels, experiments).
-// Each group parses its own flags, validates UUIDs/required fields BEFORE any request, and renders a
-// table by default or JSON with --json. The admin token is resolved from a flag/env and only ever
-// travels in the Authorization header — it is never printed or logged. Newly issued key plaintext is
-// the sole secret ever written to stdout, and only once with a warning.
+// Admin-API resource commands (sites, keys, goals, funnels, experiments). The admin token only ever
+// travels in the Authorization header, never printed. Newly issued key plaintext is the sole secret
+// written to stdout, and only once with a warning.
 
 import { parseArgs } from 'node:util';
 import type {

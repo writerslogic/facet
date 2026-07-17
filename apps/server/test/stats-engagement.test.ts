@@ -1,4 +1,4 @@
-// T050: GET /stats/sessions + /stats/channels and the extended /stats — authed reads over seeded
+// GET /stats/sessions + /stats/channels and the extended /stats: authed reads over seeded
 // event_sessions; site-scope enforcement.
 
 import { env } from 'cloudflare:test';

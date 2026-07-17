@@ -1,7 +1,6 @@
 // Admin endpoints for sites and API keys, all behind requireAdmin. Sites and keys are bespoke
 // (sites aren't site-scoped; keys use one-time issuance and never expose their hash), so they do
-// not use the generic crudRouter — that factory is for the site-scoped child resources in later
-// phases (goals, funnels, experiments, sources).
+// not use the generic crudRouter.
 
 import { CreateSiteSchema, IssueKeySchema, type Site } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';

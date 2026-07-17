@@ -1,4 +1,4 @@
-// T015: track() builds a schema-valid CollectPayload (site_id/hostname/path/referrer + optional
+// track() builds a schema-valid CollectPayload (site_id/hostname/path/referrer + optional
 // name/props) and sends it via sendBeacon, falling back to fetch(keepalive). No-op before init().
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';

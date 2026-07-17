@@ -1,4 +1,4 @@
-// E.20: optional anomaly-alert webhook. Disabled unless WEBHOOK_URL is configured. Deliveries are
+// Optional anomaly-alert webhook. Disabled unless WEBHOOK_URL is configured. Deliveries are
 // HMAC-SHA256 signed (when WEBHOOK_SECRET is set), time-bounded, and best-effort — a failed webhook
 // never throws into the scheduled handler and is never a dependency of analytics ingestion. The
 // hourly cron evaluates only the last completed hour, so each anomalous (site, bucket) is delivered

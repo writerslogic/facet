@@ -1,6 +1,5 @@
-// Wire-level valibot schemas + inferred types. The single validation source of truth for the
-// collect, stats-query, and admin wire contracts, with every limit fixed here. Zero runtime deps
-// beyond valibot.
+// Wire-level valibot schemas + inferred types: the validation source of truth for the collect,
+// stats-query, and admin contracts.
 
 import * as v from 'valibot';
 
@@ -41,8 +40,8 @@ export const CollectPayloadSchema = v.object({
 	),
 });
 
-// First-party server-to-server event: same shape as the beacon minus site_id (which comes from the
-// API key), plus optional ip/user_agent so the caller can attribute the end-user's visit.
+// First-party server-to-server event: beacon shape minus site_id (taken from the API key), plus
+// optional ip/user_agent to attribute the end-user's visit.
 export const ServerEventSchema = v.object({
 	hostname: v.pipe(v.string(), v.minLength(1), v.maxLength(253)),
 	path: v.pipe(
@@ -73,8 +72,8 @@ export const StatsQuerySchema = v.object({
 	interval: v.optional(v.picklist(['hour', 'day'])),
 });
 
-// Constrained natural-language query intent. The LLM only ever emits a value matching this schema;
-// the executor maps it onto existing aggregate helpers. Never used to build SQL from model text.
+// Constrained natural-language query intent: the LLM only emits a value matching this schema, which
+// the executor maps onto existing aggregate helpers. Never used to build SQL from model text.
 export const QueryIntentSchema = v.object({
 	metric: v.picklist(['pageviews', 'visitors', 'events', 'sessions', 'bounce_rate']),
 	dimension: v.optional(v.picklist(['path', 'referrer', 'country', 'device', 'channel'])),

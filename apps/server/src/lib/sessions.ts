@@ -1,7 +1,7 @@
 // Sessionization: fold a day's raw `events` into `event_sessions`. Events are grouped per
 // (site, visitor); a new session starts whenever the gap between adjacent events exceeds
 // SESSION_TIMEOUT_MS. Session ids are deterministic (sha256 of site|visitor|startedAt) so a
-// re-run upserts identical rows — idempotent (see the DRY/idempotency mandate).
+// re-run upserts identical rows — idempotent.
 
 import { and, asc, gte, lt } from 'drizzle-orm';
 import { db } from '../db/queries.js';

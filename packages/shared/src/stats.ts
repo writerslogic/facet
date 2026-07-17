@@ -92,7 +92,6 @@ export interface NlQueryResult {
 		| { kind: 'series'; points: SeriesPoint[] };
 }
 
-/** Response body for `GET /api/stats`. */
 /**
  * Freshness metadata for session-derived analytics. Sessions/engagement/channels are materialized
  * from raw events by an hourly cron, so very recent activity may not be reflected yet.

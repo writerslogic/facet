@@ -1,4 +1,4 @@
-// T059: funnel report — seed sessions with known step completion and assert each steps[i].count and
+// Funnel report: seed sessions with known step completion and assert each steps[i].count and
 // overall_rate; verify out-of-order events do NOT count as progression.
 
 import { env } from 'cloudflare:test';

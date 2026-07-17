@@ -1,5 +1,4 @@
-// T057: goal conversions — seed sessions/events + a goal, then assert exact conversions/rate over
-// the authed /api/stats/conversions endpoint, for both an event-type and a path-type goal.
+// Goal conversions over the authed /api/stats/conversions endpoint, for event-type and path-type goals.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

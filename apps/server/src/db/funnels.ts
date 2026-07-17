@@ -1,6 +1,4 @@
-// T059: funnel report. For each session in range, walk its time-ordered events and advance a step
-// pointer only on an in-order match of the next step. steps[i].count is the number of sessions that
-// reached step i; overall_rate = steps[last].count / steps[0].count (0 when step0 is 0).
+// Funnel report: per-session in-order step matching over materialized sessions.
 
 import type { Funnel, FunnelReportResult, StatsFilter } from '@facet/shared';
 import { and, asc, eq, gte, lt } from 'drizzle-orm';

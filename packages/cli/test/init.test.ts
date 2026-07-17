@@ -1,5 +1,4 @@
-// T034: `facet init --dry-run` writes a wrangler.jsonc (with the given name + db) and a
-// .dev.vars (with an ADMIN_TOKEN) into the target dir, without prompting or calling the network.
+// `facet init --dry-run` scaffolds wrangler.jsonc + .dev.vars without prompting or network calls.
 
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

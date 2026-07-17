@@ -1,5 +1,4 @@
-// T035: `facet migrate` builds the correct wrangler argv (default --local, --remote when asked)
-// and resolves to the child exit code, via an injected spawner (no real wrangler call).
+// `facet migrate` builds the wrangler argv (default --local) and resolves to the child exit code.
 
 import { describe, expect, it } from 'vitest';
 import { runMigrate } from '../src/commands/migrate.js';

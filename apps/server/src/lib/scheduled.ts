@@ -1,6 +1,5 @@
 // Scheduled-job registry. The cron handler iterates `JOBS`, running each inside its own try/catch
-// so one job's failure never skips another. Later cron work registers a job here instead of
-// editing `runScheduled` (see the DRY mandate).
+// so one job's failure never skips another.
 
 import type { Env } from '../env.js';
 import { HOUR_MS } from './constants.js';

@@ -1,4 +1,4 @@
-// Experiment readiness (Task B.6): whenReady() settles after /active resolves or fails and never
+// Experiment readiness: whenReady() settles after /active resolves or fails and never
 // rejects; assignment() reports pending/assigned/unavailable/opted-out precisely; variant() stays
 // backward-compatible with a safe non-exposing fallback; exposure dedups; opt-out blocks fetch and
 // exposure.

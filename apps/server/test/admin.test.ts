@@ -1,5 +1,4 @@
-// T020: admin sites & keys endpoints — create/list sites, issue/list(no hash)/revoke keys, all
-// behind requireAdmin.
+// Admin sites & keys endpoints: create/list sites, issue/list(no hash)/revoke keys, behind requireAdmin.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

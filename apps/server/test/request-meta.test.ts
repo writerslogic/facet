@@ -1,4 +1,4 @@
-// T011: request metadata — device class from UA, country normalization, client IP header.
+// Request metadata: device class from UA, country normalization, client IP header.
 
 import { describe, expect, it } from 'vitest';
 import { clientIp, country, device } from '../src/lib/request-meta.js';

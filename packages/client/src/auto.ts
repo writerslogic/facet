@@ -1,8 +1,5 @@
-// Auto-init side-effect bundle loaded via <script src=".../script.js" data-site-id="…">. Reads the
-// executing script's data-* attributes, installs the window.umami-compatible shim, fires an initial
-// pageview, and auto-tracks SPA navigations (history pushState/replaceState + popstate). Every
-// collection path is gated on the shared opt-out state (Do-Not-Track, data-facet-optout, and the
-// localStorage kill switch).
+// Auto-init side-effect bundle: reads the script's data-* attributes, installs the umami shim, and
+// auto-tracks pageviews and SPA navigations. Every collection path is gated on the opt-out state.
 
 import { assignment, variant, whenReady } from './experiments.js';
 import { init, track } from './index.js';

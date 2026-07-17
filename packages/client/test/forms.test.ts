@@ -1,4 +1,4 @@
-// T056: the auto bundle fires a `form_submit` event (no field values) on a form submission, and
+// The auto bundle fires a `form_submit` event (no field values) on a form submission, and
 // respects the data-facet-ignore opt-out.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';

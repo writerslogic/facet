@@ -1,5 +1,5 @@
-// T013: rate-limit middleware — denies over-limit keys with 429 + Retry-After, isolates keys,
-// and no-ops when the RATE_LIMITER binding is absent.
+// Rate-limit middleware: denies over-limit keys with 429 + Retry-After, isolates keys, and
+// no-ops when the RATE_LIMITER binding is absent.
 
 import { Hono } from 'hono';
 import { describe, expect, it } from 'vitest';

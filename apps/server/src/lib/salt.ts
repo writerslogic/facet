@@ -1,6 +1,6 @@
 // Daily-rotating salt management: fetch (or lazily create) today's salt from the `salts` table
 // so visitor hashes are un-linkable across UTC days. One salt per UTC day; created race-safe via
-// INSERT OR IGNORE + re-select. Never a multi-salt lookback (see the canonical contract).
+// INSERT OR IGNORE + re-select.
 
 import type { Env } from '../env.js';
 import { SALT_BYTES } from './constants.js';

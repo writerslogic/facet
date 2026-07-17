@@ -1,7 +1,6 @@
-// T043: end-to-end acceptance — the release gate for the ingest → D1 → scheduled rollup → stats →
-// asset path. Creates a site + key via admin, ingests real client-shaped beacons across two
-// hostnames (a bot dropped), runs the scheduled handler, and asserts exact stats and per-hostname
-// split, then confirms the dashboard is served.
+// End-to-end acceptance for the ingest → D1 → scheduled rollup → stats → asset path. Ingests
+// client-shaped beacons across two hostnames (a bot dropped), runs the scheduled handler, and
+// asserts exact stats, the per-hostname split, and that the dashboard is served.
 
 import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';

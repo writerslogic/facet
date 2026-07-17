@@ -1,4 +1,4 @@
-// T022: GET /api/stats — authed read returns the assembled response; enforces site scope, range
+// GET /api/stats: authed read returns the assembled response; enforces site scope, range
 // validity, and the max range.
 
 import { env } from 'cloudflare:test';

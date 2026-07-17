@@ -1,6 +1,4 @@
-// Shared helpers for the admin-API resource commands (sites/keys/goals/funnels/experiments).
-// Resolves host + admin token from flags/env, performs authenticated requests via an injectable
-// fetcher, and provides UUID/table utilities. The admin token is NEVER logged or printed.
+// Shared helpers for the admin-API resource commands. The admin token is NEVER logged or printed.
 
 import { fetchJson } from './util.js';
 

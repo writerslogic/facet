@@ -1,5 +1,4 @@
-// T019: API-key + admin auth — key resolves to its site and bumps last_used; bogus keys and admin
-// tokens are rejected with the canonical 401 codes.
+// API-key + admin auth: key resolves to its site and bumps last_used; bogus keys/tokens get a 401.
 
 import { env } from 'cloudflare:test';
 import { Hono } from 'hono';

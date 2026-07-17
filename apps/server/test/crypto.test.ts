@@ -1,4 +1,4 @@
-// T009: canonical crypto primitives — hex encoding, SHA-256, random hex, constant-time compare.
+// Canonical crypto primitives: hex encoding, SHA-256, random hex, constant-time compare.
 
 import { describe, expect, it } from 'vitest';
 import { constantTimeEqualHex, randomHex, sha256Hex, toHex } from '../src/lib/crypto.js';

@@ -1,4 +1,4 @@
-// T009: visitor hash — format, determinism, sensitivity to every argument, and a pinned digest.
+// Visitor hash: format, determinism, sensitivity to every argument, and a pinned digest.
 
 import { describe, expect, it } from 'vitest';
 import { visitorHash } from '../src/lib/hash.js';
