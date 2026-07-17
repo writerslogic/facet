@@ -17,7 +17,7 @@ Facet is pre-1.0 and under active development. Security fixes are applied to
 ### Preferred Method
 
 Open a private advisory via
-[GitHub Security Advisories](https://github.com/dcondrey/facet/security/advisories/new),
+[GitHub Security Advisories](https://github.com/writerslogic/facet/security/advisories/new),
 or email **admin@writerslogic.com**.
 
 Please include:

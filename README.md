@@ -9,10 +9,10 @@
 
 # Facet
 
-[![CI](https://github.com/dcondrey/facet/actions/workflows/ci.yml/badge.svg)](https://github.com/dcondrey/facet/actions/workflows/ci.yml)
+[![CI](https://github.com/writerslogic/facet/actions/workflows/ci.yml/badge.svg)](https://github.com/writerslogic/facet/actions/workflows/ci.yml)
 [![TypeScript](https://img.shields.io/badge/typescript-5.7-blue.svg)](https://www.typescriptlang.org)
 [![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg)](https://workers.cloudflare.com)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://github.com/dcondrey/facet/blob/main/LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://github.com/writerslogic/facet/blob/main/LICENSE)
 [![ORCID](https://img.shields.io/badge/ORCID-0009--0003--1849--2963-green.svg)](https://orcid.org/0009-0003-1849-2963)
 
 **Privacy-first, cookieless analytics and experimentation that runs entirely on the Cloudflare edge.**
@@ -27,7 +27,7 @@ by swapping a single script tag.
 
 ## Deploy to Cloudflare
 
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/dcondrey/facet)
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/writerslogic/facet)
 
 ## Why Facet
 
