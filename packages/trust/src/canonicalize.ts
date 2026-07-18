@@ -1,0 +1,33 @@
+// JSON Canonicalization Scheme (RFC 8785 / JCS): a deterministic byte serialization so a signer and
+// a verifier agree on exactly what was signed regardless of key order or incidental whitespace. Keys
+// are sorted by UTF-16 code unit, strings use JSON escaping, and numbers use the ECMAScript
+// Number-to-String form (`JSON.stringify`). Reused for detached-JWS export proofs and, later, for the
+// eddsa-jcs Data Integrity suite. Note: matches JCS for our domain (integers, decimals, strings); the
+// exotic large-exponent number forms JCS specifies are not produced by our data.
+
+/** Canonicalize a JSON value to its RFC 8785 string form. Rejects non-finite numbers. */
+export function canonicalizeJson(value: unknown): string {
+	if (value === null) return 'null';
+	if (typeof value === 'number') {
+		if (!Number.isFinite(value)) throw new Error('cannot canonicalize a non-finite number');
+		return JSON.stringify(value);
+	}
+	if (typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
+	if (Array.isArray(value)) {
+		return `[${value.map((v) => canonicalizeJson(v)).join(',')}]`;
+	}
+	if (typeof value === 'object') {
+		const obj = value as Record<string, unknown>;
+		const keys = Object.keys(obj)
+			.filter((k) => obj[k] !== undefined)
+			.sort();
+		const members = keys.map((k) => `${JSON.stringify(k)}:${canonicalizeJson(obj[k])}`);
+		return `{${members.join(',')}}`;
+	}
+	throw new Error(`cannot canonicalize value of type ${typeof value}`);
+}
+
+/** Canonicalize a JSON value to UTF-8 bytes (the input to signing/hashing). */
+export function canonicalizeBytes(value: unknown): Uint8Array {
+	return new TextEncoder().encode(canonicalizeJson(value));
+}
