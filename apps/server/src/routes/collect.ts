@@ -6,6 +6,7 @@ import { CollectPayloadSchema } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
+import { isGpcOptOut } from '../lib/gpc.js';
 import { ingestEvent } from '../lib/ingest.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, country, device } from '../lib/request-meta.js';
@@ -21,6 +22,10 @@ collectRoute.post(
 		}
 	}),
 	async (c) => {
+		// GPC opt-out: drop silently (202) before any hashing or write, like a client opt-out.
+		if (isGpcOptOut(c.req.raw)) {
+			return c.body(null, 202);
+		}
 		const body = c.req.valid('json');
 		const ua = c.req.header('user-agent') ?? '';
 		await ingestEvent(c.env, {

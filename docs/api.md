@@ -55,6 +55,10 @@ rejected with `413 payload_too_large` before parsing. Bot user-agents are silent
 (the request still returns `202` but no event is written). On success, returns **`202`**
 with an empty body.
 
+A request carrying the [Global Privacy Control](https://globalprivacycontrol.org/) header
+`Sec-GPC: 1` is treated as an opt-out: it returns `202` but no event is written and no visitor
+hash is derived. This mirrors the client-side opt-out and holds for direct callers too.
+
 Body fields (`site_id`, `hostname`, `path`, `referrer` required; `name`, `props`
 optional):
 
@@ -104,7 +108,7 @@ never stored.
 - **Auth:** `Authorization: Bearer <api_key>` (the site is taken from the key; no `site_id` in the body).
 - **Body:** `hostname`, `path` (absolute), optional `referrer`, `name`, `props`, `utm`, and optional
   `ip` / `user_agent` (the end-user's, for hashing + device/channel classification).
-- **Responses:** `202` (empty) on accept or bot-drop; `400 validation_failed`; `401 invalid_api_key`.
+- **Responses:** `202` (empty) on accept, bot-drop, or a `Sec-GPC: 1` opt-out; `400 validation_failed`; `401 invalid_api_key`.
 
 ```sh
 curl -X POST https://your-deployment.example.com/api/event \

@@ -8,6 +8,7 @@ import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { requireApiKey } from '../lib/auth.js';
+import { isGpcOptOut } from '../lib/gpc.js';
 import { ingestEvent } from '../lib/ingest.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, device } from '../lib/request-meta.js';
@@ -27,6 +28,10 @@ eventRoute.post(
 		}
 	}),
 	async (c) => {
+		// GPC opt-out: an authenticated backend still relays the visitor's signal; drop before write.
+		if (isGpcOptOut(c.req.raw)) {
+			return c.body(null, 202);
+		}
 		const body = c.req.valid('json');
 		const ua = body.user_agent ?? '';
 		await ingestEvent(c.env, {
