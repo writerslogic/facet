@@ -10,12 +10,14 @@ import { parseArgs } from 'node:util';
 import {
 	type DidConfiguration,
 	type DidDocument,
+	type EatClaims,
 	type ScittReceiptPayload,
 	type SignedExport,
 	type SignedStatement,
 	type VerifiableCredential,
 	verifyCredential,
 	verifyDidConfiguration,
+	verifyProcessEvidence,
 	verifyScittReceipt,
 	verifySignedExport,
 } from '@facet/trust';
@@ -30,6 +32,7 @@ Targets:
   did-configuration <file> --did-doc <file> [--origin <origin>]
                                                  Verify a DIF domain-linkage against a DID document.
   receipt <file>                                 Verify a SCITT receipt (signature + MMR inclusion).
+  attestation <file> [--nonce <n>]               Verify a RATS process-evidence EAT (software only).
 `;
 
 /** Read + parse a JSON file, returning null (and printing) on any error. */
@@ -133,6 +136,23 @@ async function verifyReceiptCmd(file: string): Promise<number> {
 	return 1;
 }
 
+async function verifyAttestationCmd(file: string, flags: Record<string, string>): Promise<number> {
+	const doc = await readJson(file);
+	if (doc === null) return 1;
+	const result = await verifyProcessEvidence(doc as SignedStatement<EatClaims>, {
+		nonce: flags.nonce,
+	});
+	if (result.valid) {
+		ok(`valid RATS process evidence (key-bound, build=${result.evidence?.buildId})`);
+		process.stdout.write(
+			`  ${pc.dim('software attestation only — no hardware root of trust')}\n`,
+		);
+		return 0;
+	}
+	printError(`✗ invalid attestation: ${result.reason ?? 'verification failed'}`);
+	return 1;
+}
+
 export async function runVerify(args: string[]): Promise<number> {
 	const [what] = args;
 	if (what === '--help' || what === '-h' || what === undefined) {
@@ -146,6 +166,7 @@ export async function runVerify(args: string[]): Promise<number> {
 			jwk: { type: 'string' },
 			'did-doc': { type: 'string' },
 			origin: { type: 'string' },
+			nonce: { type: 'string' },
 		},
 		allowPositionals: true,
 	});
@@ -164,6 +185,8 @@ export async function runVerify(args: string[]): Promise<number> {
 			return verifyDidConfigurationCmd(file, flags);
 		case 'receipt':
 			return verifyReceiptCmd(file);
+		case 'attestation':
+			return verifyAttestationCmd(file, flags);
 		default:
 			printError(`unknown verify target: ${what}`);
 			process.stderr.write(USAGE);

@@ -14,6 +14,7 @@ import {
 	jwkToPublicKeyMultibase,
 	loadSigningKey,
 	signExport,
+	signProcessEvidence,
 } from '@facet/trust';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { main } from '../src/index.js';
@@ -122,5 +123,26 @@ describe('facet verify export', () => {
 		const code = await main(['verify', 'did-configuration', cfgFile, '--did-doc', docFile]);
 		expect(code).toBe(0);
 		expect(stdout).toContain('valid domain linkage');
+	});
+
+	it('verifies a RATS process-evidence attestation', async () => {
+		const { privateJwk } = await generateSigningJwk('EdDSA');
+		const key = await loadSigningKey(JSON.stringify(privateJwk));
+		const eat = await signProcessEvidence(
+			{
+				buildId: 'ci-1',
+				commit: 'abc',
+				schemaHash: 'f'.repeat(64),
+				wranglerHash: 'a'.repeat(64),
+				privacyTransforms: ['cookieless'],
+			},
+			key,
+			{ now: 1_770_000_000_000, nonce: 'n1' },
+		);
+		const file = await tmpFile('eat.json', eat);
+		expect(await main(['verify', 'attestation', file, '--nonce', 'n1'])).toBe(0);
+		expect(stdout).toContain('valid RATS process evidence');
+		// Wrong nonce fails.
+		expect(await main(['verify', 'attestation', file, '--nonce', 'bad'])).toBe(1);
 	});
 });

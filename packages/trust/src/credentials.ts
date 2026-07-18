@@ -36,6 +36,8 @@ export interface PrivacyAttestationInput {
 	deployment: DeploymentProperties;
 	/** Optional DPV (Data Privacy Vocabulary) claims, embedded by the P3.7 manifest layer. */
 	dpv?: Record<string, unknown>;
+	/** Optional reference to a RATS process-evidence EAT (P4.10): its profile + content-ref digest. */
+	evidence?: { profile: string; contentRef: { alg: string; digest: string } };
 	validUntil?: string;
 }
 
@@ -53,6 +55,7 @@ export function buildPrivacyAttestationCredential(
 			id: input.did,
 			deployment: input.deployment,
 			...(input.dpv ? { dpv: input.dpv } : {}),
+			...(input.evidence ? { processEvidence: input.evidence } : {}),
 		},
 	};
 }

@@ -3,7 +3,7 @@
 // live D1 schema, the retention window, and the fixed privacy model. Reused by the PrivacyAttestation
 // credential (P3.6/P3.7) and the RATS process-evidence attestation (P4.10).
 
-import type { DeploymentProperties } from '@facet/trust';
+import type { DeploymentProperties, ProcessEvidence } from '@facet/trust';
 import { getTableColumns, getTableName } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -56,5 +56,25 @@ export async function deploymentDescriptor(env: Env): Promise<DeploymentProperti
 			storesRawIp: false,
 			cookies: false,
 		},
+	};
+}
+
+/** The enabled privacy transforms, as stable labels for RATS process evidence. */
+const PRIVACY_TRANSFORMS = [
+	'daily-rotating-salted-sha256-visitor-hash',
+	'no-raw-ip-storage',
+	'cookieless',
+	'dnt-honored',
+	'gpc-honored',
+] as const;
+
+/** Assemble RATS process evidence for the running deployment (software attestation only). */
+export async function buildProcessEvidence(env: Env): Promise<ProcessEvidence> {
+	return {
+		buildId: env.FACET_BUILD_ID ?? 'unknown',
+		commit: env.FACET_GIT_COMMIT ?? 'unknown',
+		schemaHash: await schemaFingerprintHash(),
+		wranglerHash: env.FACET_WRANGLER_HASH ?? 'unknown',
+		privacyTransforms: [...PRIVACY_TRANSFORMS],
 	};
 }

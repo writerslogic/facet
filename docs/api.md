@@ -438,6 +438,27 @@ Both return `501` when no signing key is configured (or the key is not Ed25519).
 (SD-JWT-style, Workers-native) is available via `@facet/trust`; the RDF-based `ecdsa-sd-2023` and
 pairing-based `bbs-2023` cryptosuites are not usable under Cloudflare Workers (see the trust README).
 
+## Transparency log, SCITT & attestation
+
+A Merkle Mountain Range (MMR, profiled against `draft-bryce-cose-receipts-mmr-profile`) is maintained
+over finalized `event_rollups` on the hourly cron, with signed checkpoints. All of this is inert
+unless a signing key is configured. None of it commits anything about a visitor — leaves cover
+aggregate rollups only.
+
+| Endpoint | Auth | Purpose |
+| --- | --- | --- |
+| `GET /api/transparency/checkpoint` | public | Latest signed tree head (size + bagged root + timestamp). |
+| `GET /api/transparency/inclusion?site_id&hostname&bucket_start&interval` | API key | Inclusion receipt for one of the site's rollups. |
+| `GET /api/transparency/consistency?from&to` | public | Consistency proof between two tree sizes. |
+| `POST /api/scitt/attestation` | admin | Wrap the PrivacyAttestation as a SCITT Signed Statement, register it with the local Transparency-Service double, return a Receipt. |
+| `POST /api/scitt/register` | admin | Register an arbitrary Signed Statement, return a Receipt. |
+| `GET /api/attestation/evidence[?nonce=]` | public | A RATS process-evidence EAT (software attestation only; no hardware root of trust). |
+
+Verify offline: `facet verify receipt <file>` (SCITT receipt / MMR inclusion) and
+`facet verify attestation <file> [--nonce <n>]` (RATS EAT). The COSE_Sign1 wire form and an external
+SCITT Transparency Service (`SCITT_URL`) are integration points — see the trust README for the
+Workers runtime boundaries (COSE/CBOR, `ecdsa-sd-2023`, `bbs-2023`, hardware RATS).
+
 ---
 
 ## Goals, conversions & funnels
