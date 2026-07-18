@@ -15,13 +15,17 @@ import {
 /** JWS `alg` values this deployment supports. Ed25519 is preferred; P-256 is the ECDSA fallback. */
 export type SigningAlg = 'EdDSA' | 'ES256';
 
-/** A loaded deployment signing key: the private key plus its published public JWK and `kid`.
- * `privateKey` is a Web Crypto `CryptoKey` under workerd and a Node `KeyObject` under Node; jose's
- * JWS operations accept either. The RFC 9421 raw path additionally requires a `CryptoKey`. */
+/** The Web Crypto key type `crypto.subtle.sign` expects, derived from the runtime so we do not depend
+ * on the `CryptoKey` global type name being exported (it is not, under @types/node). */
+export type SubtleKey = Parameters<typeof crypto.subtle.sign>[1];
+
+/** A loaded deployment signing key: the private key plus its published public JWK and `kid`. The
+ * private key is a real Web Crypto key (imported via crypto.subtle) so the raw RFC 9421 / Data
+ * Integrity signing paths work under both workerd and Node; jose's JWS operations accept it too. */
 export interface SigningKey {
 	alg: SigningAlg;
 	kid: string;
-	privateKey: KeyLike;
+	privateKey: SubtleKey;
 	/** Public JWK (with `kid`/`alg`/`use`) suitable for a JWKS. */
 	publicJwk: JWK;
 }
@@ -40,7 +44,17 @@ async function toPublicJwk(privateJwk: JWK, alg: SigningAlg): Promise<JWK> {
 	return { ...pub, alg, use: 'sig', kid };
 }
 
-/** Load the deployment signing key from a JWK string (the `FACET_SIGNING_JWK` Worker secret). */
+/** Web Crypto import parameters for signing with a given alg. */
+function signImportParams(
+	alg: SigningAlg,
+): { name: 'Ed25519' } | { name: 'ECDSA'; namedCurve: 'P-256' } {
+	return alg === 'EdDSA' ? { name: 'Ed25519' } : { name: 'ECDSA', namedCurve: 'P-256' };
+}
+
+/** Load the deployment signing key from a JWK string (the `FACET_SIGNING_JWK` Worker secret). The
+ * private key is imported through `crypto.subtle.importKey` so it is a real Web Crypto CryptoKey in
+ * BOTH workerd and Node (jose's importJWK yields a Node KeyObject that crypto.subtle cannot use for
+ * the raw RFC 9421 / Data Integrity signing paths). jose's JWS operations accept a CryptoKey too. */
 export async function loadSigningKey(jwkJson: string): Promise<SigningKey> {
 	let privateJwk: JWK;
 	try {
@@ -50,11 +64,15 @@ export async function loadSigningKey(jwkJson: string): Promise<SigningKey> {
 	}
 	if (!privateJwk.d) throw new Error('FACET_SIGNING_JWK must be a private JWK (missing `d`)');
 	const alg = algForJwk(privateJwk);
-	const key = await importJWK(privateJwk, alg);
-	if (key instanceof Uint8Array)
-		throw new Error('FACET_SIGNING_JWK imported as a symmetric key, not a signing key');
+	const privateKey = await crypto.subtle.importKey(
+		'jwk',
+		privateJwk as never,
+		signImportParams(alg),
+		false,
+		['sign'],
+	);
 	const publicJwk = await toPublicJwk(privateJwk, alg);
-	return { alg, kid: publicJwk.kid as string, privateKey: key, publicJwk };
+	return { alg, kid: publicJwk.kid as string, privateKey, publicJwk };
 }
 
 /** Generate a fresh extractable key pair and return both JWKs (for provisioning/tests). */
@@ -91,13 +109,9 @@ export async function importPublicJwk(jwk: JWK): Promise<{ key: KeyLike; alg: Si
 	return { key, alg };
 }
 
-/** The Web Crypto key type `crypto.subtle.sign` expects, derived from the runtime so we do not depend
- * on the `CryptoKey` global type name being exported (it is not, under @types/node). */
-export type SubtleKey = Parameters<typeof crypto.subtle.sign>[1];
-
-/** Narrow a jose KeyLike to a Web Crypto key (required for raw sign/verify). Uses a structural check
- * so it compiles under both Node and workerd type environments — a Node KeyObject lacks the
- * `extractable` property a Web Crypto key always has, and raw signing needs a real CryptoKey. */
+/** Narrow a jose KeyLike (from `importPublicJwk`) to a Web Crypto key, required by the raw RFC 9421
+ * verify path. Uses a structural check so it compiles under both Node and workerd type environments —
+ * a Node KeyObject lacks the `extractable` property a Web Crypto key always has. */
 export function requireCryptoKey(key: KeyLike): SubtleKey {
 	if (typeof (key as { extractable?: unknown }).extractable !== 'boolean') {
 		throw new Error('this operation requires a Web Crypto CryptoKey (available under workerd)');

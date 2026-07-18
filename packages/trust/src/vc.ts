@@ -8,7 +8,7 @@
 
 import { base58decode, base58encode } from './base58.js';
 import { canonicalizeBytes } from './canonicalize.js';
-import { type SigningKey, requireCryptoKey } from './keys.js';
+import type { SigningKey } from './keys.js';
 import { ed25519RawFromJwk, publicKeyMultibaseToJwk, rawToEd25519Jwk } from './multikey.js';
 
 /** The W3C VC 2.0 base context. */
@@ -102,9 +102,8 @@ export async function issueCredential(
 	const { proof: Drop, ...unsecured } = credential;
 	const config = proofConfig(credential, opts);
 	const data = await hashData(unsecured, config);
-	const privateKey = requireCryptoKey(key.privateKey);
 	const signature = new Uint8Array(
-		await crypto.subtle.sign({ name: 'Ed25519' }, privateKey, data),
+		await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, data),
 	);
 	const proof: DataIntegrityProof = {
 		type: 'DataIntegrityProof',

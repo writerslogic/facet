@@ -78,8 +78,7 @@ export interface SignResponseInput {
 export async function signResponse(input: SignResponseInput): Promise<HttpSignatureHeaders> {
 	const label = input.label ?? DEFAULT_LABEL;
 	const alg = rfc9421Alg(input.key.alg);
-	// RFC 9421 raw signing goes through Web Crypto, which needs a CryptoKey (present under workerd).
-	const privateKey = requireCryptoKey(input.key.privateKey);
+	const privateKey = input.key.privateKey;
 	const digest = await contentDigest(input.body);
 	const params = signatureParams(input.created, input.key.kid, alg);
 	const base = signatureBase(
