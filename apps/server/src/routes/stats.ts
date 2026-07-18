@@ -9,7 +9,15 @@ import {
 	StatsQuerySchema,
 	type StatsResponse,
 } from '@facet/shared';
-import { signDetachedJws, signExport, signResponse } from '@facet/trust';
+import {
+	buildAnalyticsReportCredential,
+	didWebFromHost,
+	issueCredential,
+	signDetachedJws,
+	signExport,
+	signResponse,
+	verificationMethodId,
+} from '@facet/trust';
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -295,6 +303,48 @@ statsRoutes.get('/stats/export', requireApiKey, async (c) => {
 		headers['facet-signing-key'] = jwksUrl(origin);
 	}
 	return new Response(bodyText, { headers });
+});
+
+// Signed AnalyticsReportCredential (VC 2.0, eddsa-jcs-2022) over an aggregate stats snapshot for a
+// site+range. The credential subject is the DATASET (`<origin>/sites/<id>`), never a person. Requires
+// an Ed25519 signing key; 501 when unconfigured.
+statsRoutes.get('/stats/report', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	const start = Number(c.req.query('start'));
+	const end = Number(c.req.query('end'));
+	if (!Number.isInteger(start) || !Number.isInteger(end)) {
+		throw new ApiError('bad_range', 400);
+	}
+	assertRange(start, end);
+	const loading = getSigningKey(c.env);
+	if (!loading) throw new ApiError('signing_unavailable', 501);
+	const key = await loading;
+	if (key.alg !== 'EdDSA') throw new ApiError('report_requires_ed25519', 501);
+
+	const url = new URL(c.req.url);
+	const did = didWebFromHost(url.host);
+	const created = new Date().toISOString();
+	const s = await summary(c.env, { siteId, start, end });
+	const doc = buildAnalyticsReportCredential({
+		did,
+		created,
+		site: siteId,
+		subjectId: `${url.origin}/sites/${siteId}`,
+		range: { start, end },
+		report: {
+			pageviews: s.pageviews,
+			visitors: s.visitors,
+			events: s.events,
+		},
+	});
+	const vc = await issueCredential(doc, key, {
+		verificationMethod: verificationMethodId(did, key.kid),
+		created,
+	});
+	return c.json(vc, 200, { 'content-type': 'application/vc+json' });
 });
 
 statsRoutes.get(

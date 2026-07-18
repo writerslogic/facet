@@ -9,4 +9,6 @@ export * from './signed-export.js';
 export * from './base58.js';
 export * from './multikey.js';
 export * from './vc.js';
+export * from './credentials.js';
+export * from './sd.js';
 export * from './did-web.js';

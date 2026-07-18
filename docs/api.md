@@ -416,8 +416,27 @@ correct content type:
 | --- | --- |
 | `/.well-known/security.txt` | RFC 9116 disclosure contact (Contact, Expires, Policy, Canonical). |
 | `/.well-known/jwks.json` | The deployment's public signing key(s) as a JWK Set. Empty (`{"keys":[]}`) when signing is unconfigured. |
+| `/.well-known/did.json` | did:web DID document (`did:web:<host>`); Multikey verification method from the JWKS key. `404` unless an Ed25519 key is configured. |
+| `/.well-known/did-configuration.json` | DIF Domain Linkage Credential binding the origin to the DID (`404` unless Ed25519 configured). |
+| `/.well-known/facet-privacy.json` | Machine-readable privacy manifest with W3C DPV (`https://w3id.org/dpv#`) claims + deployment properties. Always available. |
 
 These endpoints are public and unauthenticated.
+
+## Verifiable credentials
+
+When an Ed25519 signing key is configured, the deployment issues W3C VC 2.0 credentials signed with
+the `eddsa-jcs-2022` Data Integrity cryptosuite, verifiable against `/.well-known/jwks.json` or the
+DID. Neither credential describes a person — they attest the deployment and the aggregate dataset.
+
+| Endpoint | Auth | Credential |
+| --- | --- | --- |
+| `GET /api/attestation/privacy` | public | `PrivacyAttestationCredential` — deployment build id, commit, D1 schema hash, retention days, privacy model, and DPV claims. |
+| `GET /api/stats/report?site_id&start&end` | API key | `AnalyticsReportCredential` — an aggregate stats snapshot (pageviews/visitors/events) for a site+range; subject is the dataset (`<origin>/sites/<id>`). |
+
+Both return `501` when no signing key is configured (or the key is not Ed25519). Verify offline with
+`facet verify credential <file> --jwk <jwk>` (or `--key <publicKeyMultibase>`). Selective disclosure
+(SD-JWT-style, Workers-native) is available via `@facet/trust`; the RDF-based `ecdsa-sd-2023` and
+pairing-based `bbs-2023` cryptosuites are not usable under Cloudflare Workers (see the trust README).
 
 ---
 

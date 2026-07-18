@@ -12,10 +12,30 @@ import {
 } from '@facet/trust';
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
+import { deploymentDescriptor } from '../lib/attestation.js';
+import { privacyDpvClaims } from '../lib/dpv.js';
 import { buildSecurityTxt } from '../lib/security-txt.js';
 import { getSigningKey } from '../lib/signing.js';
 
 export const wellKnownRoutes = new Hono<AppEnv>();
+
+// Machine-readable privacy manifest (W3C DPV terms). Unsigned and always available — it describes the
+// deployment's processing/purpose/legal-basis + privacy properties. The same DPV claims are embedded
+// (and signed) in the PrivacyAttestationCredential at /api/attestation/privacy.
+wellKnownRoutes.get('/facet-privacy.json', async (c) => {
+	return c.json(
+		{
+			deployment: await deploymentDescriptor(c.env),
+			dpv: privacyDpvClaims(),
+			attestation: '/api/attestation/privacy',
+		},
+		200,
+		{
+			'content-type': 'application/json',
+			'cache-control': 'public, max-age=3600',
+		},
+	);
+});
 
 // Public JWKS: the deployment's signing public key(s), referenced by the DID doc and used by
 // verifiers of signed exports/credentials. Empty key set when signing is unconfigured.

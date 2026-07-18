@@ -65,3 +65,23 @@ describe('GET /.well-known/did-configuration.json', () => {
 		expect(res.status).toBe(404);
 	});
 });
+
+describe('GET /.well-known/facet-privacy.json', () => {
+	it('serves an unsigned DPV privacy manifest (no key required)', async () => {
+		const res = await req('/.well-known/facet-privacy.json', false);
+		expect(res.status).toBe(200);
+		const manifest = (await res.json()) as {
+			deployment: {
+				schemaHash: string;
+				privacy: { storesRawIp: boolean };
+			};
+			dpv: Record<string, unknown>;
+		};
+		expect(manifest.deployment.privacy.storesRawIp).toBe(false);
+		expect(manifest.deployment.schemaHash).toMatch(/^[0-9a-f]{64}$/);
+		expect(manifest.dpv['dpv:hasPurpose']).toBe('dpv:ServiceOptimisation');
+		expect(manifest.dpv['@context']).toEqual({
+			dpv: 'https://w3id.org/dpv#',
+		});
+	});
+});

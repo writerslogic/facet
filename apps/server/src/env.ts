@@ -30,6 +30,12 @@ export interface Env {
 	/** Optional deployment signing key as a private JWK string (Worker secret, Ed25519 preferred).
 	 * When unset, all signing/attestation features are inert and the deployment behaves as before. */
 	FACET_SIGNING_JWK?: string;
+	/** Optional build identifier (var) surfaced in attestations/evidence. Defaults to `unknown`. */
+	FACET_BUILD_ID?: string;
+	/** Optional source commit (var) surfaced in attestations/evidence. Defaults to `unknown`. */
+	FACET_GIT_COMMIT?: string;
+	/** Optional SHA-256 (hex) of the wrangler config (var), surfaced in RATS process evidence. */
+	FACET_WRANGLER_HASH?: string;
 }
 
 /** App-wide Hono environment: bindings plus request-scoped variables (set by auth middleware). */
