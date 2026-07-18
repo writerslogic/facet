@@ -23,6 +23,10 @@ export interface Env {
 	WEBHOOK_URL?: string;
 	/** Optional secret (Worker secret) used to HMAC-sign anomaly webhook payloads. */
 	WEBHOOK_SECRET?: string;
+	/** Optional security.txt contact URI (var). Defaults to the project security mailbox. */
+	FACET_SECURITY_CONTACT?: string;
+	/** Optional security.txt policy URL (var). Defaults to the repo SECURITY.md. */
+	FACET_SECURITY_POLICY?: string;
 }
 
 /** App-wide Hono environment: bindings plus request-scoped variables (set by auth middleware). */
