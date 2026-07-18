@@ -4,8 +4,8 @@
 // ECDSA P-256/SHA-256 producing the IEEE-P1363 r||s form RFC 9421 requires. All via Web Crypto so it
 // runs in workerd. This is offered alongside detached JWS as a second, HTTP-native integrity option.
 
-import type { JWK, KeyLike } from 'jose';
-import { type SigningKey, importPublicJwk } from './keys.js';
+import type { JWK } from 'jose';
+import { type SigningKey, importPublicJwk, requireCryptoKey } from './keys.js';
 
 /** Covered components, in signature-base order. Kept fixed so signer and verifier agree. */
 const COMPONENTS = ['content-digest', 'content-type'] as const;
@@ -23,20 +23,6 @@ function subtleParams(
 	alg: 'ed25519' | 'ecdsa-p256-sha256',
 ): { name: 'Ed25519' } | { name: 'ECDSA'; hash: 'SHA-256' } {
 	return alg === 'ed25519' ? { name: 'Ed25519' } : { name: 'ECDSA', hash: 'SHA-256' };
-}
-
-/** The Web Crypto key type `crypto.subtle.sign` expects, derived from the runtime so we don't depend
- * on the `CryptoKey` global type name being exported (it isn't under @types/node). */
-type SubtleKey = Parameters<typeof crypto.subtle.sign>[1];
-
-/** Narrow a jose KeyLike to a Web Crypto key (required for raw RFC 9421 sign/verify). Uses a
- * structural check so this compiles under both Node (@types/node) and workerd type environments — a
- * Node KeyObject lacks the `extractable` property a Web Crypto key always has. */
-function requireCryptoKey(key: KeyLike): SubtleKey {
-	if (typeof (key as { extractable?: unknown }).extractable !== 'boolean') {
-		throw new Error('RFC 9421 requires a Web Crypto CryptoKey (available under workerd)');
-	}
-	return key as SubtleKey;
 }
 
 /** Standard base64 encode (Structured-Fields byte sequences use base64, not base64url). */

@@ -90,3 +90,17 @@ export async function importPublicJwk(jwk: JWK): Promise<{ key: KeyLike; alg: Si
 	if (key instanceof Uint8Array) throw new Error('public JWK imported as a symmetric key');
 	return { key, alg };
 }
+
+/** The Web Crypto key type `crypto.subtle.sign` expects, derived from the runtime so we do not depend
+ * on the `CryptoKey` global type name being exported (it is not, under @types/node). */
+export type SubtleKey = Parameters<typeof crypto.subtle.sign>[1];
+
+/** Narrow a jose KeyLike to a Web Crypto key (required for raw sign/verify). Uses a structural check
+ * so it compiles under both Node and workerd type environments — a Node KeyObject lacks the
+ * `extractable` property a Web Crypto key always has, and raw signing needs a real CryptoKey. */
+export function requireCryptoKey(key: KeyLike): SubtleKey {
+	if (typeof (key as { extractable?: unknown }).extractable !== 'boolean') {
+		throw new Error('this operation requires a Web Crypto CryptoKey (available under workerd)');
+	}
+	return key as SubtleKey;
+}
