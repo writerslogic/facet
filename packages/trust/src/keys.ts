@@ -3,17 +3,25 @@
 // Worker secret (a JWK string); the public half is published as a JWK/JWKS and referenced by the DID
 // document. `kid` is the RFC 7638 JWK thumbprint so it is stable and self-describing.
 
-import { type JWK, calculateJwkThumbprint, exportJWK, generateKeyPair, importJWK } from 'jose';
+import {
+	type JWK,
+	type KeyLike,
+	calculateJwkThumbprint,
+	exportJWK,
+	generateKeyPair,
+	importJWK,
+} from 'jose';
 
 /** JWS `alg` values this deployment supports. Ed25519 is preferred; P-256 is the ECDSA fallback. */
 export type SigningAlg = 'EdDSA' | 'ES256';
 
-/** A loaded deployment signing key: the private CryptoKey plus its published public JWK and `kid`. */
+/** A loaded deployment signing key: the private key plus its published public JWK and `kid`.
+ * `privateKey` is a Web Crypto `CryptoKey` under workerd and a Node `KeyObject` under Node; jose's
+ * JWS operations accept either. The RFC 9421 raw path additionally requires a `CryptoKey`. */
 export interface SigningKey {
 	alg: SigningAlg;
 	kid: string;
-	/** Non-extractable-friendly CryptoKey used for signing. */
-	privateKey: CryptoKey;
+	privateKey: KeyLike;
 	/** Public JWK (with `kid`/`alg`/`use`) suitable for a JWKS. */
 	publicJwk: JWK;
 }
@@ -43,7 +51,8 @@ export async function loadSigningKey(jwkJson: string): Promise<SigningKey> {
 	if (!privateJwk.d) throw new Error('FACET_SIGNING_JWK must be a private JWK (missing `d`)');
 	const alg = algForJwk(privateJwk);
 	const key = await importJWK(privateJwk, alg);
-	if (!(key instanceof CryptoKey)) throw new Error('signing key did not import as a CryptoKey');
+	if (key instanceof Uint8Array)
+		throw new Error('FACET_SIGNING_JWK imported as a symmetric key, not a signing key');
 	const publicJwk = await toPublicJwk(privateJwk, alg);
 	return { alg, kid: publicJwk.kid as string, privateKey: key, publicJwk };
 }
@@ -72,10 +81,12 @@ export function toJwks(publicJwks: JWK[]): Jwks {
 	return { keys: publicJwks };
 }
 
-/** Import a public JWK for verification, inferring the `alg`. */
-export async function importPublicJwk(jwk: JWK): Promise<{ key: CryptoKey; alg: SigningAlg }> {
+/** Import a public JWK for verification, inferring the `alg`. Returns a jose KeyLike (CryptoKey in
+ * workerd, KeyObject in Node) — both are accepted by jose's verify; the RFC 9421 raw path narrows
+ * to CryptoKey itself. */
+export async function importPublicJwk(jwk: JWK): Promise<{ key: KeyLike; alg: SigningAlg }> {
 	const alg = jwk.alg === 'ES256' || jwk.alg === 'EdDSA' ? jwk.alg : algForJwk(jwk);
 	const key = await importJWK(jwk, alg);
-	if (!(key instanceof CryptoKey)) throw new Error('public key did not import as a CryptoKey');
+	if (key instanceof Uint8Array) throw new Error('public JWK imported as a symmetric key');
 	return { key, alg };
 }

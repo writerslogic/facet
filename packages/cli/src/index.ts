@@ -5,6 +5,7 @@ import { runInit } from './commands/init.js';
 import { runMigrate } from './commands/migrate.js';
 import { isResourceCommand, runResource } from './commands/resources.js';
 import { runStats } from './commands/stats.js';
+import { runVerify } from './commands/verify.js';
 
 const USAGE = `Usage: facet <command> [options]
 
@@ -16,6 +17,9 @@ Setup:
 
 Reporting:
   stats --host <url> --key <k> --site <uuid>   Print summary stats
+
+Verify (offline):
+  verify export <file>         Verify a signed stats export envelope
 
 Resources (admin API — needs --host + --admin-token, or FACET_HOST/FACET_ADMIN_TOKEN):
   sites list | create --name <n> --domain <d>
@@ -48,6 +52,8 @@ export async function main(argv: string[]): Promise<number> {
 			return runStats(argv.slice(1));
 		case 'config':
 			return runConfig(argv.slice(1));
+		case 'verify':
+			return runVerify(argv.slice(1));
 		case '--help':
 		case '-h':
 			process.stdout.write(USAGE);

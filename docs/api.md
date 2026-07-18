@@ -340,6 +340,7 @@ renders it as literal text).
 | `format` | no | `csv` (default) or `json`. |
 | `interval` | no | `hour` or `day` (series only). Defaults to `hour` when range ≤ 48h, otherwise `day`. |
 | `limit` | no | Breakdown row cap, `1`–`1000` (default `100`). |
+| `sign` | no | `1` returns a self-contained **signed-export envelope** (see below). Requires a configured signing key (`501 signing_unavailable` otherwise). |
 
 For `kind=series` the columns are `bucket_start_iso,bucket_start_ms,pageviews,visitors`; for
 `kind=breakdown` they are `key,count`. A CSV response is served with
@@ -365,6 +366,58 @@ curl "https://your-deployment.example.com/api/stats/export?site_id=11111111-1111
   ]
 }
 ```
+
+#### Signed exports (optional)
+
+When the deployment is configured with a signing key (the `FACET_SIGNING_JWK` Worker secret,
+Ed25519 preferred), the export is cryptographically verifiable. The verification key is published
+at [`/.well-known/jwks.json`](#well-known-documents) and referenced by the deployment DID.
+
+Every (unsigned-envelope) export response additionally carries integrity headers over the exact
+response bytes — offered in **two** interoperable forms:
+
+- **Detached JWS** (RFC 7515): `Facet-Signature-Jws: <protected>..<signature>` plus
+  `Facet-Signing-Key: <jwks-url>`.
+- **HTTP Message Signatures** (RFC 9421): `Content-Digest` (RFC 9530, SHA-256), `Signature-Input`,
+  and `Signature` (covering `content-digest` and `content-type`; `ed25519` or `ecdsa-p256-sha256`).
+
+With `sign=1` the endpoint instead returns a **self-contained JSON envelope** that verifies fully
+offline — it embeds the detached JWS over the canonical (RFC 8785 JCS) payload and the public JWK:
+
+```json
+{
+  "facet": "facet-signed-export/1",
+  "payload": { "columns": ["key", "count"], "rows": [["/", 14]] },
+  "proof": {
+    "type": "DetachedJWS",
+    "alg": "EdDSA",
+    "kid": "<jwk-thumbprint>",
+    "jws": "<protected>..<signature>",
+    "publicJwk": { "kty": "OKP", "crv": "Ed25519", "x": "…", "kid": "…" },
+    "jwksUrl": "https://your-deployment.example.com/.well-known/jwks.json",
+    "created": "2026-07-17T00:00:00.000Z"
+  }
+}
+```
+
+Verify offline with the CLI: `facet verify export export.json`.
+
+None of these signing features create any per-visitor identifier — they attest the **dataset**
+(the aggregate rollups in the export), never a person.
+
+---
+
+## Well-known documents
+
+Facet serves these documents directly from the Worker (not the static-asset binding), each with the
+correct content type:
+
+| Path | Purpose |
+| --- | --- |
+| `/.well-known/security.txt` | RFC 9116 disclosure contact (Contact, Expires, Policy, Canonical). |
+| `/.well-known/jwks.json` | The deployment's public signing key(s) as a JWK Set. Empty (`{"keys":[]}`) when signing is unconfigured. |
+
+These endpoints are public and unauthenticated.
 
 ---
 

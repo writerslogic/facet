@@ -27,6 +27,9 @@ export interface Env {
 	FACET_SECURITY_CONTACT?: string;
 	/** Optional security.txt policy URL (var). Defaults to the repo SECURITY.md. */
 	FACET_SECURITY_POLICY?: string;
+	/** Optional deployment signing key as a private JWK string (Worker secret, Ed25519 preferred).
+	 * When unset, all signing/attestation features are inert and the deployment behaves as before. */
+	FACET_SIGNING_JWK?: string;
 }
 
 /** App-wide Hono environment: bindings plus request-scoped variables (set by auth middleware). */

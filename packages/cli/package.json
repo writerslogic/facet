@@ -19,6 +19,7 @@
 	"dependencies": {
 		"@clack/prompts": "0.9.1",
 		"@facet/shared": "workspace:*",
+		"@facet/trust": "workspace:*",
 		"picocolors": "1.1.1"
 	},
 	"devDependencies": {

@@ -3,11 +3,24 @@
 // the SPA catch-all in `app.ts`. security.txt (RFC 9116) is the first document; trust/provenance
 // documents (JWKS, DID) are added here as later phases land.
 
+import { toJwks } from '@facet/trust';
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { buildSecurityTxt } from '../lib/security-txt.js';
+import { getSigningKey } from '../lib/signing.js';
 
 export const wellKnownRoutes = new Hono<AppEnv>();
+
+// Public JWKS: the deployment's signing public key(s), referenced by the DID doc and used by
+// verifiers of signed exports/credentials. Empty key set when signing is unconfigured.
+wellKnownRoutes.get('/jwks.json', async (c) => {
+	const loading = getSigningKey(c.env);
+	const keys = loading ? [(await loading).publicJwk] : [];
+	return c.json(toJwks(keys), 200, {
+		'content-type': 'application/jwk-set+json',
+		'cache-control': 'public, max-age=3600',
+	});
+});
 
 // RFC 9116 security.txt. Text is stable except for the request-relative Expires, so a modest cache is safe.
 wellKnownRoutes.get('/security.txt', (c) => {
