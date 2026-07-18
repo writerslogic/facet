@@ -171,3 +171,13 @@ export const mmrCheckpoints = sqliteTable('mmr_checkpoints', {
 	createdAt: integer('created_at').notNull(),
 	signed: text('signed').notNull(),
 });
+
+// Local SCITT Transparency-Service double: an append-only registration log of Signed Statement
+// hashes. The server rebuilds an MMR over these hashes to issue an inclusion Receipt. No PII — a
+// statement hash commits an attestation about the deployment/dataset. Operating a production
+// Transparency Service is a deployment concern, not a shipped Facet service.
+export const scittLog = sqliteTable('scitt_log', {
+	entryId: integer('entry_id').primaryKey({ autoIncrement: true }),
+	statementHash: text('statement_hash').notNull(),
+	registeredAt: integer('registered_at').notNull(),
+});

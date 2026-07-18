@@ -16,3 +16,4 @@ export * from './mmr.js';
 export * from './statement.js';
 export * from './checkpoint.js';
 export * from './receipt.js';
+export * from './scitt.js';

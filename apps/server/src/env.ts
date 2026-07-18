@@ -36,6 +36,10 @@ export interface Env {
 	FACET_GIT_COMMIT?: string;
 	/** Optional SHA-256 (hex) of the wrangler config (var), surfaced in RATS process evidence. */
 	FACET_WRANGLER_HASH?: string;
+	/** Optional external SCITT Transparency Service URL (var). When unset, external registration is a no-op. */
+	SCITT_URL?: string;
+	/** Optional bearer token (Worker secret) for the external SCITT service. */
+	SCITT_TOKEN?: string;
 }
 
 /** App-wide Hono environment: bindings plus request-scoped variables (set by auth middleware). */

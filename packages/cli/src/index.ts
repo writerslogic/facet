@@ -1,11 +1,11 @@
 // facet-cli entrypoint: dispatches setup subcommands and the admin-API resource groups.
 
-import { runConfig } from "./commands/config.js";
-import { runInit } from "./commands/init.js";
-import { runMigrate } from "./commands/migrate.js";
-import { isResourceCommand, runResource } from "./commands/resources.js";
-import { runStats } from "./commands/stats.js";
-import { runVerify } from "./commands/verify.js";
+import { runConfig } from './commands/config.js';
+import { runInit } from './commands/init.js';
+import { runMigrate } from './commands/migrate.js';
+import { isResourceCommand, runResource } from './commands/resources.js';
+import { runStats } from './commands/stats.js';
+import { runVerify } from './commands/verify.js';
 
 const USAGE = `Usage: facet <command> [options]
 
@@ -46,18 +46,18 @@ Examples:
 export async function main(argv: string[]): Promise<number> {
 	const [command] = argv;
 	switch (command) {
-		case "init":
+		case 'init':
 			return runInit(argv.slice(1));
-		case "migrate":
+		case 'migrate':
 			return runMigrate(argv.slice(1));
-		case "stats":
+		case 'stats':
 			return runStats(argv.slice(1));
-		case "config":
+		case 'config':
 			return runConfig(argv.slice(1));
-		case "verify":
+		case 'verify':
 			return runVerify(argv.slice(1));
-		case "--help":
-		case "-h":
+		case '--help':
+		case '-h':
 			process.stdout.write(USAGE);
 			return 0;
 		case undefined:
@@ -73,8 +73,8 @@ export async function main(argv: string[]): Promise<number> {
 }
 
 const isMain =
-	typeof process.argv[1] === "string" &&
-	import.meta.url === new URL(process.argv[1], "file://").href;
+	typeof process.argv[1] === 'string' &&
+	import.meta.url === new URL(process.argv[1], 'file://').href;
 
 if (isMain) {
 	void main(process.argv.slice(2)).then((code) => process.exit(code));

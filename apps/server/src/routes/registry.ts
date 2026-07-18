@@ -10,6 +10,7 @@ import { eventRoute } from './event.js';
 import { experimentsRoutes } from './experiments.js';
 import { funnelsRoutes } from './funnels.js';
 import { goalsRoutes } from './goals.js';
+import { scittRoutes } from './scitt.js';
 import { statsRoutes } from './stats.js';
 import { transparencyRoutes } from './transparency.js';
 import { wellKnownRoutes } from './wellknown.js';
@@ -35,4 +36,5 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/api/experiments', router: experimentsRoutes },
 	{ path: '/api/attestation', router: attestationRoutes },
 	{ path: '/api/transparency', router: transparencyRoutes },
+	{ path: '/api/scitt', router: scittRoutes },
 ];

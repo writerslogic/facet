@@ -10,10 +10,13 @@ import { parseArgs } from 'node:util';
 import {
 	type DidConfiguration,
 	type DidDocument,
+	type ScittReceiptPayload,
 	type SignedExport,
+	type SignedStatement,
 	type VerifiableCredential,
 	verifyCredential,
 	verifyDidConfiguration,
+	verifyScittReceipt,
 	verifySignedExport,
 } from '@facet/trust';
 import pc from 'picocolors';
@@ -26,6 +29,7 @@ Targets:
   credential <file> (--key <z…> | --jwk <file>)  Verify a VC's eddsa-jcs-2022 proof.
   did-configuration <file> --did-doc <file> [--origin <origin>]
                                                  Verify a DIF domain-linkage against a DID document.
+  receipt <file>                                 Verify a SCITT receipt (signature + MMR inclusion).
 `;
 
 /** Read + parse a JSON file, returning null (and printing) on any error. */
@@ -117,6 +121,18 @@ async function verifyDidConfigurationCmd(
 	return 1;
 }
 
+async function verifyReceiptCmd(file: string): Promise<number> {
+	const doc = await readJson(file);
+	if (doc === null) return 1;
+	const result = await verifyScittReceipt(doc as SignedStatement<ScittReceiptPayload>);
+	if (result.valid) {
+		ok(`valid SCITT receipt (log=${result.logId}, entry=${result.entryId})`);
+		return 0;
+	}
+	printError(`✗ invalid SCITT receipt: ${result.reason ?? 'verification failed'}`);
+	return 1;
+}
+
 export async function runVerify(args: string[]): Promise<number> {
 	const [what] = args;
 	if (what === '--help' || what === '-h' || what === undefined) {
@@ -146,6 +162,8 @@ export async function runVerify(args: string[]): Promise<number> {
 			return verifyCredentialCmd(file, flags);
 		case 'did-configuration':
 			return verifyDidConfigurationCmd(file, flags);
+		case 'receipt':
+			return verifyReceiptCmd(file);
 		default:
 			printError(`unknown verify target: ${what}`);
 			process.stderr.write(USAGE);

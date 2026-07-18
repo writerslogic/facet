@@ -36,6 +36,13 @@
       "when": 1784337966012,
       "tag": "0005_neat_lady_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1784338623427,
+      "tag": "0006_cool_rattler",
+      "breakpoints": true
     }
   ]
 }
