@@ -46,7 +46,11 @@ export const eventRollups = sqliteTable(
 		events: integer('events').notNull().default(0),
 		visitors: integer('visitors').notNull().default(0),
 	},
-	(t) => [primaryKey({ columns: [t.siteId, t.hostname, t.bucketStart, t.interval] })],
+	(t) => [
+		primaryKey({
+			columns: [t.siteId, t.hostname, t.bucketStart, t.interval],
+		}),
+	],
 );
 
 export const sessions = sqliteTable(
@@ -142,3 +146,28 @@ export const experiments = sqliteTable(
 	},
 	(t) => [index('idx_experiments_site').on(t.site_id)],
 );
+
+// Append-only Merkle Mountain Range over finalized event_rollups (transparency log). `mmr_nodes`
+// holds the linear node array (index → 32-byte hash, hex). No PII: leaves commit aggregate rollup
+// rows, never raw events. Populated on the hourly cron only when a deployment signing key is set.
+export const mmrNodes = sqliteTable('mmr_nodes', {
+	nodeIndex: integer('node_index').primaryKey(),
+	hash: text('hash').notNull(),
+});
+
+// Maps each logged rollup to its MMR leaf node index (for inclusion proofs) and dedupes appends.
+export const mmrLeaves = sqliteTable('mmr_leaves', {
+	leafNo: integer('leaf_no').primaryKey(),
+	nodeIndex: integer('node_index').notNull(),
+	rollupKey: text('rollup_key').notNull().unique(),
+	leafHash: text('leaf_hash').notNull(),
+});
+
+// Signed tree heads: the tree size, bagged root (hex), timestamp, and the signed checkpoint JSON.
+export const mmrCheckpoints = sqliteTable('mmr_checkpoints', {
+	id: integer('id').primaryKey({ autoIncrement: true }),
+	treeSize: integer('tree_size').notNull(),
+	root: text('root').notNull(),
+	createdAt: integer('created_at').notNull(),
+	signed: text('signed').notNull(),
+});

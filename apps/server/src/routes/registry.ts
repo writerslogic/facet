@@ -11,6 +11,7 @@ import { experimentsRoutes } from './experiments.js';
 import { funnelsRoutes } from './funnels.js';
 import { goalsRoutes } from './goals.js';
 import { statsRoutes } from './stats.js';
+import { transparencyRoutes } from './transparency.js';
 import { wellKnownRoutes } from './wellknown.js';
 
 const healthRoute = new Hono<AppEnv>();
@@ -33,4 +34,5 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/api/funnels', router: funnelsRoutes },
 	{ path: '/api/experiments', router: experimentsRoutes },
 	{ path: '/api/attestation', router: attestationRoutes },
+	{ path: '/api/transparency', router: transparencyRoutes },
 ];

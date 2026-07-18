@@ -12,3 +12,7 @@ export * from './vc.js';
 export * from './credentials.js';
 export * from './sd.js';
 export * from './did-web.js';
+export * from './mmr.js';
+export * from './statement.js';
+export * from './checkpoint.js';
+export * from './receipt.js';
