@@ -9,6 +9,15 @@ import {
 	StatsQuerySchema,
 	type StatsResponse,
 } from '@facet/shared';
+import {
+	buildAnalyticsReportCredential,
+	didWebFromHost,
+	issueCredential,
+	signDetachedJws,
+	signExport,
+	signResponse,
+	verificationMethodId,
+} from '@facet/trust';
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -44,6 +53,7 @@ import {
 } from '../lib/constants.js';
 import { toCsv } from '../lib/csv.js';
 import { ApiError } from '../lib/http.js';
+import { getSigningKey, jwksUrl } from '../lib/signing.js';
 
 export const statsRoutes = new Hono<AppEnv>();
 
@@ -251,15 +261,90 @@ statsRoutes.get('/stats/export', requireApiKey, async (c) => {
 		throw new ApiError('bad_request', 400, 'kind must be series or breakdown');
 	}
 
-	if (format === 'json') {
-		return c.json({ columns, rows });
+	const origin = new URL(c.req.url).origin;
+	const isJson = format === 'json';
+	const bodyText = isJson ? JSON.stringify({ columns, rows }) : toCsv(columns, rows);
+	const contentType = isJson ? 'application/json; charset=utf-8' : 'text/csv; charset=utf-8';
+	const loadingKey = getSigningKey(c.env);
+	const key = loadingKey ? await loadingKey : null;
+
+	// Signed-envelope mode: a self-contained, offline-verifiable JSON export (detached JWS over the
+	// canonical payload + embedded public JWK). Requires a configured signing key.
+	if (c.req.query('sign') === '1') {
+		if (!key) {
+			throw new ApiError('signing_unavailable', 501, 'deployment signing key not configured');
+		}
+		return c.json(
+			await signExport({ columns, rows }, key, {
+				jwksUrl: jwksUrl(origin),
+				now: Date.now(),
+			}),
+		);
 	}
-	return new Response(toCsv(columns, rows), {
-		headers: {
-			'content-type': 'text/csv; charset=utf-8',
-			'content-disposition': `attachment; filename="${name}.csv"`,
+
+	const headers: Record<string, string> = { 'content-type': contentType };
+	if (!isJson) {
+		headers['content-disposition'] = `attachment; filename="${name}.csv"`;
+	}
+	// When signing is configured, offer BOTH integrity options over the exact response bytes: a
+	// detached JWS (Facet-Signature-Jws) and an RFC 9421 Signature/Signature-Input pair.
+	if (key) {
+		const bodyBytes = new TextEncoder().encode(bodyText);
+		const sig = await signResponse({
+			body: bodyBytes,
+			contentType,
+			created: Math.floor(Date.now() / 1000),
+			key,
+		});
+		headers['content-digest'] = sig['content-digest'];
+		headers['signature-input'] = sig['signature-input'];
+		headers.signature = sig.signature;
+		headers['facet-signature-jws'] = await signDetachedJws(bodyBytes, key);
+		headers['facet-signing-key'] = jwksUrl(origin);
+	}
+	return new Response(bodyText, { headers });
+});
+
+// Signed AnalyticsReportCredential (VC 2.0, eddsa-jcs-2022) over an aggregate stats snapshot for a
+// site+range. The credential subject is the DATASET (`<origin>/sites/<id>`), never a person. Requires
+// an Ed25519 signing key; 501 when unconfigured.
+statsRoutes.get('/stats/report', requireApiKey, async (c) => {
+	const siteId = c.req.query('site_id');
+	if (siteId !== c.get('siteId')) {
+		throw new ApiError('site_mismatch', 403);
+	}
+	const start = Number(c.req.query('start'));
+	const end = Number(c.req.query('end'));
+	if (!Number.isInteger(start) || !Number.isInteger(end)) {
+		throw new ApiError('bad_range', 400);
+	}
+	assertRange(start, end);
+	const loading = getSigningKey(c.env);
+	if (!loading) throw new ApiError('signing_unavailable', 501);
+	const key = await loading;
+	if (key.alg !== 'EdDSA') throw new ApiError('report_requires_ed25519', 501);
+
+	const url = new URL(c.req.url);
+	const did = didWebFromHost(url.host);
+	const created = new Date().toISOString();
+	const s = await summary(c.env, { siteId, start, end });
+	const doc = buildAnalyticsReportCredential({
+		did,
+		created,
+		site: siteId,
+		subjectId: `${url.origin}/sites/${siteId}`,
+		range: { start, end },
+		report: {
+			pageviews: s.pageviews,
+			visitors: s.visitors,
+			events: s.events,
 		},
 	});
+	const vc = await issueCredential(doc, key, {
+		verificationMethod: verificationMethodId(did, key.kid),
+		created,
+	});
+	return c.json(vc, 200, { 'content-type': 'application/vc+json' });
 });
 
 statsRoutes.get(

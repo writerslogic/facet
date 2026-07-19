@@ -1,5 +1,5 @@
 // Single source of truth for visitor opt-out state, consulted by every collection path. Honors
-// Do-Not-Track by default, a `data-facet-optout` script attribute, and a persistent
+// Do-Not-Track and Global Privacy Control by default, a `data-facet-optout` script attribute, and a persistent
 // `localStorage['facet.optout']` kill switch (the visitor's deliberate control, which overrides
 // DNT). All localStorage access is wrapped so a blocked/unavailable store never throws — it
 // degrades to an in-memory map. State is re-read on every call so optOut()/optIn() take effect
@@ -42,9 +42,15 @@ export function setOptOutScript(el: { getAttribute(name: string): string | null 
 	scriptEl = el;
 }
 
-/** True when any Do-Not-Track signal is set across the common browser vendors. */
-function dntEnabled(): boolean {
+/** True when any Do-Not-Track or Global Privacy Control signal is set across common browser vendors. */
+function browserSignalOptOut(): boolean {
 	if (typeof navigator !== 'undefined') {
+		// Global Privacy Control: a legally recognized opt-out signal (navigator.globalPrivacyControl).
+		if (
+			(navigator as unknown as { globalPrivacyControl?: boolean }).globalPrivacyControl ===
+			true
+		)
+			return true;
 		const dnt = navigator.doNotTrack;
 		if (dnt === '1' || dnt === 'yes') return true;
 		const ms = (navigator as unknown as { msDoNotTrack?: string }).msDoNotTrack;
@@ -69,7 +75,7 @@ function scriptOptOut(): boolean {
  *   1. localStorage['facet.optout'] explicit value ('1'/'true' out, '0'/'false' in) — the
  *      visitor's persistent choice, which OVERRIDES DNT because it is deliberate and per-visitor.
  *   2. data-facet-optout script attribute.
- *   3. Do-Not-Track browser signals.
+ *   3. Do-Not-Track and Global Privacy Control browser signals.
  *   4. Default: opted in.
  */
 export function isOptedOut(): boolean {
@@ -77,7 +83,7 @@ export function isOptedOut(): boolean {
 	if (stored === '1' || stored === 'true') return true;
 	if (stored === '0' || stored === 'false') return false;
 	if (scriptOptOut()) return true;
-	return dntEnabled();
+	return browserSignalOptOut();
 }
 
 /** Persist a visitor opt-out. Takes effect immediately for every collection path. */

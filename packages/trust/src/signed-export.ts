@@ -1,0 +1,101 @@
+// Self-contained signed-export envelope: a stats export plus a detached-JWS proof over the canonical
+// (RFC 8785) bytes of its payload, with the public JWK embedded so it verifies fully offline. The
+// `jwksUrl` lets a verifier additionally confirm the embedded key matches the deployment's published
+// key set (online trust). Shared by @facet/server (issue) and the CLI (verify).
+
+import type { JWK } from 'jose';
+import { canonicalizeBytes } from './canonicalize.js';
+import { signDetachedJws, verifyDetachedJws } from './jws.js';
+import type { SigningAlg, SigningKey } from './keys.js';
+
+/** Envelope format identifier (versioned so future changes are detectable). */
+export const SIGNED_EXPORT_TYPE = 'facet-signed-export/1' as const;
+
+export interface SignedExportProof {
+	type: 'DetachedJWS';
+	alg: SigningAlg;
+	kid: string;
+	/** Detached JWS (`<protected>..<signature>`) over `canonicalizeBytes(payload)`. */
+	jws: string;
+	/** Public JWK, embedded for offline verification. */
+	publicJwk: JWK;
+	/** Where the authoritative JWKS lives, for online key cross-checking. */
+	jwksUrl?: string;
+	/** ISO 8601 issuance time. */
+	created: string;
+}
+
+export interface SignedExport {
+	facet: typeof SIGNED_EXPORT_TYPE;
+	payload: unknown;
+	proof: SignedExportProof;
+}
+
+export interface SignExportOptions {
+	jwksUrl?: string;
+	/** Issuance time in ms (injectable for deterministic tests). */
+	now: number;
+}
+
+/** Build a signed-export envelope around `payload`, signed by `key`. */
+export async function signExport(
+	payload: unknown,
+	key: SigningKey,
+	opts: SignExportOptions,
+): Promise<SignedExport> {
+	const jws = await signDetachedJws(canonicalizeBytes(payload), key);
+	return {
+		facet: SIGNED_EXPORT_TYPE,
+		payload,
+		proof: {
+			type: 'DetachedJWS',
+			alg: key.alg,
+			kid: key.kid,
+			jws,
+			publicJwk: key.publicJwk,
+			jwksUrl: opts.jwksUrl,
+			created: new Date(opts.now).toISOString(),
+		},
+	};
+}
+
+export interface SignedExportVerification {
+	valid: boolean;
+	kid: string;
+	alg: SigningAlg;
+	jwksUrl?: string;
+	/** Present when invalid: why verification failed. */
+	reason?: string;
+}
+
+/** Verify a signed-export envelope offline against its embedded public JWK. */
+export async function verifySignedExport(env: SignedExport): Promise<SignedExportVerification> {
+	const { proof, payload } = env;
+	const kid = proof?.kid ?? '';
+	const alg = proof?.alg ?? 'EdDSA';
+	const jwksUrl = proof?.jwksUrl;
+	const fail = (reason: string): SignedExportVerification => ({
+		valid: false,
+		kid,
+		alg,
+		jwksUrl,
+		reason,
+	});
+
+	if (env.facet !== SIGNED_EXPORT_TYPE) return fail('unrecognized envelope type');
+	if (proof?.type !== 'DetachedJWS') return fail('unsupported proof type');
+	try {
+		const { protectedHeader } = await verifyDetachedJws(
+			proof.jws,
+			canonicalizeBytes(payload),
+			proof.publicJwk,
+		);
+		// The signing key id in the protected header must match the proof's declared kid.
+		if (protectedHeader.kid !== proof.kid) {
+			return fail('protected-header kid does not match proof kid');
+		}
+		return { valid: true, kid, alg, jwksUrl };
+	} catch (e) {
+		return fail(e instanceof Error ? e.message : 'verification failed');
+	}
+}

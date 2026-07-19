@@ -61,21 +61,26 @@ tags** taken verbatim from the page URL. They are stored only in their own decla
 and used to classify each event's traffic channel; they are not identifiers and are not
 mixed into the visitor hash.
 
-## Visitor opt-out & Do Not Track
+## Visitor opt-out, Do Not Track & Global Privacy Control
 
-**Do Not Track is honored by default.** When the browser signals DNT
+**Do Not Track and Global Privacy Control are honored by default.** When the browser signals DNT
 (`navigator.doNotTrack === '1'`, `window.doNotTrack === '1'`, `navigator.doNotTrack === 'yes'`, or
-`navigator.msDoNotTrack === '1'`) the client sends nothing: no pageview, no SPA navigation events,
-no `form_submit`, no UTM read, and no experiment fetch, bucketing, or `$exposure`.
+`navigator.msDoNotTrack === '1'`) or [Global Privacy Control](https://globalprivacycontrol.org/)
+(`navigator.globalPrivacyControl === true`) the client sends nothing: no pageview, no SPA navigation
+events, no `form_submit`, no UTM read, and no experiment fetch, bucketing, or `$exposure`.
+
+GPC is also enforced **server-side**: any request to `POST /api/collect` or `POST /api/event`
+carrying the `Sec-GPC: 1` header is dropped with `202 Accepted` before the visitor hash is derived
+or any row is written — so the opt-out holds even for callers that bypass the JavaScript client.
 
 Opt-out state has a single precedence chain (highest first):
 
 1. **`localStorage['facet.optout']`** — the visitor's persistent switch and their override.
-   `'1'`/`'true'` opts out; `'0'`/`'false'` is an explicit opt-in that **overrides Do Not Track**,
+   `'1'`/`'true'` opts out; `'0'`/`'false'` is an explicit opt-in that **overrides DNT and GPC**,
    because it is a deliberate per-visitor choice and takes priority over the browser default.
 2. **`data-facet-optout`** on the script tag — opts out unless set to a false-like value
    (`false`/`0`/`no`/`off`).
-3. **Do Not Track** browser signals.
+3. **Do Not Track** and **Global Privacy Control** browser signals.
 4. Otherwise opted in.
 
 The only client-side storage Facet uses is local-only and never sent as identity: the opt-out

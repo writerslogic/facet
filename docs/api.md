@@ -55,6 +55,10 @@ rejected with `413 payload_too_large` before parsing. Bot user-agents are silent
 (the request still returns `202` but no event is written). On success, returns **`202`**
 with an empty body.
 
+A request carrying the [Global Privacy Control](https://globalprivacycontrol.org/) header
+`Sec-GPC: 1` is treated as an opt-out: it returns `202` but no event is written and no visitor
+hash is derived. This mirrors the client-side opt-out and holds for direct callers too.
+
 Body fields (`site_id`, `hostname`, `path`, `referrer` required; `name`, `props`
 optional):
 
@@ -104,7 +108,7 @@ never stored.
 - **Auth:** `Authorization: Bearer <api_key>` (the site is taken from the key; no `site_id` in the body).
 - **Body:** `hostname`, `path` (absolute), optional `referrer`, `name`, `props`, `utm`, and optional
   `ip` / `user_agent` (the end-user's, for hashing + device/channel classification).
-- **Responses:** `202` (empty) on accept or bot-drop; `400 validation_failed`; `401 invalid_api_key`.
+- **Responses:** `202` (empty) on accept, bot-drop, or a `Sec-GPC: 1` opt-out; `400 validation_failed`; `401 invalid_api_key`.
 
 ```sh
 curl -X POST https://your-deployment.example.com/api/event \
@@ -336,6 +340,7 @@ renders it as literal text).
 | `format` | no | `csv` (default) or `json`. |
 | `interval` | no | `hour` or `day` (series only). Defaults to `hour` when range ≤ 48h, otherwise `day`. |
 | `limit` | no | Breakdown row cap, `1`–`1000` (default `100`). |
+| `sign` | no | `1` returns a self-contained **signed-export envelope** (see below). Requires a configured signing key (`501 signing_unavailable` otherwise). |
 
 For `kind=series` the columns are `bucket_start_iso,bucket_start_ms,pageviews,visitors`; for
 `kind=breakdown` they are `key,count`. A CSV response is served with
@@ -361,6 +366,98 @@ curl "https://your-deployment.example.com/api/stats/export?site_id=11111111-1111
   ]
 }
 ```
+
+#### Signed exports (optional)
+
+When the deployment is configured with a signing key (the `FACET_SIGNING_JWK` Worker secret,
+Ed25519 preferred), the export is cryptographically verifiable. The verification key is published
+at [`/.well-known/jwks.json`](#well-known-documents) and referenced by the deployment DID.
+
+Every (unsigned-envelope) export response additionally carries integrity headers over the exact
+response bytes — offered in **two** interoperable forms:
+
+- **Detached JWS** (RFC 7515): `Facet-Signature-Jws: <protected>..<signature>` plus
+  `Facet-Signing-Key: <jwks-url>`.
+- **HTTP Message Signatures** (RFC 9421): `Content-Digest` (RFC 9530, SHA-256), `Signature-Input`,
+  and `Signature` (covering `content-digest` and `content-type`; `ed25519` or `ecdsa-p256-sha256`).
+
+With `sign=1` the endpoint instead returns a **self-contained JSON envelope** that verifies fully
+offline — it embeds the detached JWS over the canonical (RFC 8785 JCS) payload and the public JWK:
+
+```json
+{
+  "facet": "facet-signed-export/1",
+  "payload": { "columns": ["key", "count"], "rows": [["/", 14]] },
+  "proof": {
+    "type": "DetachedJWS",
+    "alg": "EdDSA",
+    "kid": "<jwk-thumbprint>",
+    "jws": "<protected>..<signature>",
+    "publicJwk": { "kty": "OKP", "crv": "Ed25519", "x": "…", "kid": "…" },
+    "jwksUrl": "https://your-deployment.example.com/.well-known/jwks.json",
+    "created": "2026-07-17T00:00:00.000Z"
+  }
+}
+```
+
+Verify offline with the CLI: `facet verify export export.json`.
+
+None of these signing features create any per-visitor identifier — they attest the **dataset**
+(the aggregate rollups in the export), never a person.
+
+---
+
+## Well-known documents
+
+Facet serves these documents directly from the Worker (not the static-asset binding), each with the
+correct content type:
+
+| Path | Purpose |
+| --- | --- |
+| `/.well-known/security.txt` | RFC 9116 disclosure contact (Contact, Expires, Policy, Canonical). |
+| `/.well-known/jwks.json` | The deployment's public signing key(s) as a JWK Set. Empty (`{"keys":[]}`) when signing is unconfigured. |
+| `/.well-known/did.json` | did:web DID document (`did:web:<host>`); Multikey verification method from the JWKS key. `404` unless an Ed25519 key is configured. |
+| `/.well-known/did-configuration.json` | DIF Domain Linkage Credential binding the origin to the DID (`404` unless Ed25519 configured). |
+| `/.well-known/facet-privacy.json` | Machine-readable privacy manifest with W3C DPV (`https://w3id.org/dpv#`) claims + deployment properties. Always available. |
+
+These endpoints are public and unauthenticated.
+
+## Verifiable credentials
+
+When an Ed25519 signing key is configured, the deployment issues W3C VC 2.0 credentials signed with
+the `eddsa-jcs-2022` Data Integrity cryptosuite, verifiable against `/.well-known/jwks.json` or the
+DID. Neither credential describes a person — they attest the deployment and the aggregate dataset.
+
+| Endpoint | Auth | Credential |
+| --- | --- | --- |
+| `GET /api/attestation/privacy` | public | `PrivacyAttestationCredential` — deployment build id, commit, D1 schema hash, retention days, privacy model, and DPV claims. |
+| `GET /api/stats/report?site_id&start&end` | API key | `AnalyticsReportCredential` — an aggregate stats snapshot (pageviews/visitors/events) for a site+range; subject is the dataset (`<origin>/sites/<id>`). |
+
+Both return `501` when no signing key is configured (or the key is not Ed25519). Verify offline with
+`facet verify credential <file> --jwk <jwk>` (or `--key <publicKeyMultibase>`). Selective disclosure
+(SD-JWT-style, Workers-native) is available via `@facet/trust`; the RDF-based `ecdsa-sd-2023` and
+pairing-based `bbs-2023` cryptosuites are not usable under Cloudflare Workers (see the trust README).
+
+## Transparency log, SCITT & attestation
+
+A Merkle Mountain Range (MMR, profiled against `draft-bryce-cose-receipts-mmr-profile`) is maintained
+over finalized `event_rollups` on the hourly cron, with signed checkpoints. All of this is inert
+unless a signing key is configured. None of it commits anything about a visitor — leaves cover
+aggregate rollups only.
+
+| Endpoint | Auth | Purpose |
+| --- | --- | --- |
+| `GET /api/transparency/checkpoint` | public | Latest signed tree head (size + bagged root + timestamp). |
+| `GET /api/transparency/inclusion?site_id&hostname&bucket_start&interval` | API key | Inclusion receipt for one of the site's rollups. |
+| `GET /api/transparency/consistency?from&to` | public | Consistency proof between two tree sizes. |
+| `POST /api/scitt/attestation` | admin | Wrap the PrivacyAttestation as a SCITT Signed Statement, register it with the local Transparency-Service double, return a Receipt. |
+| `POST /api/scitt/register` | admin | Register an arbitrary Signed Statement, return a Receipt. |
+| `GET /api/attestation/evidence[?nonce=]` | public | A RATS process-evidence EAT (software attestation only; no hardware root of trust). |
+
+Verify offline: `facet verify receipt <file>` (SCITT receipt / MMR inclusion) and
+`facet verify attestation <file> [--nonce <n>]` (RATS EAT). The COSE_Sign1 wire form and an external
+SCITT Transparency Service (`SCITT_URL`) are integration points — see the trust README for the
+Workers runtime boundaries (COSE/CBOR, `ecdsa-sd-2023`, `bbs-2023`, hardware RATS).
 
 ---
 

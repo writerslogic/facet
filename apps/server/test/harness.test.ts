@@ -6,11 +6,11 @@ describe('test harness', () => {
 		expect(env.DB).toBeDefined();
 	});
 
-	it('has 10 tables after migrations', async () => {
+	it('has 14 tables after migrations', async () => {
 		const result = await env.DB.prepare(
 			"SELECT count(*) as n FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'd1_%'",
 		).first<{ n: number }>();
-		expect(result?.n).toBe(10);
+		expect(result?.n).toBe(14);
 	});
 
 	it('events table has 15 columns', async () => {

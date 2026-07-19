@@ -64,6 +64,30 @@ describe('opt-out state', () => {
 		expect(isOptedOut()).toBe(true);
 	});
 
+	it('honors navigator.globalPrivacyControl === true (GPC)', async () => {
+		stubPage();
+		stubStorage();
+		vi.stubGlobal('navigator', { globalPrivacyControl: true });
+		const { isOptedOut } = await import('../src/optout.js');
+		expect(isOptedOut()).toBe(true);
+	});
+
+	it('does NOT opt out for globalPrivacyControl === false', async () => {
+		stubPage();
+		stubStorage();
+		vi.stubGlobal('navigator', { globalPrivacyControl: false });
+		const { isOptedOut } = await import('../src/optout.js');
+		expect(isOptedOut()).toBe(false);
+	});
+
+	it('localStorage explicit opt-in OVERRIDES GPC', async () => {
+		stubPage();
+		stubStorage({ 'facet.optout': '0' });
+		vi.stubGlobal('navigator', { globalPrivacyControl: true });
+		const { isOptedOut } = await import('../src/optout.js');
+		expect(isOptedOut()).toBe(false);
+	});
+
 	it('honors window.doNotTrack === "1"', async () => {
 		stubPage();
 		stubStorage();
@@ -172,6 +196,21 @@ describe('opt-out blocks collection', () => {
 		stubStorage();
 		const beacon = vi.fn(() => true);
 		vi.stubGlobal('navigator', { doNotTrack: '1', sendBeacon: beacon });
+		const { init, track } = await import('../src/index.js');
+		init({ host: HOST, siteId: SITE });
+		track('signup');
+		await new Promise((r) => setTimeout(r, 0));
+		expect(beacon).not.toHaveBeenCalled();
+	});
+
+	it('track() no-ops when opted out via GPC', async () => {
+		stubPage();
+		stubStorage();
+		const beacon = vi.fn(() => true);
+		vi.stubGlobal('navigator', {
+			globalPrivacyControl: true,
+			sendBeacon: beacon,
+		});
 		const { init, track } = await import('../src/index.js');
 		init({ host: HOST, siteId: SITE });
 		track('signup');

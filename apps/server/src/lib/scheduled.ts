@@ -8,6 +8,7 @@ import { enforceRetention } from './retention.js';
 import { runRollups } from './rollups.js';
 import { dayKey } from './salt.js';
 import { buildSessions } from './sessions.js';
+import { runTransparency } from './transparency.js';
 import { notifyAnomalies } from './webhook.js';
 
 /** A unit of scheduled work: a stable name and an idempotent run function. */
@@ -39,6 +40,11 @@ registerJob({
 registerJob({
 	name: 'anomaly-alerts',
 	run: (env, now) => notifyAnomalies(env, now),
+});
+// Optional: maintain the MMR transparency log + signed checkpoint. No-op unless FACET_SIGNING_JWK is set.
+registerJob({
+	name: 'transparency-log',
+	run: (env, now) => runTransparency(env, now),
 });
 
 /** Run every registered job, isolating failures so one bad job never blocks the rest. */

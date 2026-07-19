@@ -21,6 +21,7 @@
 	},
 	"dependencies": {
 		"@facet/shared": "workspace:*",
+		"@facet/trust": "workspace:*",
 		"@hono/valibot-validator": "0.5.2",
 		"drizzle-orm": "0.38.3",
 		"hono": "4.6.14",
