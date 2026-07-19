@@ -4,6 +4,7 @@
 // `jose` end-to-end so it runs in workerd.
 
 import { CompactSign, type JWK, base64url, compactVerify } from 'jose';
+import { canonicalizeBytes } from './canonicalize.js';
 import { type SigningKey, importPublicJwk } from './keys.js';
 
 /** Sign `payload` and return a compact *detached* JWS (`<protected>..<signature>`). */
@@ -36,4 +37,47 @@ export async function verifyDetachedJws(
 		algorithms: [alg],
 	});
 	return { protectedHeader };
+}
+
+/** A detached-JWS proof embedded in a signed envelope (signed-export, statement, receipt, …). */
+export interface DetachedProof {
+	type: string;
+	jws: string;
+	kid: string;
+	publicJwk: JWK;
+}
+
+/** Outcome of {@link verifyDetachedProof}. */
+export interface DetachedProofCheck {
+	ok: boolean;
+	reason?: string;
+}
+
+/** Verify a detached-JWS proof over the canonical (RFC 8785) bytes of `payload`, checking that the
+ * protected-header `kid` matches the proof's declared `kid`. Shared by every signed envelope so the
+ * security-critical verification kernel lives in exactly one place. Never throws. */
+export async function verifyDetachedProof(
+	proof: DetachedProof | undefined,
+	payload: unknown,
+): Promise<DetachedProofCheck> {
+	if (proof?.type !== 'DetachedJWS') return { ok: false, reason: 'unsupported proof type' };
+	try {
+		const { protectedHeader } = await verifyDetachedJws(
+			proof.jws,
+			canonicalizeBytes(payload),
+			proof.publicJwk,
+		);
+		if (protectedHeader.kid !== proof.kid) {
+			return {
+				ok: false,
+				reason: 'protected-header kid does not match proof kid',
+			};
+		}
+		return { ok: true };
+	} catch (e) {
+		return {
+			ok: false,
+			reason: e instanceof Error ? e.message : 'verification failed',
+		};
+	}
 }

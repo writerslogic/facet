@@ -5,7 +5,7 @@
 
 import type { JWK } from 'jose';
 import { canonicalizeBytes } from './canonicalize.js';
-import { signDetachedJws, verifyDetachedJws } from './jws.js';
+import { signDetachedJws, verifyDetachedProof } from './jws.js';
 import type { SigningAlg, SigningKey } from './keys.js';
 
 export interface StatementProof {
@@ -67,27 +67,6 @@ export async function verifyStatement(
 			reason: `expected statement type ${expectedType}`,
 		};
 	}
-	if (proof?.type !== 'DetachedJWS')
-		return { valid: false, ...base, reason: 'unsupported proof type' };
-	try {
-		const { protectedHeader } = await verifyDetachedJws(
-			proof.jws,
-			canonicalizeBytes(payload),
-			proof.publicJwk,
-		);
-		if (protectedHeader.kid !== proof.kid) {
-			return {
-				valid: false,
-				...base,
-				reason: 'protected-header kid mismatch',
-			};
-		}
-		return { valid: true, ...base };
-	} catch (e) {
-		return {
-			valid: false,
-			...base,
-			reason: e instanceof Error ? e.message : 'verification failed',
-		};
-	}
+	const check = await verifyDetachedProof(proof, payload);
+	return check.ok ? { valid: true, ...base } : { valid: false, ...base, reason: check.reason };
 }

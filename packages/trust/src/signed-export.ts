@@ -5,7 +5,7 @@
 
 import type { JWK } from 'jose';
 import { canonicalizeBytes } from './canonicalize.js';
-import { signDetachedJws, verifyDetachedJws } from './jws.js';
+import { signDetachedJws, verifyDetachedProof } from './jws.js';
 import type { SigningAlg, SigningKey } from './keys.js';
 
 /** Envelope format identifier (versioned so future changes are detectable). */
@@ -83,19 +83,8 @@ export async function verifySignedExport(env: SignedExport): Promise<SignedExpor
 	});
 
 	if (env.facet !== SIGNED_EXPORT_TYPE) return fail('unrecognized envelope type');
-	if (proof?.type !== 'DetachedJWS') return fail('unsupported proof type');
-	try {
-		const { protectedHeader } = await verifyDetachedJws(
-			proof.jws,
-			canonicalizeBytes(payload),
-			proof.publicJwk,
-		);
-		// The signing key id in the protected header must match the proof's declared kid.
-		if (protectedHeader.kid !== proof.kid) {
-			return fail('protected-header kid does not match proof kid');
-		}
-		return { valid: true, kid, alg, jwksUrl };
-	} catch (e) {
-		return fail(e instanceof Error ? e.message : 'verification failed');
-	}
+	const check = await verifyDetachedProof(proof, payload);
+	return check.ok
+		? { valid: true, kid, alg, jwksUrl }
+		: fail(check.reason ?? 'verification failed');
 }
