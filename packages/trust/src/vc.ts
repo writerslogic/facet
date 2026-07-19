@@ -7,6 +7,7 @@
 // crypto.subtle cannot use for raw verify).
 
 import { base58decode, base58encode } from './base58.js';
+import { sha256 } from './bytes.js';
 import { canonicalizeBytes } from './canonicalize.js';
 import type { SigningKey } from './keys.js';
 import { ed25519RawFromJwk, publicKeyMultibaseToJwk, rawToEd25519Jwk } from './multikey.js';
@@ -42,10 +43,6 @@ export interface IssueOptions {
 	verificationMethod: string;
 	created: string;
 	proofPurpose?: string;
-}
-
-async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
-	return new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
 }
 
 /** proofConfigHash || transformedDocumentHash — the 64-byte hashData eddsa-jcs-2022 signs. */

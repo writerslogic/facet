@@ -5,20 +5,7 @@
 // pure, storage-agnostic core (an array of 32-byte node hashes); the server persists nodes in D1.
 // Covers a DATASET (aggregate rollups), never a person.
 
-const enc = new TextEncoder();
-
-/** SHA-256 of the concatenation of the given byte parts. */
-export async function sha256(...parts: Uint8Array[]): Promise<Uint8Array> {
-	let total = 0;
-	for (const p of parts) total += p.length;
-	const buf = new Uint8Array(total);
-	let off = 0;
-	for (const p of parts) {
-		buf.set(p, off);
-		off += p.length;
-	}
-	return new Uint8Array(await crypto.subtle.digest('SHA-256', buf));
-}
+import { bytesEqual, sha256, utf8 } from './bytes.js';
 
 /** A one-based node position as an unsigned 64-bit big-endian byte string. */
 function u64be(n: number): Uint8Array {
@@ -34,7 +21,7 @@ export function hashPosPair(pos: number, left: Uint8Array, right: Uint8Array): P
 
 /** Leaf hash `H(x)` for a caller-defined leaf value. */
 export function leafHash(x: Uint8Array | string): Promise<Uint8Array> {
-	return sha256(typeof x === 'string' ? enc.encode(x) : x);
+	return sha256(typeof x === 'string' ? utf8(x) : x);
 }
 
 /** True when every bit of `n` up to its top set bit is 1 (i.e. n = 2^k - 1). */
@@ -134,27 +121,6 @@ export async function includedRoot(
 /** Bag the accumulator peaks into a single root commitment: `H(count_be64 || peak0 || peak1 || …)`. */
 export async function baggedRoot(count: number, peaks: Uint8Array[]): Promise<Uint8Array> {
 	return sha256(u64be(count), ...peaks);
-}
-
-/** Hex-encode bytes. */
-export function toHex(bytes: Uint8Array): string {
-	let s = '';
-	for (const b of bytes) s += b.toString(16).padStart(2, '0');
-	return s;
-}
-
-/** Decode a hex string to bytes. */
-export function fromHex(hex: string): Uint8Array {
-	const out = new Uint8Array(hex.length / 2);
-	for (let k = 0; k < out.length; k++) out[k] = Number.parseInt(hex.slice(k * 2, k * 2 + 2), 16);
-	return out;
-}
-
-/** Byte-equality of two hashes. */
-export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-	if (a.length !== b.length) return false;
-	for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) return false;
-	return true;
 }
 
 /** The accumulator (peak hashes) for a tree of `count` nodes. */

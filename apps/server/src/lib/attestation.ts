@@ -8,15 +8,9 @@ import { getTableColumns, getTableName } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
 import { DEFAULT_RAW_RETENTION_DAYS } from './constants.js';
+import { sha256Hex } from './crypto.js';
 
 let cachedSchemaHash: string | null = null;
-
-/** Hex-encode bytes. */
-function hex(bytes: Uint8Array): string {
-	let s = '';
-	for (const b of bytes) s += b.toString(16).padStart(2, '0');
-	return s;
-}
 
 /** Every drizzle table exported from the schema module (filters out non-table exports). */
 function schemaTables(): unknown[] {
@@ -38,8 +32,7 @@ export async function schemaFingerprintHash(): Promise<string> {
 			columns: Object.keys(getTableColumns(t as never)).sort(),
 		}))
 		.sort((a, b) => a.name.localeCompare(b.name));
-	const bytes = new TextEncoder().encode(JSON.stringify(descriptor));
-	cachedSchemaHash = hex(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)));
+	cachedSchemaHash = await sha256Hex(JSON.stringify(descriptor));
 	return cachedSchemaHash;
 }
 

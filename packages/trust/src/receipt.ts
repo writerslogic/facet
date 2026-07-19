@@ -3,11 +3,10 @@
 // bagged root. Profiled against draft-bryce-cose-receipts-mmr-profile; a COSE_Sign1 receipt encoding
 // is format-ready but gated on a workerd-verified COSE library (see the trust README).
 
+import { fromHex, toHex } from './bytes.js';
 import {
 	type ConsistencyProof,
 	type InclusionProof,
-	fromHex,
-	toHex,
 	verifyConsistency,
 	verifyInclusion,
 } from './mmr.js';

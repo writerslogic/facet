@@ -9,6 +9,7 @@
 // Undisclosed claims never leave the issuer as anything but an opaque digest. This binds only DATASET
 // / DEPLOYMENT claims — never a person.
 
+import { bytesToBase64url, sha256 } from './bytes.js';
 import { canonicalizeBytes } from './canonicalize.js';
 import type { SigningKey } from './keys.js';
 import {
@@ -26,22 +27,14 @@ export interface Disclosure {
 	value: unknown;
 }
 
-/** base64url-encode raw bytes (no padding). */
-function b64u(bytes: Uint8Array): string {
-	let s = '';
-	for (const b of bytes) s += String.fromCharCode(b);
-	return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
 /** Digest of a disclosure: base64url(SHA-256(JCS([salt, name, value]))). */
 async function disclosureDigest(d: Disclosure): Promise<string> {
-	const bytes = canonicalizeBytes([d.salt, d.name, d.value]);
-	return b64u(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)));
+	return bytesToBase64url(await sha256(canonicalizeBytes([d.salt, d.name, d.value])));
 }
 
 /** A fresh 128-bit salt as base64url. */
 function makeSalt(): string {
-	return b64u(crypto.getRandomValues(new Uint8Array(16)));
+	return bytesToBase64url(crypto.getRandomValues(new Uint8Array(16)));
 }
 
 /** An issued selectively-disclosable credential: the signed credential plus all disclosures. */

@@ -5,32 +5,17 @@
 
 import type { JWK } from 'jose';
 import { base58decode, base58encode } from './base58.js';
+import { base64urlToBytes, bytesToBase64url } from './bytes.js';
 
 /** Multicodec prefix for an Ed25519 public key (0xed 0x01), little-endian varint of 0xed. */
 const ED25519_PREFIX = new Uint8Array([0xed, 0x01]);
-
-/** Minimal base64url decode to raw bytes. */
-function decodeBase64Url(b64u: string): Uint8Array {
-	const b64 = b64u.replace(/-/g, '+').replace(/_/g, '/');
-	const bin = atob(b64.padEnd(Math.ceil(b64.length / 4) * 4, '='));
-	const out = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-	return out;
-}
-
-/** base64url-encode raw bytes (no padding). */
-function bytesToB64u(bytes: Uint8Array): string {
-	let s = '';
-	for (const b of bytes) s += String.fromCharCode(b);
-	return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
 
 /** Extract the raw 32-byte Ed25519 public key from an OKP/Ed25519 JWK. */
 export function ed25519RawFromJwk(jwk: JWK): Uint8Array {
 	if (jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || !jwk.x) {
 		throw new Error('not an Ed25519 (OKP) public JWK');
 	}
-	const raw = decodeBase64Url(jwk.x);
+	const raw = base64urlToBytes(jwk.x);
 	if (raw.length !== 32) throw new Error('Ed25519 public key must be 32 bytes');
 	return raw;
 }
@@ -58,7 +43,7 @@ export function publicKeyMultibaseToRaw(multibase: string): Uint8Array {
 
 /** Rebuild an Ed25519 public JWK from a raw 32-byte key (for Web Crypto import). */
 export function rawToEd25519Jwk(raw: Uint8Array): JWK {
-	return { kty: 'OKP', crv: 'Ed25519', x: bytesToB64u(raw) };
+	return { kty: 'OKP', crv: 'Ed25519', x: bytesToBase64url(raw) };
 }
 
 /** Convenience: a `publicKeyMultibase` straight to an Ed25519 public JWK. */

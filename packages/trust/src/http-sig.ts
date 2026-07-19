@@ -5,6 +5,7 @@
 // runs in workerd. This is offered alongside detached JWS as a second, HTTP-native integrity option.
 
 import type { JWK } from 'jose';
+import { base64ToBytes, bytesToBase64, sha256 } from './bytes.js';
 import { type SigningKey, importPublicJwk, requireCryptoKey } from './keys.js';
 
 /** Covered components, in signature-base order. Kept fixed so signer and verifier agree. */
@@ -25,25 +26,9 @@ function subtleParams(
 	return alg === 'ed25519' ? { name: 'Ed25519' } : { name: 'ECDSA', hash: 'SHA-256' };
 }
 
-/** Standard base64 encode (Structured-Fields byte sequences use base64, not base64url). */
-function b64(bytes: Uint8Array): string {
-	let s = '';
-	for (const byte of bytes) s += String.fromCharCode(byte);
-	return btoa(s);
-}
-
-/** Standard base64 decode to bytes. */
-function unb64(s: string): Uint8Array {
-	const bin = atob(s);
-	const out = new Uint8Array(bin.length);
-	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-	return out;
-}
-
-/** RFC 9530 Content-Digest value for a body: `sha-256=:<base64>:`. */
+/** RFC 9530 Content-Digest value for a body: `sha-256=:<base64>:` (Structured Fields use base64). */
 async function contentDigest(body: Uint8Array): Promise<string> {
-	const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', body));
-	return `sha-256=:${b64(hash)}:`;
+	return `sha-256=:${bytesToBase64(await sha256(body))}:`;
 }
 
 /** Build the signature-params inner list + parameters, e.g. `("content-digest" "content-type");created=…`. */
@@ -91,7 +76,7 @@ export async function signResponse(input: SignResponseInput): Promise<HttpSignat
 	return {
 		'content-digest': digest,
 		'signature-input': `${label}=${params}`,
-		signature: `${label}=:${b64(sig)}:`,
+		signature: `${label}=:${bytesToBase64(sig)}:`,
 	};
 }
 
@@ -106,7 +91,7 @@ function parseSignatureInput(input: string): { label: string; params: string } {
 function parseSignature(header: string, label: string): Uint8Array {
 	const m = header.match(new RegExp(`${label}=:([^:]+):`));
 	if (!m?.[1]) throw new Error('signature not found for label');
-	return unb64(m[1]);
+	return base64ToBytes(m[1]);
 }
 
 /** Pull `keyid` / `alg` out of a signature-params string for cross-checking against the JWK. */

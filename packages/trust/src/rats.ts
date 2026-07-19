@@ -7,9 +7,9 @@
 // subject key is protocol-level and out of scope here. The EAT is a JWS statement (COSE_Sign1 is
 // format-ready, gated on a workerd-verified COSE lib — see the trust README).
 
+import { sha256, toHex } from './bytes.js';
 import { canonicalizeBytes } from './canonicalize.js';
 import type { SigningKey } from './keys.js';
-import { sha256, toHex } from './mmr.js';
 import { type SignedStatement, signStatement, verifyStatement } from './statement.js';
 
 /** EAT profile URN for creation/process evidence (draft-condrey). */
