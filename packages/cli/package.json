@@ -1,6 +1,6 @@
 {
 	"name": "@writerslogic/facet-cli",
-	"version": "0.5.0",
+	"version": "0.5.1",
 	"description": "Facet CLI: setup, admin, reporting, offline verification, and trust tooling for self-hosted Facet.",
 	"license": "MIT",
 	"type": "module",

@@ -4,6 +4,15 @@ All notable changes to Facet are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-07-20
+
+### Fixed
+
+- **Release pipeline** — CI and the npm-publish workflow now run on Node 22 (pnpm 11.12 requires
+  Node ≥ 22.13; Node 20 lacks the `node:sqlite` builtin). This is the first publishable tag; the v0.5.0
+  workflow was pinned to Node 20 and could not complete a release. Package contents are unchanged
+  from 0.5.0.
+
 ## [0.5.0] - 2026-07-19
 
 Verifiable trust & provenance: a Facet deployment now signs machine-readable statements about itself —
@@ -175,6 +184,7 @@ Cloudflare Workers + D1.
 - **CLI** (`@writerslogic/facet-cli` on npm) — `init`, `migrate`, and `stats` commands for self-hosters.
 - **Docs** — usage, self-hosting, privacy model, and API reference.
 
+[0.5.1]: https://github.com/writerslogic/facet/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/writerslogic/facet/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/writerslogic/facet/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/writerslogic/facet/compare/v0.2.0...v0.3.0
