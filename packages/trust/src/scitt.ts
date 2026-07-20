@@ -14,6 +14,7 @@ import {
 	type SignedStatement,
 	type StatementVerification,
 	signStatement,
+	signStatementCose,
 	verifyStatement,
 } from './statement.js';
 
@@ -23,13 +24,22 @@ export const SCITT_SIGNED_STATEMENT = 'scitt-signed-statement/1' as const;
 /** SCITT Receipt type identifier. */
 export const SCITT_RECEIPT = 'scitt-receipt/1' as const;
 
-/** Sign a payload as a SCITT Signed Statement. */
+/** Sign a payload as a SCITT Signed Statement (detached-JWS proof, for HTTP contexts). */
 export function signSignedStatement<T>(
 	payload: T,
 	key: SigningKey,
 	now: number,
 ): Promise<SignedStatement<T>> {
 	return signStatement(SCITT_SIGNED_STATEMENT, payload, key, now);
+}
+
+/** Sign a payload as a SCITT Signed Statement with a COSE_Sign1 proof (the SCITT-native wire form). */
+export function signSignedStatementCose<T>(
+	payload: T,
+	key: SigningKey,
+	now: number,
+): Promise<SignedStatement<T>> {
+	return signStatementCose(SCITT_SIGNED_STATEMENT, payload, key, now);
 }
 
 /** Verify a SCITT Signed Statement's signature (offline, against its embedded key). */
@@ -53,6 +63,18 @@ export interface ScittReceiptPayload {
 	inclusion: InclusionReceipt;
 	/** ISO 8601 registration time. */
 	registeredAt: string;
+}
+
+/** Sign a SCITT Receipt payload in the requested wire form (`jws` default, or `cose`). */
+export function signScittReceipt(
+	payload: ScittReceiptPayload,
+	key: SigningKey,
+	now: number,
+	format: 'jws' | 'cose' = 'jws',
+): Promise<SignedStatement<ScittReceiptPayload>> {
+	return format === 'cose'
+		? signStatementCose(SCITT_RECEIPT, payload, key, now)
+		: signStatement(SCITT_RECEIPT, payload, key, now);
 }
 
 export interface ScittReceiptVerification {

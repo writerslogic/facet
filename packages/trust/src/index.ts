@@ -4,6 +4,7 @@
 export * from './bytes.js';
 export * from './keys.js';
 export * from './jws.js';
+export * from './cose.js';
 export * from './http-sig.js';
 export * from './canonicalize.js';
 export * from './signed-export.js';
@@ -19,3 +20,4 @@ export * from './checkpoint.js';
 export * from './receipt.js';
 export * from './scitt.js';
 export * from './rats.js';
+export * from './keyattest.js';

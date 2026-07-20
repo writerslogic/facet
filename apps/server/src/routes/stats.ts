@@ -11,7 +11,6 @@ import {
 } from '@facet/shared';
 import {
 	buildAnalyticsReportCredential,
-	didWebFromHost,
 	issueCredential,
 	signDetachedJws,
 	signExport,
@@ -53,7 +52,7 @@ import {
 } from '../lib/constants.js';
 import { toCsv } from '../lib/csv.js';
 import { ApiError } from '../lib/http.js';
-import { getSigningKey, jwksUrl } from '../lib/signing.js';
+import { deploymentDid, getSigningKey, jwksUrl, loadEd25519Key } from '../lib/signing.js';
 
 export const statsRoutes = new Hono<AppEnv>();
 
@@ -319,13 +318,17 @@ statsRoutes.get('/stats/report', requireApiKey, async (c) => {
 		throw new ApiError('bad_range', 400);
 	}
 	assertRange(start, end);
-	const loading = getSigningKey(c.env);
-	if (!loading) throw new ApiError('signing_unavailable', 501);
-	const key = await loading;
-	if (key.alg !== 'EdDSA') throw new ApiError('report_requires_ed25519', 501);
+	const r = await loadEd25519Key(c.env);
+	if ('error' in r) {
+		throw new ApiError(
+			r.error === 'unconfigured' ? 'signing_unavailable' : 'report_requires_ed25519',
+			501,
+		);
+	}
+	const key = r.key;
 
 	const url = new URL(c.req.url);
-	const did = didWebFromHost(url.host);
+	const did = deploymentDid(url);
 	const created = new Date().toISOString();
 	const s = await summary(c.env, { siteId, start, end });
 	const doc = buildAnalyticsReportCredential({

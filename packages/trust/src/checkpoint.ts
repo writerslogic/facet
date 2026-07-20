@@ -7,6 +7,7 @@ import {
 	type SignedStatement,
 	type StatementVerification,
 	signStatement,
+	signStatementCose,
 	verifyStatement,
 } from './statement.js';
 
@@ -31,6 +32,15 @@ export function signCheckpoint(
 	now: number,
 ): Promise<SignedStatement<Checkpoint>> {
 	return signStatement(CHECKPOINT_TYPE, checkpoint, key, now);
+}
+
+/** Sign a checkpoint as a COSE_Sign1 statement (the SCITT/COSE-receipts native wire form). */
+export function signCheckpointCose(
+	checkpoint: Checkpoint,
+	key: SigningKey,
+	now: number,
+): Promise<SignedStatement<Checkpoint>> {
+	return signStatementCose(CHECKPOINT_TYPE, checkpoint, key, now);
 }
 
 /** Verify a signed checkpoint's signature (offline, against the embedded key). */

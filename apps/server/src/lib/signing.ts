@@ -3,7 +3,7 @@
 // deploy keeps working and the existing tests stay green. The loaded key is cached by its JWK string
 // so we import it through Web Crypto once per isolate rather than on every request.
 
-import { type SigningKey, loadSigningKey } from '@facet/trust';
+import { type SigningKey, didWebFromHost, loadSigningKey } from '@facet/trust';
 import type { Env } from '../env.js';
 
 const cache = new Map<string, Promise<SigningKey>>();
@@ -20,9 +20,24 @@ export function getSigningKey(env: Env): Promise<SigningKey> | null {
 	return loading;
 }
 
-/** True when the deployment has a signing key configured. */
-export function signingEnabled(env: Env): boolean {
-	return Boolean(env.FACET_SIGNING_JWK);
+/** The deployment DID (`did:web:<host>`) derived from a request URL — the single place this mapping
+ * is defined, so a future public-origin override changes here only. */
+export function deploymentDid(url: URL): string {
+	return didWebFromHost(url.host);
+}
+
+/** Either a loaded key, or why it is unavailable. */
+export type Ed25519KeyResult = { key: SigningKey } | { error: 'unconfigured' | 'not_ed25519' };
+
+/** Load the deployment signing key and require Ed25519 (needed by Data Integrity, did:web, and the
+ * attestation/report/DID endpoints). Distinguishes "no key configured" from "key is ECDSA" so each
+ * caller maps the outcome to its own status/error while the Ed25519 policy lives in one place. */
+export async function loadEd25519Key(env: Env): Promise<Ed25519KeyResult> {
+	const loading = getSigningKey(env);
+	if (!loading) return { error: 'unconfigured' };
+	const key = await loading;
+	if (key.alg !== 'EdDSA') return { error: 'not_ed25519' };
+	return { key };
 }
 
 /** The URL of this deployment's JWKS document, derived from the request origin. */

@@ -8,7 +8,6 @@
 import {
 	EAT_PROCESS_PROFILE,
 	buildPrivacyAttestationCredential,
-	didWebFromHost,
 	issueCredential,
 	signProcessEvidence,
 	verificationMethodId,
@@ -17,17 +16,26 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { buildProcessEvidence, deploymentDescriptor } from '../lib/attestation.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
-import { getSigningKey } from '../lib/signing.js';
+import { deploymentDid, getSigningKey, loadEd25519Key } from '../lib/signing.js';
 
 export const attestationRoutes = new Hono<AppEnv>();
 
 attestationRoutes.get('/privacy', async (c) => {
-	const loading = getSigningKey(c.env);
-	if (!loading) return c.json({ error: 'signing_unavailable' }, 501);
-	const key = await loading;
-	if (key.alg !== 'EdDSA') return c.json({ error: 'attestation_requires_ed25519' }, 501);
+	const r = await loadEd25519Key(c.env);
+	if ('error' in r) {
+		return c.json(
+			{
+				error:
+					r.error === 'unconfigured'
+						? 'signing_unavailable'
+						: 'attestation_requires_ed25519',
+			},
+			501,
+		);
+	}
+	const key = r.key;
 	const now = Date.now();
-	const did = didWebFromHost(new URL(c.req.url).host);
+	const did = deploymentDid(new URL(c.req.url));
 	const created = new Date(now).toISOString();
 	// Sign the RATS evidence so the credential can reference its content-ref digest.
 	const evidence = await signProcessEvidence(await buildProcessEvidence(c.env), key, { now });

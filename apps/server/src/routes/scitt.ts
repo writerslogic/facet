@@ -5,7 +5,6 @@
 
 import {
 	buildPrivacyAttestationCredential,
-	didWebFromHost,
 	issueCredential,
 	signSignedStatement,
 	verificationMethodId,
@@ -16,17 +15,26 @@ import { deploymentDescriptor } from '../lib/attestation.js';
 import { requireAdmin } from '../lib/auth.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
 import { registerExternal, registerLocal } from '../lib/scitt.js';
-import { getSigningKey } from '../lib/signing.js';
+import { deploymentDid, loadEd25519Key } from '../lib/signing.js';
 
 export const scittRoutes = new Hono<AppEnv>();
 
 scittRoutes.post('/attestation', requireAdmin, async (c) => {
-	const loading = getSigningKey(c.env);
-	if (!loading) return c.json({ error: 'signing_unavailable' }, 501);
-	const key = await loading;
-	if (key.alg !== 'EdDSA') return c.json({ error: 'attestation_requires_ed25519' }, 501);
+	const r = await loadEd25519Key(c.env);
+	if ('error' in r) {
+		return c.json(
+			{
+				error:
+					r.error === 'unconfigured'
+						? 'signing_unavailable'
+						: 'attestation_requires_ed25519',
+			},
+			501,
+		);
+	}
+	const key = r.key;
 	const now = Date.now();
-	const did = didWebFromHost(new URL(c.req.url).host);
+	const did = deploymentDid(new URL(c.req.url));
 	const created = new Date(now).toISOString();
 	const vc = await issueCredential(
 		buildPrivacyAttestationCredential({
@@ -38,8 +46,9 @@ scittRoutes.post('/attestation', requireAdmin, async (c) => {
 		key,
 		{ verificationMethod: verificationMethodId(did, key.kid), created },
 	);
+	const format = c.req.query('format') === 'cose' ? 'cose' : 'jws';
 	const statement = await signSignedStatement(vc, key, now);
-	const receipt = await registerLocal(c.env, statement, now);
+	const receipt = await registerLocal(c.env, statement, now, format);
 	const external = await registerExternal(c.env, statement).catch(() => null);
 	return c.json({ statement, receipt, external });
 });

@@ -27,7 +27,11 @@ describe('createLogger', () => {
 		log.warn('watch out', { code: 42 });
 		expect(logSpy).toHaveBeenCalledTimes(1);
 		const parsed = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
-		expect(parsed).toMatchObject({ level: 'warn', msg: 'watch out', code: 42 });
+		expect(parsed).toMatchObject({
+			level: 'warn',
+			msg: 'watch out',
+			code: 42,
+		});
 	});
 
 	it('error emits via console.error with level error', () => {
@@ -57,8 +61,10 @@ describe('createLogger', () => {
 
 	it('strips ip field at runtime even when passed via cast', () => {
 		const log = createLogger();
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(log.info as any)('test', { ip: '1.2.3.4', safe: 'yes' });
+		(log.info as (m: string, f: Record<string, unknown>) => void)('test', {
+			ip: '1.2.3.4',
+			safe: 'yes',
+		});
 		const parsed = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
 		expect(parsed.ip).toBeUndefined();
 		expect(parsed.safe).toBe('yes');
@@ -66,8 +72,10 @@ describe('createLogger', () => {
 
 	it('strips CF-Connecting-IP field at runtime', () => {
 		const log = createLogger();
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(log.info as any)('test', { 'CF-Connecting-IP': '1.2.3.4', safe: 'yes' });
+		(log.info as (m: string, f: Record<string, unknown>) => void)('test', {
+			'CF-Connecting-IP': '1.2.3.4',
+			safe: 'yes',
+		});
 		const parsed = JSON.parse(logSpy.mock.calls[0]?.[0] as string);
 		expect(parsed['CF-Connecting-IP']).toBeUndefined();
 		expect(parsed.safe).toBe('yes');

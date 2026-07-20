@@ -2,8 +2,11 @@
 
 import { runConfig } from './commands/config.js';
 import { runInit } from './commands/init.js';
+import { runKeyattest } from './commands/keyattest.js';
+import { runKeys } from './commands/keys.js';
 import { runMigrate } from './commands/migrate.js';
 import { isResourceCommand, runResource } from './commands/resources.js';
+import { runSd } from './commands/sd.js';
 import { runStats } from './commands/stats.js';
 import { runVerify } from './commands/verify.js';
 
@@ -14,6 +17,7 @@ Setup:
   migrate [--remote]           Apply D1 migrations via wrangler
   config set-db-id --id <id>   Write the D1 database_id into wrangler.jsonc
   config check                 Verify the D1 database_id is set (not the placeholder)
+  keys generate [--alg <a>]    Generate a deployment signing keypair (FACET_SIGNING_JWK)
 
 Reporting:
   stats --host <url> --key <k> --site <uuid>   Print summary stats
@@ -22,6 +26,15 @@ Verify (offline):
   verify export <file>                          Verify a signed stats export envelope
   verify credential <file> --key <z…>|--jwk <f> Verify a VC (eddsa-jcs-2022)
   verify did-configuration <file> --did-doc <f> Verify a DIF domain linkage
+
+Selective disclosure (Node-only W3C cryptosuites):
+  sd keygen --suite <ecdsa-sd-2023|bbs-2023> --out <keyfile>
+  sd issue  --suite <s> --credential <f> --key <keyfile> [--mandatory </a,/b>] --out <f>
+  sd derive --suite <s> --credential <signed> --key <keyfile> --reveal </a,/b> --out <f>
+  sd verify --suite <s> --presentation <f> --key <keyfile>
+
+Hardware key-attestation (Node-only X.509 chain via node:crypto):
+  keyattest verify <leaf.pem> --root <root.pem> --key <deploy-pub|.crt> [--intermediate <pem>] [--now <iso>]
 
 Resources (admin API — needs --host + --admin-token, or FACET_HOST/FACET_ADMIN_TOKEN):
   sites list | create --name <n> --domain <d>
@@ -54,8 +67,14 @@ export async function main(argv: string[]): Promise<number> {
 			return runStats(argv.slice(1));
 		case 'config':
 			return runConfig(argv.slice(1));
+		case 'keys':
+			return runKeys(argv.slice(1));
 		case 'verify':
 			return runVerify(argv.slice(1));
+		case 'sd':
+			return runSd(argv.slice(1));
+		case 'keyattest':
+			return runKeyattest(argv.slice(1));
 		case '--help':
 		case '-h':
 			process.stdout.write(USAGE);

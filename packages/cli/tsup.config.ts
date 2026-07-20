@@ -7,4 +7,8 @@ export default defineConfig({
 	format: ['esm'],
 	dts: true,
 	banner: { js: '#!/usr/bin/env node' },
+	// Bundle the private workspace packages (@facet/trust, @facet/shared) so the published CLI has no
+	// unresolvable `workspace:*` deps; their published deps (jose, cborg) stay external and are declared
+	// as CLI dependencies.
+	noExternal: [/^@facet\//],
 });

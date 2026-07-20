@@ -6,7 +6,6 @@
 import {
 	buildDidConfiguration,
 	buildDidDocument,
-	didWebFromHost,
 	issueDomainLinkageCredential,
 	toJwks,
 } from '@facet/trust';
@@ -15,7 +14,7 @@ import type { AppEnv } from '../env.js';
 import { deploymentDescriptor } from '../lib/attestation.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
 import { buildSecurityTxt } from '../lib/security-txt.js';
-import { getSigningKey } from '../lib/signing.js';
+import { deploymentDid, getSigningKey, loadEd25519Key } from '../lib/signing.js';
 
 export const wellKnownRoutes = new Hono<AppEnv>();
 
@@ -52,11 +51,17 @@ wellKnownRoutes.get('/jwks.json', async (c) => {
 // Ed25519 key as a Multikey. Requires an Ed25519 signing key (Data Integrity is Ed25519-only); 404
 // when signing is unconfigured or the key is ECDSA.
 wellKnownRoutes.get('/did.json', async (c) => {
-	const loading = getSigningKey(c.env);
-	if (!loading) return c.json({ error: 'not_configured' }, 404);
-	const key = await loading;
-	if (key.alg !== 'EdDSA') return c.json({ error: 'did_requires_ed25519' }, 404);
-	const did = didWebFromHost(new URL(c.req.url).host);
+	const r = await loadEd25519Key(c.env);
+	if ('error' in r) {
+		return c.json(
+			{
+				error: r.error === 'unconfigured' ? 'not_configured' : 'did_requires_ed25519',
+			},
+			404,
+		);
+	}
+	const key = r.key;
+	const did = deploymentDid(new URL(c.req.url));
 	return c.json(buildDidDocument(did, key.kid, key.publicJwk), 200, {
 		'content-type': 'application/did+json',
 		'cache-control': 'public, max-age=3600',
@@ -66,12 +71,18 @@ wellKnownRoutes.get('/did.json', async (c) => {
 // DIF Well-Known DID Configuration: a Domain Linkage Credential binding the origin to the DID,
 // signed by the deployment key (eddsa-jcs-2022). Same Ed25519 requirement as did.json.
 wellKnownRoutes.get('/did-configuration.json', async (c) => {
-	const loading = getSigningKey(c.env);
-	if (!loading) return c.json({ error: 'not_configured' }, 404);
-	const key = await loading;
-	if (key.alg !== 'EdDSA') return c.json({ error: 'did_requires_ed25519' }, 404);
+	const r = await loadEd25519Key(c.env);
+	if ('error' in r) {
+		return c.json(
+			{
+				error: r.error === 'unconfigured' ? 'not_configured' : 'did_requires_ed25519',
+			},
+			404,
+		);
+	}
+	const key = r.key;
 	const url = new URL(c.req.url);
-	const did = didWebFromHost(url.host);
+	const did = deploymentDid(url);
 	const credential = await issueDomainLinkageCredential({
 		did,
 		origin: url.origin,
