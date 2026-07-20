@@ -8,7 +8,6 @@
 import {
 	EAT_PROCESS_PROFILE,
 	buildPrivacyAttestationCredential,
-	didWebFromHost,
 	issueCredential,
 	signProcessEvidence,
 	verificationMethodId,
@@ -17,7 +16,7 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { buildProcessEvidence, deploymentDescriptor } from '../lib/attestation.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
-import { getSigningKey, loadEd25519Key } from '../lib/signing.js';
+import { deploymentDid, getSigningKey, loadEd25519Key } from '../lib/signing.js';
 
 export const attestationRoutes = new Hono<AppEnv>();
 
@@ -36,7 +35,7 @@ attestationRoutes.get('/privacy', async (c) => {
 	}
 	const key = r.key;
 	const now = Date.now();
-	const did = didWebFromHost(new URL(c.req.url).host);
+	const did = deploymentDid(new URL(c.req.url));
 	const created = new Date(now).toISOString();
 	// Sign the RATS evidence so the credential can reference its content-ref digest.
 	const evidence = await signProcessEvidence(await buildProcessEvidence(c.env), key, { now });

@@ -3,7 +3,7 @@
 // deploy keeps working and the existing tests stay green. The loaded key is cached by its JWK string
 // so we import it through Web Crypto once per isolate rather than on every request.
 
-import { type SigningKey, loadSigningKey } from '@facet/trust';
+import { type SigningKey, didWebFromHost, loadSigningKey } from '@facet/trust';
 import type { Env } from '../env.js';
 
 const cache = new Map<string, Promise<SigningKey>>();
@@ -20,9 +20,10 @@ export function getSigningKey(env: Env): Promise<SigningKey> | null {
 	return loading;
 }
 
-/** True when the deployment has a signing key configured. */
-export function signingEnabled(env: Env): boolean {
-	return Boolean(env.FACET_SIGNING_JWK);
+/** The deployment DID (`did:web:<host>`) derived from a request URL — the single place this mapping
+ * is defined, so a future public-origin override changes here only. */
+export function deploymentDid(url: URL): string {
+	return didWebFromHost(url.host);
 }
 
 /** Either a loaded key, or why it is unavailable. */

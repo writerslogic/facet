@@ -5,7 +5,6 @@
 
 import {
 	buildPrivacyAttestationCredential,
-	didWebFromHost,
 	issueCredential,
 	signSignedStatement,
 	verificationMethodId,
@@ -16,7 +15,7 @@ import { deploymentDescriptor } from '../lib/attestation.js';
 import { requireAdmin } from '../lib/auth.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
 import { registerExternal, registerLocal } from '../lib/scitt.js';
-import { loadEd25519Key } from '../lib/signing.js';
+import { deploymentDid, loadEd25519Key } from '../lib/signing.js';
 
 export const scittRoutes = new Hono<AppEnv>();
 
@@ -35,7 +34,7 @@ scittRoutes.post('/attestation', requireAdmin, async (c) => {
 	}
 	const key = r.key;
 	const now = Date.now();
-	const did = didWebFromHost(new URL(c.req.url).host);
+	const did = deploymentDid(new URL(c.req.url));
 	const created = new Date(now).toISOString();
 	const vc = await issueCredential(
 		buildPrivacyAttestationCredential({

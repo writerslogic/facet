@@ -11,7 +11,6 @@ import {
 } from '@facet/shared';
 import {
 	buildAnalyticsReportCredential,
-	didWebFromHost,
 	issueCredential,
 	signDetachedJws,
 	signExport,
@@ -53,7 +52,7 @@ import {
 } from '../lib/constants.js';
 import { toCsv } from '../lib/csv.js';
 import { ApiError } from '../lib/http.js';
-import { getSigningKey, jwksUrl, loadEd25519Key } from '../lib/signing.js';
+import { deploymentDid, getSigningKey, jwksUrl, loadEd25519Key } from '../lib/signing.js';
 
 export const statsRoutes = new Hono<AppEnv>();
 
@@ -329,7 +328,7 @@ statsRoutes.get('/stats/report', requireApiKey, async (c) => {
 	const key = r.key;
 
 	const url = new URL(c.req.url);
-	const did = didWebFromHost(url.host);
+	const did = deploymentDid(url);
 	const created = new Date().toISOString();
 	const s = await summary(c.env, { siteId, start, end });
 	const doc = buildAnalyticsReportCredential({

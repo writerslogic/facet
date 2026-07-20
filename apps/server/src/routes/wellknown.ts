@@ -6,7 +6,6 @@
 import {
 	buildDidConfiguration,
 	buildDidDocument,
-	didWebFromHost,
 	issueDomainLinkageCredential,
 	toJwks,
 } from '@facet/trust';
@@ -15,7 +14,7 @@ import type { AppEnv } from '../env.js';
 import { deploymentDescriptor } from '../lib/attestation.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
 import { buildSecurityTxt } from '../lib/security-txt.js';
-import { getSigningKey, loadEd25519Key } from '../lib/signing.js';
+import { deploymentDid, getSigningKey, loadEd25519Key } from '../lib/signing.js';
 
 export const wellKnownRoutes = new Hono<AppEnv>();
 
@@ -62,7 +61,7 @@ wellKnownRoutes.get('/did.json', async (c) => {
 		);
 	}
 	const key = r.key;
-	const did = didWebFromHost(new URL(c.req.url).host);
+	const did = deploymentDid(new URL(c.req.url));
 	return c.json(buildDidDocument(did, key.kid, key.publicJwk), 200, {
 		'content-type': 'application/did+json',
 		'cache-control': 'public, max-age=3600',
@@ -83,7 +82,7 @@ wellKnownRoutes.get('/did-configuration.json', async (c) => {
 	}
 	const key = r.key;
 	const url = new URL(c.req.url);
-	const did = didWebFromHost(url.host);
+	const did = deploymentDid(url);
 	const credential = await issueDomainLinkageCredential({
 		did,
 		origin: url.origin,
