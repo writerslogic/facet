@@ -38,7 +38,7 @@ jobs:
         run: pnpm build
 
       - name: Package check (publint + attw)
-        run: pnpm --filter @writerslogic/facet check:package
+        run: pnpm --filter "@writerslogic/*" check:package
 
       - name: Test
         run: pnpm test
