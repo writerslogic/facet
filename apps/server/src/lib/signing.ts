@@ -25,6 +25,20 @@ export function signingEnabled(env: Env): boolean {
 	return Boolean(env.FACET_SIGNING_JWK);
 }
 
+/** Either a loaded key, or why it is unavailable. */
+export type Ed25519KeyResult = { key: SigningKey } | { error: 'unconfigured' | 'not_ed25519' };
+
+/** Load the deployment signing key and require Ed25519 (needed by Data Integrity, did:web, and the
+ * attestation/report/DID endpoints). Distinguishes "no key configured" from "key is ECDSA" so each
+ * caller maps the outcome to its own status/error while the Ed25519 policy lives in one place. */
+export async function loadEd25519Key(env: Env): Promise<Ed25519KeyResult> {
+	const loading = getSigningKey(env);
+	if (!loading) return { error: 'unconfigured' };
+	const key = await loading;
+	if (key.alg !== 'EdDSA') return { error: 'not_ed25519' };
+	return { key };
+}
+
 /** The URL of this deployment's JWKS document, derived from the request origin. */
 export function jwksUrl(origin: string): string {
 	return `${origin}/.well-known/jwks.json`;
