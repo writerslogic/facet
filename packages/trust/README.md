@@ -16,17 +16,15 @@ Everything here is proven to run under `@cloudflare/vitest-pool-workers` (real w
   claims, signed with `eddsa-jcs-2022`).
 - **MMR** (Merkle Mountain Range) profiled against `draft-bryce-cose-receipts-mmr-profile`
   (`MMR_SHA256`): inclusion + consistency proofs, bagged-root **signed checkpoints**.
-- **SCITT** Signed Statements + Receipts (JWS form); **RATS** process-evidence EAT
+- **COSE_Sign1** (RFC 9052) — the SCITT-native wire format, CBOR via `cborg` (proven in workerd),
+  raw Web Crypto signatures, with a pinned known-answer vector.
+- **SCITT** Signed Statements + Receipts; **RATS** process-evidence EAT
   (`draft-condrey-rats-process-evidence-claims` + `draft-reddy-rats-key-binding`).
 
 ## Runtime gaps (deliberately NOT claimed as shipped)
 
 These are documented format/verification decisions, not oversights:
 
-- **COSE_Sign1 / CBOR wire format** — the canonical SCITT/COSE-receipts serialization is COSE_Sign1.
-  We ship the **JWS equivalents** and mark COSE **format-ready pending a workerd-verified COSE/CBOR
-  library**. No COSE library has been proven to run under `@cloudflare/vitest-pool-workers` here, so we
-  do not depend on one. The signed-statement/receipt/checkpoint shapes are COSE-portable.
 - **`ecdsa-sd-2023` selective disclosure** — depends on RDF Dataset Canonicalization
   (`jsonld`/`rdf-canonize`), which does not run under workerd. We ship the SD-JWT-style mechanism
   instead. `ecdsa-sd-2023` is **not usable in Cloudflare Workers**.
