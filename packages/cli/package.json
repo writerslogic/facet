@@ -1,8 +1,15 @@
 {
 	"name": "@writerslogic/facet-cli",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"description": "Facet CLI: setup, admin, reporting, offline verification, and trust tooling for self-hosted Facet.",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/writerslogic/facet.git",
+		"directory": "packages/cli"
+	},
+	"homepage": "https://github.com/writerslogic/facet#readme",
+	"bugs": "https://github.com/writerslogic/facet/issues",
 	"type": "module",
 	"bin": {
 		"facet": "./dist/index.js"

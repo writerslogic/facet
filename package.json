@@ -1,9 +1,15 @@
 {
   "name": "facet",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "private": true,
   "description": "Facet — privacy-first, Cloudflare-native web analytics.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/writerslogic/facet.git"
+  },
+  "homepage": "https://github.com/writerslogic/facet#readme",
+  "bugs": "https://github.com/writerslogic/facet/issues",
   "type": "module",
   "packageManager": "pnpm@11.12.0",
   "engines": {

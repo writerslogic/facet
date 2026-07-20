@@ -1,8 +1,15 @@
 {
 	"name": "@writerslogic/facet",
-	"version": "0.5.1",
+	"version": "0.5.2",
 	"description": "Facet browser tracking snippet: zero-dependency, umami-compatible.",
 	"license": "MIT",
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/writerslogic/facet.git",
+		"directory": "packages/client"
+	},
+	"homepage": "https://github.com/writerslogic/facet#readme",
+	"bugs": "https://github.com/writerslogic/facet/issues",
 	"type": "module",
 	"main": "./dist/index.js",
 	"module": "./dist/index.js",

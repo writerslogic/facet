@@ -4,6 +4,14 @@ All notable changes to Facet are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-07-20
+
+### Fixed
+
+- **npm provenance publish** — the published packages now declare `repository` / `homepage` / `bugs`,
+  required for npm to verify the sigstore provenance bundle (publish previously failed `E422:
+  repository.url is ""`). Package code is unchanged from 0.5.0/0.5.1.
+
 ## [0.5.1] - 2026-07-20
 
 ### Fixed
@@ -184,6 +192,7 @@ Cloudflare Workers + D1.
 - **CLI** (`@writerslogic/facet-cli` on npm) — `init`, `migrate`, and `stats` commands for self-hosters.
 - **Docs** — usage, self-hosting, privacy model, and API reference.
 
+[0.5.2]: https://github.com/writerslogic/facet/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/writerslogic/facet/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/writerslogic/facet/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/writerslogic/facet/compare/v0.3.0...v0.4.0
