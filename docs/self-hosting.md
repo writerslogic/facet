@@ -232,6 +232,50 @@ time-bounded (5s) and best-effort; the hourly cadence means each anomalous `(sit
 sent at most once, but consumers should still dedupe on those fields. If you prefer polling, use
 `GET /api/stats/anomalies` instead.
 
+## Trust & provenance configuration
+
+Facet can sign machine-readable statements about the deployment — its keys, privacy processing, and
+build/config state — so third parties can verify what your instance is and does. This is **optional
+and off by default**: with no signing key configured, the signed endpoints return `501` / an empty
+JWKS and every analytics feature works unchanged. See [Trust & provenance](./trust.md) for what gets
+published and how to verify it.
+
+### Signing key
+
+Generate a deployment signing keypair and store the **private** JWK as a Worker secret; the public
+half is published automatically at `/.well-known/jwks.json`. Ed25519 is required for the VC 2.0 Data
+Integrity credential (`eddsa-jcs-2022`):
+
+```sh
+facet keys generate --out signing.jwk        # writes the private JWK (mode 0600)
+wrangler secret put FACET_SIGNING_JWK < signing.jwk
+rm signing.jwk                                # keep only the Worker secret
+```
+
+### Related variables
+
+All optional. Secrets go through `wrangler secret put`; plain vars can live in `wrangler.jsonc`.
+
+| Name | Kind | Purpose |
+| --- | --- | --- |
+| `FACET_SIGNING_JWK` | secret | Private signing JWK (above). Enables all signed attestations/credentials/exports. |
+| `FACET_SECURITY_CONTACT` | var | `security.txt` contact URI. Defaults to the project security mailbox. |
+| `FACET_SECURITY_POLICY` | var | `security.txt` policy URL. Defaults to the repo `SECURITY.md`. |
+| `FACET_BUILD_ID` | var | Build identifier surfaced in the RATS process-evidence. Defaults to `unknown`. |
+| `FACET_GIT_COMMIT` | var | Source commit surfaced in the process-evidence. Defaults to `unknown`. |
+| `FACET_WRANGLER_HASH` | var | SHA-256 (hex) of the wrangler config, surfaced in the process-evidence. |
+| `SCITT_URL` | var | External SCITT Transparency Service URL. When unset, external registration is a no-op (the local D1-backed MMR log still runs). |
+| `SCITT_TOKEN` | secret | Bearer token for the external SCITT service. |
+
+### Hardware-rooted keys
+
+`key-attributes.hardware` in the RATS evidence is a verified, conditional claim: it is `true` only
+when a key-attestation, checked against a configured trust anchor, proves the signing key is
+hardware-resident. Hold the key in an HSM / cloud-KMS / hardware token and supply its attestation —
+see [Trust & provenance → Hardware-rooted signing keys](./trust.md#hardware-rooted-signing-keys). By
+default the Worker signs with the `FACET_SIGNING_JWK` software secret and reports honest software
+attestation (`hardware:false`).
+
 ## Test Worker config
 
 `apps/server/wrangler.test.jsonc` is **generated** from `wrangler.jsonc` by

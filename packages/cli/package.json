@@ -1,13 +1,15 @@
 {
 	"name": "@writerslogic/facet-cli",
-	"version": "0.3.0",
-	"description": "Facet CLI: init, migrate, and stats for self-hosted Facet.",
+	"version": "0.5.0",
+	"description": "Facet CLI: setup, admin, reporting, offline verification, and trust tooling for self-hosted Facet.",
 	"license": "MIT",
 	"type": "module",
 	"bin": {
 		"facet": "./dist/index.js"
 	},
-	"files": ["dist"],
+	"files": [
+		"dist"
+	],
 	"scripts": {
 		"build": "tsup",
 		"dev": "tsx src/index.ts",
@@ -19,11 +21,26 @@
 	},
 	"dependencies": {
 		"@clack/prompts": "0.9.1",
-		"@facet/shared": "workspace:*",
-		"@facet/trust": "workspace:*",
-		"picocolors": "1.1.1"
+		"@digitalbazaar/bbs-2023-cryptosuite": "2.0.0",
+		"@digitalbazaar/bbs-signatures": "1.2.0",
+		"@digitalbazaar/bls12-381-multikey": "2.1.0",
+		"@digitalbazaar/credentials-context": "3.2.0",
+		"@digitalbazaar/data-integrity": "2.5.0",
+		"@digitalbazaar/data-integrity-context": "2.0.1",
+		"@digitalbazaar/ecdsa-multikey": "1.8.0",
+		"@digitalbazaar/ecdsa-sd-2023-cryptosuite": "3.4.1",
+		"@digitalbazaar/multikey-context": "2.0.1",
+		"cborg": "4.2.6",
+		"jose": "5.9.6",
+		"jsonld": "8.3.3",
+		"jsonld-document-loader": "2.2.0",
+		"jsonld-signatures": "11.5.0",
+		"picocolors": "1.1.1",
+		"rdf-canonize": "4.0.1"
 	},
 	"devDependencies": {
+		"@facet/shared": "workspace:*",
+		"@facet/trust": "workspace:*",
 		"@types/node": "22.10.5",
 		"publint": "0.3.5",
 		"tsup": "8.3.5",

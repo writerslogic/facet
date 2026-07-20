@@ -65,6 +65,21 @@ describe('POST /api/scitt/attestation', () => {
 		expect(await (await verifyScittReceipt(second.receipt)).valid).toBe(true);
 	});
 
+	it('issues a COSE_Sign1 receipt when ?format=cose is requested', async () => {
+		const res = await createApp().request(
+			'https://facet.example/api/scitt/attestation?format=cose',
+			{ method: 'POST', headers: { Authorization: ADMIN } },
+			signingEnv,
+		);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			receipt: SignedStatement<ScittReceiptPayload>;
+		};
+		expect(body.receipt.proof.type).toBe('COSE_Sign1');
+		const rv = await verifyScittReceipt(body.receipt);
+		expect(rv.valid).toBe(true);
+	});
+
 	it('requires admin auth', async () => {
 		const res = await createApp().request(
 			'https://facet.example/api/scitt/attestation',

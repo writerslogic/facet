@@ -3,7 +3,13 @@
 
 import { describe, expect, it } from 'vitest';
 import { generateSigningJwk, loadSigningKey } from '../src/keys.js';
-import { type ProcessEvidence, signProcessEvidence, verifyProcessEvidence } from '../src/rats.js';
+import {
+	type ProcessEvidence,
+	answerPopChallenge,
+	signProcessEvidence,
+	verifyPopChallenge,
+	verifyProcessEvidence,
+} from '../src/rats.js';
 
 const EVIDENCE: ProcessEvidence = {
 	buildId: 'ci-99',
@@ -70,5 +76,68 @@ describe('RATS process-evidence', () => {
 		const result = await verifyProcessEvidence(eat);
 		expect(result.valid).toBe(false);
 		expect(result.keyBound).toBe(false);
+	});
+});
+
+describe('RATS challenge-response proof-of-possession', () => {
+	const NONCE = 'verifier-nonce-abc123';
+
+	it('succeeds when the PoP is signed by the cnf subject key over the challenge nonce', async () => {
+		const eatKey = await edKey();
+		const subjectKey = await edKey();
+		const { eat, pop } = await answerPopChallenge(EVIDENCE, eatKey, subjectKey, {
+			now: 1_770_000_000_000,
+			nonce: NONCE,
+		});
+		const result = await verifyPopChallenge(eat, pop, NONCE);
+		expect(result.valid).toBe(true);
+		expect(result.eatValid).toBe(true);
+		expect(result.popValid).toBe(true);
+		expect(result.evidence?.buildId).toBe('ci-99');
+	});
+
+	it('works with a single self-attesting key (subject == eat key)', async () => {
+		const key = await edKey();
+		const { eat, pop } = await answerPopChallenge(EVIDENCE, key, key, {
+			now: 1_770_000_000_000,
+			nonce: NONCE,
+		});
+		expect((await verifyPopChallenge(eat, pop, NONCE)).valid).toBe(true);
+	});
+
+	it('fails when the challenge nonce does not match the EAT/PoP nonce', async () => {
+		const key = await edKey();
+		const { eat, pop } = await answerPopChallenge(EVIDENCE, key, key, {
+			now: 1_770_000_000_000,
+			nonce: NONCE,
+		});
+		const result = await verifyPopChallenge(eat, pop, 'different-nonce');
+		expect(result.valid).toBe(false);
+	});
+
+	it('fails when the PoP is signed by the wrong key', async () => {
+		const eatKey = await edKey();
+		const subjectKey = await edKey();
+		const attacker = await edKey();
+		// Attacker forges a PoP over the real challenge but with THEIR key, and swaps the pop.publicJwk.
+		const { eat, pop } = await answerPopChallenge(EVIDENCE, eatKey, subjectKey, {
+			now: 1_770_000_000_000,
+			nonce: NONCE,
+		});
+		const forged = await answerPopChallenge(EVIDENCE, eatKey, attacker, {
+			now: 1_770_000_000_000,
+			nonce: NONCE,
+		});
+		// Keep the genuine EAT (cnf = subjectKey) but attach the attacker's PoP.
+		const result = await verifyPopChallenge(eat, forged.pop, NONCE);
+		expect(result.valid).toBe(false);
+		expect(result.popValid).toBe(false);
+		// And even swapping pop.publicJwk to the attacker key must not help: verify uses the EAT's cnf.
+		const swapped = {
+			...pop,
+			jws: forged.pop.jws,
+			publicJwk: attacker.publicJwk,
+		};
+		expect((await verifyPopChallenge(eat, swapped, NONCE)).valid).toBe(false);
 	});
 });

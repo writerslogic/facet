@@ -46,6 +46,7 @@ by swapping a single script tag.
 - **Visitor opt-out & Do-Not-Track.** Honors browser DNT and a per-visitor opt-out; ignored visitors are never recorded.
 - **CSV / JSON export.** Export any series or breakdown from the API or dashboard; CSV is spreadsheet formula-injection-safe.
 - **In-dashboard admin.** A Settings tab manages sites and API keys, with one-click multi-site switching.
+- **Verifiable trust & provenance.** Optional signed statements about the deployment — published keys (`did:web` + JWKS), a W3C VC 2.0 privacy attestation, a RATS build/config evidence EAT, and a SCITT transparency log — with hardware-rootable signing keys. See [`docs/trust.md`](./docs/trust.md).
 - **Free, self-issued API keys** and **unlimited, first-class multi-site.**
 
 ## How privacy works
@@ -63,8 +64,9 @@ only to compute that hash in memory and is never stored, logged, or returned. Se
 | `apps/server` | — | Cloudflare Worker: ingest + stats API + admin + cron rollups + D1 schema |
 | `apps/dashboard` | — | React 19 + Vite dashboard, served as static assets by the Worker |
 | `packages/client` | [`@writerslogic/facet`](https://www.npmjs.com/package/@writerslogic/facet) | Browser tracking snippet (zero deps, umami shim) |
-| `packages/cli` | [`@writerslogic/facet-cli`](https://www.npmjs.com/package/@writerslogic/facet-cli) (`npx @writerslogic/facet-cli`) | `init` / `migrate` / `stats` CLI |
+| `packages/cli` | [`@writerslogic/facet-cli`](https://www.npmjs.com/package/@writerslogic/facet-cli) (`npx @writerslogic/facet-cli`) | Setup, admin, reporting, offline verification, key generation & selective disclosure CLI |
 | `packages/shared` | — | Shared TypeScript types + valibot wire schemas |
+| `packages/trust` | — | Workers-native trust & provenance primitives (keys/JWKS, JWS/COSE, VC, DID, MMR, SCITT, RATS) |
 
 ## Quick start
 
@@ -120,6 +122,7 @@ period-over-period comparison and CSV/JSON export are available throughout. A **
 - [Usage](./docs/usage.md) — the tracking snippet, npm API, UTM & form tracking, umami migration
 - [Self-hosting](./docs/self-hosting.md) — one-command deploy on Cloudflare Workers + D1
 - [Privacy model](./docs/privacy.md) — the hashing design, salt rotation, and retention
+- [Trust & provenance](./docs/trust.md) — signed deployment attestations, verification, hardware-rooted keys
 - [API reference](./docs/api.md) — every endpoint, auth, and error code
 - [CHANGELOG](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
 

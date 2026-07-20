@@ -1,14 +1,17 @@
 // SCITT integration. Two parts, both explicit about the FORMAT-vs-SERVICE boundary:
 //   1. A LOCAL Transparency-Service DOUBLE: registers a Signed Statement's hash into an append-only
-//      log (`scitt_log`), rebuilds an MMR over all registered hashes, and issues a signed Receipt
-//      containing an inclusion proof. This is a test double, not a production Transparency Service.
+//      log (`scitt_log`, durable in D1), rebuilds an MMR over all registered hashes, and issues a
+//      signed Receipt containing a real inclusion proof. This is a test double, not a production
+//      Transparency Service — Facet does not operate a public log.
 //   2. A PLUGGABLE EXTERNAL CLIENT: when `SCITT_URL` is configured, POSTs the Signed Statement to an
-//      external Transparency Service and returns its Receipt. No-op (returns null) when unset.
-// The canonical SCITT wire format is COSE_Sign1; here statements/receipts are the JWS equivalents
-// (COSE is format-ready but gated on a workerd-verified COSE lib — see the trust README).
+//      external Transparency Service, then VERIFIES the returned Receipt (signature + inclusion proof)
+//      when it is in Facet's SignedStatement form. No-op (returns null) when unset.
+// Receipts are issued in the JWS wire form here; @facet/trust also ships the COSE_Sign1 SCITT-native
+// form (both workerd-verified — see the trust README).
 
 import {
 	type ScittReceiptPayload,
+	type ScittReceiptVerification,
 	type SignedStatement,
 	accumulatorHashes,
 	addLeafHash,
@@ -19,8 +22,9 @@ import {
 	leafHash,
 	proveInclusion,
 	sha256,
-	signStatement,
+	signScittReceipt,
 	toHex,
+	verifyScittReceipt,
 } from '@facet/trust';
 import { asc } from 'drizzle-orm';
 import { db } from '../db/queries.js';
@@ -45,6 +49,7 @@ export async function registerLocal(
 	env: Env,
 	stmt: SignedStatement,
 	now: number,
+	format: 'jws' | 'cose' = 'jws',
 ): Promise<SignedStatement<ScittReceiptPayload> | null> {
 	const loading = getSigningKey(env);
 	if (!loading) return null;
@@ -81,15 +86,34 @@ export async function registerLocal(
 		inclusion,
 		registeredAt: new Date(now).toISOString(),
 	};
-	return signStatement('scitt-receipt/1', payload, key, now);
+	return signScittReceipt(payload, key, now, format);
+}
+
+/** Result of an external SCITT registration: the raw receipt the service returned, plus — when that
+ * receipt is in Facet's SignedStatement form — the outcome of verifying its signature + inclusion. */
+export interface ExternalRegistration {
+	receipt: unknown;
+	/** Verification of the returned receipt, or null when it is not a Facet-format SignedStatement. */
+	verification: ScittReceiptVerification | null;
+}
+
+/** True when a value looks like a Facet SignedStatement receipt (has a proof + an inclusion payload). */
+function isReceiptShape(v: unknown): v is SignedStatement<ScittReceiptPayload> {
+	if (!v || typeof v !== 'object') return false;
+	const o = v as { proof?: unknown; payload?: { inclusion?: unknown } };
+	return typeof o.proof === 'object' && typeof o.payload?.inclusion === 'object';
 }
 
 /**
  * Register a Signed Statement with an EXTERNAL SCITT Transparency Service, if `SCITT_URL` is set.
- * Returns the service's raw Receipt (opaque here) or null when no external service is configured.
+ * Returns the service's Receipt AND — when the receipt is in Facet's SignedStatement form — the result
+ * of verifying its signature + MMR inclusion proof. Returns null when no external service is configured.
  * This is the documented integration point; Facet does not operate the external service.
  */
-export async function registerExternal(env: Env, stmt: SignedStatement): Promise<unknown | null> {
+export async function registerExternal(
+	env: Env,
+	stmt: SignedStatement,
+): Promise<ExternalRegistration | null> {
 	if (!env.SCITT_URL) return null;
 	const res = await fetch(env.SCITT_URL, {
 		method: 'POST',
@@ -100,5 +124,7 @@ export async function registerExternal(env: Env, stmt: SignedStatement): Promise
 		body: JSON.stringify(stmt),
 	});
 	if (!res.ok) throw new Error(`external SCITT registration failed: ${res.status}`);
-	return res.json();
+	const receipt = await res.json();
+	const verification = isReceiptShape(receipt) ? await verifyScittReceipt(receipt) : null;
+	return { receipt, verification };
 }

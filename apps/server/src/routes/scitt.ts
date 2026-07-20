@@ -46,8 +46,9 @@ scittRoutes.post('/attestation', requireAdmin, async (c) => {
 		key,
 		{ verificationMethod: verificationMethodId(did, key.kid), created },
 	);
+	const format = c.req.query('format') === 'cose' ? 'cose' : 'jws';
 	const statement = await signSignedStatement(vc, key, now);
-	const receipt = await registerLocal(c.env, statement, now);
+	const receipt = await registerLocal(c.env, statement, now, format);
 	const external = await registerExternal(c.env, statement).catch(() => null);
 	return c.json({ statement, receipt, external });
 });
