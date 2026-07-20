@@ -7,7 +7,7 @@ API, the dashboard, and the hourly cron rollups.
 
 ## Prerequisites
 
-- **Node.js ≥ 20**
+- **Node.js ≥ 22** (pnpm 11 requires ≥ 22.13)
 - **pnpm 11** (the repo pins `pnpm@11.12.0`)
 - A **Cloudflare account** with `wrangler` authenticated (`wrangler login`)
 
