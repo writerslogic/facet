@@ -1,6 +1,6 @@
 {
   "name": "facet",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Facet — privacy-first, Cloudflare-native web analytics.",
   "license": "MIT",

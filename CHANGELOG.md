@@ -4,6 +4,57 @@ All notable changes to Facet are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-07-19
+
+Verifiable trust & provenance: a Facet deployment now signs machine-readable statements about itself —
+its keys, identity, privacy processing, and build/config state — and can root its signing key in
+hardware. Entirely optional and off by default; every analytics feature is unchanged, and Facet stays
+strictly cookieless with no cross-session identity. Trust primitives ship in a new Workers-native
+`@facet/trust` package (proven to run in real `workerd`); standards that cannot run in Workers ship in
+the Node CLI instead. See [docs/trust.md](./docs/trust.md).
+
+### Added
+
+- **Well-known trust documents** — `/.well-known/jwks.json` (signing keys, RFC 7638 `kid`),
+  `/.well-known/did.json` (`did:web`), `/.well-known/did-configuration.json` (DIF domain linkage),
+  `/.well-known/facet-privacy.json` (W3C DPV privacy manifest), alongside the existing
+  `security.txt` (RFC 9116).
+- **Signed deployment attestations** — `GET /api/attestation/privacy` returns a W3C VC 2.0
+  PrivacyAttestationCredential (`eddsa-jcs-2022` Data Integrity); `GET /api/attestation/evidence`
+  returns a RATS process-evidence EAT (build id, commit, schema/config hashes, enabled privacy
+  transforms) with an optional `?nonce=` for freshness and challenge-response proof-of-possession of
+  the subject key.
+- **COSE_Sign1 (RFC 9052)** — real COSE_Sign1 signing/verification over Web Crypto (EdDSA / ES256,
+  CBOR via `cborg`), workerd-verified, as a first-class alternative to JWS for signed statements,
+  checkpoints, and SCITT statements/receipts (the SCITT / COSE-receipts native wire form).
+- **SCITT transparency** — an append-only Merkle Mountain Range log persisted in D1
+  (`draft-bryce-cose-receipts-mmr-profile`) with real signed inclusion receipts; local Signed
+  Statement registration, plus forwarding to an external service via `SCITT_URL` with returned-receipt
+  verification (signature + inclusion proof).
+- **Hardware key-attestation** — `key-attributes.hardware` is a verified, conditional claim, never a
+  hardcoded boolean: it is `true` only when a key-attestation, checked against a configured trust
+  anchor and bound to the subject key, proves the key is hardware-resident and non-extractable
+  (HSM / cloud-KMS / YubiKey / TPM). Verified in `workerd` for the native credential; the Node CLI
+  (`facet keyattest verify`) validates the X.509 chain real modules emit via `node:crypto`.
+- **CLI: signing-key generation** — `facet keys generate [--alg EdDSA|ES256] [--out <file>]` provisions
+  the `FACET_SIGNING_JWK` deployment key.
+- **CLI: W3C selective disclosure** — `facet sd` implements the `ecdsa-sd-2023` and `bbs-2023`
+  cryptosuites (issue → selective reveal → verify). These need RDF canonicalization + BLS12-381 and
+  cannot run in Workers (`jsonld` requires `node:https`), so they are Node-CLI-only; inside the Worker,
+  Facet uses a Workers-native SD-JWT-style selective disclosure over `eddsa-jcs-2022`.
+- **Configuration** — new optional deploy vars/secrets: `FACET_SIGNING_JWK`, `SCITT_URL`,
+  `SCITT_TOKEN`, `FACET_SECURITY_CONTACT`, `FACET_SECURITY_POLICY`, `FACET_BUILD_ID`,
+  `FACET_GIT_COMMIT`, `FACET_WRANGLER_HASH`. See [self-hosting](./docs/self-hosting.md#trust--provenance-configuration).
+- **GPC** — the browser client now honors the Global Privacy Control signal
+  (`navigator.globalPrivacyControl`) in addition to Do-Not-Track.
+
+### Notes
+
+- Cloudflare does not expose an isolate runtime / measured-boot self-quote to Worker code, so Facet
+  does not attest a measured boot chain of the isolate itself; that is covered from the other side by
+  build-time SLSA provenance + a signed config/schema hash, and is kept distinct from hardware rooting
+  of the signing key. This boundary is documented, not faked.
+
 ## [0.4.0] - 2026-07-17
 
 1.0 hardening: privacy controls, ingest resilience, new analytics reads, richer tooling, and a
@@ -124,6 +175,7 @@ Cloudflare Workers + D1.
 - **CLI** (`@writerslogic/facet-cli` on npm) — `init`, `migrate`, and `stats` commands for self-hosters.
 - **Docs** — usage, self-hosting, privacy model, and API reference.
 
+[0.5.0]: https://github.com/writerslogic/facet/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/writerslogic/facet/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/writerslogic/facet/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/writerslogic/facet/compare/v0.1.0...v0.2.0
