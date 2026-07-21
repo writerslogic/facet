@@ -8,7 +8,7 @@
 
 import { base58decode, base58encode } from './base58.js';
 import { canonicalDigest } from './canonicalize.js';
-import type { SigningKey } from './keys.js';
+import { type SigningKey, importVerifyKey } from './keys.js';
 import { ed25519RawFromJwk, publicKeyMultibaseToJwk, rawToEd25519Jwk } from './multikey.js';
 
 /** The W3C VC 2.0 base context. */
@@ -70,20 +70,6 @@ function proofConfig(
 		verificationMethod: opts.verificationMethod,
 		proofPurpose: opts.proofPurpose ?? 'assertionMethod',
 	};
-}
-
-/** The key/keydata types Web Crypto expects, derived from the runtime so we don't depend on the
- * `CryptoKey`/`JsonWebKey` global type names being exported (they are not, under @types/node). */
-type ImportedKey = Awaited<ReturnType<typeof crypto.subtle.importKey>>;
-
-/** Import an Ed25519 public JWK as a Web Crypto verify key (CryptoKey under both workerd and Node). */
-async function importEd25519Verify(jwk: {
-	kty: string;
-	crv?: string;
-	x?: string;
-}): Promise<ImportedKey> {
-	// 'jwk' import; cast through `never` to avoid naming the JsonWebKey global type.
-	return crypto.subtle.importKey('jwk', jwk as never, { name: 'Ed25519' }, false, ['verify']);
 }
 
 /** Issue a credential: attach an eddsa-jcs-2022 Data Integrity proof signed by `key` (Ed25519 only). */
@@ -166,7 +152,7 @@ export async function verifyCredential(
 	try {
 		const data = await hashData(unsecured, config);
 		const signature = base58decode(proof.proofValue.slice(1));
-		const key = await importEd25519Verify(jwk);
+		const { key } = await importVerifyKey(jwk);
 		const ok = await crypto.subtle.verify({ name: 'Ed25519' }, key, signature, data);
 		return ok
 			? {
