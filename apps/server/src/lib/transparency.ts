@@ -124,23 +124,28 @@ export async function appendFinalizedRollups(env: Env, now: number): Promise<num
 		startCount,
 		finalized.map((f) => f.leaf),
 	);
-	await client.insert(schema.mmrNodes).values(
-		appended.newNodes.map((n) => ({
-			nodeIndex: n.index,
-			hash: toHex(n.hash),
-		})),
-	);
-
-	const leafNo = (await client.select({ k: schema.mmrLeaves.leafNo }).from(schema.mmrLeaves))
+	const priorLeaves = (await client.select({ k: schema.mmrLeaves.leafNo }).from(schema.mmrLeaves))
 		.length;
-	await client.insert(schema.mmrLeaves).values(
-		finalized.map((f, k) => ({
-			leafNo: leafNo + k,
-			nodeIndex: appended.leafIndices[k] as number,
-			rollupKey: f.key,
-			leafHash: toHex(f.leaf),
-		})),
-	);
+
+	// Nodes and leaves must land together. As two separate inserts, a crash in between would leave
+	// orphaned nodes — counted by peakIndices but referenced by no leaf — silently corrupting every
+	// later root. D1 runs a batch as one atomic transaction, closing that window.
+	await client.batch([
+		client.insert(schema.mmrNodes).values(
+			appended.newNodes.map((n) => ({
+				nodeIndex: n.index,
+				hash: toHex(n.hash),
+			})),
+		),
+		client.insert(schema.mmrLeaves).values(
+			finalized.map((f, k) => ({
+				leafNo: priorLeaves + k,
+				nodeIndex: appended.leafIndices[k] as number,
+				rollupKey: f.key,
+				leafHash: toHex(f.leaf),
+			})),
+		),
+	]);
 	return finalized.length;
 }
 

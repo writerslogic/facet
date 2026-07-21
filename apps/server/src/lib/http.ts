@@ -3,9 +3,9 @@
 // renders it to the canonical `{ error, message?, issues? }` envelope. Throwing one of the
 // helpers below is the only way handlers signal a client/auth/rate error.
 
-import type { Context } from "hono";
-import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { AppEnv } from "../env.js";
+import type { Context } from 'hono';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
+import type { AppEnv } from '../env.js';
 
 export class ApiError extends Error {
 	constructor(
@@ -15,7 +15,7 @@ export class ApiError extends Error {
 		public issues?: unknown,
 	) {
 		super(message ?? code);
-		this.name = "ApiError";
+		this.name = 'ApiError';
 	}
 }
 
@@ -46,26 +46,20 @@ export function validationErrorHook(
 	c: Context<AppEnv>,
 ): Response | undefined {
 	if (!result.success) {
-		return c.json(
-			{ error: "validation_failed", issues: result.issues },
-			400,
-		);
+		return c.json({ error: 'validation_failed', issues: result.issues }, 400);
 	}
 	return undefined;
 }
 
-export const badRequest = (code = "bad_request", message?: string): ApiError =>
+export const badRequest = (code = 'bad_request', message?: string): ApiError =>
 	new ApiError(code, 400, message);
 
-export const unauthorized = (
-	code = "unauthorized",
-	message?: string,
-): ApiError => new ApiError(code, 401, message);
+export const unauthorized = (code = 'unauthorized', message?: string): ApiError =>
+	new ApiError(code, 401, message);
 
-export const forbidden = (code = "site_mismatch", message?: string): ApiError =>
+export const forbidden = (code = 'site_mismatch', message?: string): ApiError =>
 	new ApiError(code, 403, message);
 
-export const tooManyRequests = (): ApiError =>
-	new ApiError("rate_limited", 429);
+export const tooManyRequests = (): ApiError => new ApiError('rate_limited', 429);
 
-export const notFoundError = (): ApiError => new ApiError("not_found", 404);
+export const notFoundError = (): ApiError => new ApiError('not_found', 404);

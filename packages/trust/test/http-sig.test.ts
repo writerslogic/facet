@@ -197,4 +197,37 @@ describe('RFC 9421 conformance (independent signature-base reconstruction)', () 
 		expect(await verifyResponse({ ...common, now, maxAgeSeconds: 900 })).toBe(true);
 		expect(await verifyResponse({ ...common, now, maxAgeSeconds: 300 })).toBe(false);
 	});
+
+	it('fails closed on malformed headers instead of throwing', async () => {
+		const { key, publicJwk } = await fixture('EdDSA');
+		const body = enc.encode('x');
+		const headers = await signResponse({
+			body,
+			contentType: CT,
+			created: 1_770_000_000,
+			key,
+		});
+		const good = {
+			body,
+			contentType: CT,
+			contentDigest: headers['content-digest'],
+			signature: headers.signature,
+			publicJwk,
+		};
+		// A Signature-Input whose label carries regex metacharacters must not build a RegExp or throw —
+		// the label is attacker-controlled, so an unbalanced `[` would otherwise be a SyntaxError/ReDoS.
+		await expect(verifyResponse({ ...good, signatureInput: 'sig1[(=bad' })).resolves.toBe(
+			false,
+		);
+		await expect(verifyResponse({ ...good, signatureInput: 'no-equals-sign' })).resolves.toBe(
+			false,
+		);
+		await expect(
+			verifyResponse({
+				...good,
+				signatureInput: headers['signature-input'],
+				signature: 'garbage',
+			}),
+		).resolves.toBe(false);
+	});
 });

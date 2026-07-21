@@ -29,8 +29,11 @@ export function toHex(bytes: Uint8Array): string {
 	return s;
 }
 
-/** Decode a hex string to bytes. */
+/** Decode a hex string to bytes. Rejects odd length and non-hex characters rather than silently
+ * mapping them to 0 — a malformed hex field must fail, not decode to valid-but-wrong bytes. */
 export function fromHex(hex: string): Uint8Array {
+	if (hex.length % 2 !== 0) throw new Error('hex string has an odd length');
+	if (!/^[0-9a-fA-F]*$/.test(hex)) throw new Error('hex string has a non-hex character');
 	const out = new Uint8Array(hex.length / 2);
 	for (let k = 0; k < out.length; k++) out[k] = Number.parseInt(hex.slice(k * 2, k * 2 + 2), 16);
 	return out;

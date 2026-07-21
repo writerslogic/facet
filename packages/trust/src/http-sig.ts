@@ -84,11 +84,17 @@ function parseSignatureInput(input: string): { label: string; params: string } {
 	return { label: input.slice(0, eq), params: input.slice(eq + 1) };
 }
 
-/** Extract the base64 signature bytes for `label` from a Signature header. */
+/** Extract the base64 signature bytes for `label` from a Signature header. Scans for the literal
+ * `<label>=:…:` delimiter rather than building a RegExp from `label` — the label comes from the
+ * untrusted Signature-Input header, so a RegExp would be an injection / ReDoS surface. */
 function parseSignature(header: string, label: string): Uint8Array {
-	const m = header.match(new RegExp(`${label}=:([^:]+):`));
-	if (!m?.[1]) throw new Error('signature not found for label');
-	return base64ToBytes(m[1]);
+	const prefix = `${label}=:`;
+	const start = header.indexOf(prefix);
+	if (start < 0) throw new Error('signature not found for label');
+	const from = start + prefix.length;
+	const end = header.indexOf(':', from);
+	if (end < 0) throw new Error('signature not found for label');
+	return base64ToBytes(header.slice(from, end));
 }
 
 /** Pull `keyid` / `alg` out of a signature-params string for cross-checking against the JWK. */
@@ -116,32 +122,42 @@ export interface VerifyResponseInput {
 	maxAgeSeconds?: number;
 }
 
-/** Verify an RFC 9421-signed response. Recomputes the digest + base and checks the raw signature. */
+/** Verify an RFC 9421-signed response. Recomputes the digest + base and checks the raw signature.
+ * Fails closed: any malformed header, key, or signature returns false rather than throwing. */
 export async function verifyResponse(input: VerifyResponseInput): Promise<boolean> {
-	// The Content-Digest must actually match the body, else a valid signature over a stale digest passes.
-	const expectedDigest = await contentDigest(input.body);
-	if (expectedDigest !== input.contentDigest) return false;
+	try {
+		// The Content-Digest must actually match the body, else a valid signature over a stale digest passes.
+		const expectedDigest = await contentDigest(input.body);
+		if (expectedDigest !== input.contentDigest) return false;
 
-	const { label, params } = parseSignatureInput(input.signatureInput);
-	const { alg, created } = parseSignatureParams(params);
-	if (alg !== 'ed25519' && alg !== 'ecdsa-p256-sha256') return false;
+		const { label, params } = parseSignatureInput(input.signatureInput);
+		const { alg, created } = parseSignatureParams(params);
+		if (alg !== 'ed25519' && alg !== 'ecdsa-p256-sha256') return false;
 
-	// Optional anti-replay: a signature older than maxAgeSeconds is stale even if otherwise valid.
-	if (input.now !== undefined && input.maxAgeSeconds !== undefined) {
-		if (created === undefined) return false;
-		if (input.now / 1000 - created > input.maxAgeSeconds) return false;
+		// Optional anti-replay: a signature older than maxAgeSeconds is stale even if otherwise valid.
+		if (input.now !== undefined && input.maxAgeSeconds !== undefined) {
+			if (created === undefined) return false;
+			if (input.now / 1000 - created > input.maxAgeSeconds) return false;
+		}
+
+		const base = signatureBase(
+			{
+				'content-digest': input.contentDigest,
+				'content-type': input.contentType,
+			},
+			params,
+		);
+		const sig = parseSignature(input.signature, label);
+		const { key, alg: keyAlg } = await importVerifyKey(input.publicJwk);
+		// The signature-params `alg` must match the verification key's actual alg, else it is unauthenticated.
+		if (rfc9421Alg(keyAlg) !== alg) return false;
+		return await crypto.subtle.verify(
+			subtleSignParams(keyAlg),
+			key,
+			sig,
+			new TextEncoder().encode(base),
+		);
+	} catch {
+		return false;
 	}
-
-	const base = signatureBase(
-		{
-			'content-digest': input.contentDigest,
-			'content-type': input.contentType,
-		},
-		params,
-	);
-	const sig = parseSignature(input.signature, label);
-	const { key, alg: keyAlg } = await importVerifyKey(input.publicJwk);
-	// The signature-params `alg` must match the verification key's actual alg, else it is unauthenticated.
-	if (rfc9421Alg(keyAlg) !== alg) return false;
-	return crypto.subtle.verify(subtleSignParams(keyAlg), key, sig, new TextEncoder().encode(base));
 }

@@ -19,7 +19,11 @@ export function hashPosPair(pos: number, left: Uint8Array, right: Uint8Array): P
 	return sha256(u64be(pos), left, right);
 }
 
-/** Leaf hash `H(x)` for a caller-defined leaf value. */
+/** Leaf hash `H(x)` for a caller-defined leaf value. Per the MMR_SHA256 profile leaves carry NO
+ * domain-separation tag (only interior nodes commit their position), so a crafted leaf value can
+ * collide with an interior-node hash. That is a known property of the profile, not a defect here:
+ * adding a tag would break receipt interop. The second-preimage is closed on the verify side, where
+ * {@link verifyInclusion} rejects any proof whose index is not a height-0 leaf. */
 export function leafHash(x: Uint8Array | string): Promise<Uint8Array> {
 	return sha256(typeof x === 'string' ? utf8(x) : x);
 }
