@@ -92,6 +92,18 @@ describe('RATS process-evidence', () => {
 		expect(result.keyBound).toBe(false);
 		expect(result.valid).toBe(false);
 	});
+
+	it('returns a clean failure (never throws) when cnf.jwk is a malformed JWK', async () => {
+		const key = await edKey();
+		const eat = await signProcessEvidence(EVIDENCE, key, {
+			now: 1_770_000_000_000,
+		});
+		// Attacker payload: cnf.jwk is not a valid JWK. Thumbprinting it must not throw out of verify.
+		eat.payload.cnf = { jwk: {} };
+		const result = await verifyProcessEvidence(eat);
+		expect(result.valid).toBe(false);
+		expect(result.keyBound).toBe(false);
+	});
 });
 
 describe('RATS challenge-response proof-of-possession', () => {

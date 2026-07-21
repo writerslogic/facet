@@ -238,11 +238,17 @@ async function verifyEmbeddedHardwareRoot(
 async function cnfBoundToSigner(claims: EatClaims, proof: StatementProof): Promise<boolean> {
 	const cnfJwk = claims.cnf?.jwk as JWK | undefined;
 	if (!cnfJwk || !proof?.publicJwk) return false;
-	const [cnf, signer] = await Promise.all([
-		calculateJwkThumbprint(cnfJwk),
-		calculateJwkThumbprint(proof.publicJwk),
-	]);
-	return cnf === signer;
+	try {
+		// cnf.jwk is attacker-controlled payload; a malformed JWK must yield keyBound:false, not throw
+		// out of the never-throw verify path.
+		const [cnf, signer] = await Promise.all([
+			calculateJwkThumbprint(cnfJwk),
+			calculateJwkThumbprint(proof.publicJwk),
+		]);
+		return cnf === signer;
+	} catch {
+		return false;
+	}
 }
 
 /**

@@ -109,16 +109,6 @@ export async function importPublicJwk(jwk: JWK): Promise<{ key: KeyLike; alg: Si
 	return { key, alg };
 }
 
-/** Narrow a jose KeyLike (from `importPublicJwk`) to a Web Crypto key, required by the raw RFC 9421
- * verify path. Uses a structural check so it compiles under both Node and workerd type environments —
- * a Node KeyObject lacks the `extractable` property a Web Crypto key always has. */
-export function requireCryptoKey(key: KeyLike): SubtleKey {
-	if (typeof (key as { extractable?: unknown }).extractable !== 'boolean') {
-		throw new Error('this operation requires a Web Crypto CryptoKey (available under workerd)');
-	}
-	return key as SubtleKey;
-}
-
 /** Web Crypto sign/verify algorithm params for a `SigningAlg` (distinct from `signImportParams`, which
  * is for `importKey`). The single home for the alg→params map, shared by every raw `crypto.subtle`
  * sign/verify path (COSE_Sign1, RFC 9421) so a new alg is added in exactly one place. */
