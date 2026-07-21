@@ -3,12 +3,12 @@
 // renders it to the canonical `{ error, message?, issues? }` envelope. Throwing one of the
 // helpers below is the only way handlers signal a client/auth/rate error.
 
-import type { StatusCode } from 'hono/utils/http-status';
+import type { ContentfulStatusCode } from 'hono/utils/http-status';
 
 export class ApiError extends Error {
 	constructor(
 		public code: string,
-		public status: StatusCode,
+		public status: ContentfulStatusCode,
 		message?: string,
 		public issues?: unknown,
 	) {

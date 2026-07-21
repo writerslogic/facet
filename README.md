@@ -1,21 +1,28 @@
 <!-- Facet: privacy-first, Cloudflare-native analytics + experimentation. Project landing README. -->
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./assets/logo-white.png">
-    <img alt="Facet" src="./assets/logo-black.png" width="140" height="140">
-  </picture>
-</p>
+<!-- Header: title + subtitle at left, logo floated right (theme-aware via GitHub's #gh-*-mode-only). -->
+<img align="right" width="150" height="150" hspace="40" alt="Facet logo" src="./assets/logo-black.png#gh-light-mode-only">
+<img align="right" width="150" height="150" hspace="40" alt="Facet logo" src="./assets/logo-white.png#gh-dark-mode-only">
 
 # Facet
 
-[![CI](https://github.com/writerslogic/facet/actions/workflows/ci.yml/badge.svg)](https://github.com/writerslogic/facet/actions/workflows/ci.yml)
-[![TypeScript](https://img.shields.io/badge/typescript-5.7-blue.svg)](https://www.typescriptlang.org)
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg)](https://workers.cloudflare.com)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://github.com/writerslogic/facet/blob/main/LICENSE)
-[![ORCID](https://img.shields.io/badge/ORCID-0009--0003--1849--2963-green.svg)](https://orcid.org/0009-0003-1849-2963)
+### Privacy-first, cookieless web analytics &amp; experimentation
 
-**Privacy-first, cookieless analytics and experimentation that runs entirely on the Cloudflare edge.**
+Runs entirely on the Cloudflare edge — no cookies, no external database,<br>
+and no cross-session identity to leak.
+
+<br clear="right">
+
+<p align="center">
+  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/writerslogic/facet"><img alt="Deploy to Cloudflare" src="https://img.shields.io/badge/Deploy%20to-Cloudflare-f38020.svg?logo=cloudflare&logoColor=white"></a>
+  <a href="https://github.com/writerslogic/facet/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/writerslogic/facet/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/writerslogic/facet"><img alt="OpenSSF Scorecard" src="https://api.securityscorecards.dev/projects/github.com/writerslogic/facet/badge"></a>
+  <a href="https://slsa.dev"><img alt="SLSA Build Level 2" src="https://img.shields.io/badge/SLSA-Build%20L2-2ea44f.svg?logo=slsa&logoColor=white"></a>
+  <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.7-blue.svg"></a>
+  <a href="https://workers.cloudflare.com"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg"></a>
+  <a href="https://github.com/writerslogic/facet/blob/main/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-blue.svg"></a>
+  <a href="https://orcid.org/0009-0003-1849-2963"><img alt="ORCID" src="https://img.shields.io/badge/ORCID-0009--0003--1849--2963-green.svg"></a>
+</p>
 
 Facet is a self-hosted analytics platform that runs 100% on Cloudflare Workers + D1 — no external
 database, no long-running server, one `wrangler deploy`. It measures your site by *facet*: pages,
@@ -24,10 +31,6 @@ referrers, countries, devices, channels, sessions, goals, funnels, and experimen
 daily-rotating, salted `SHA-256` hash, **raw IP addresses are never stored**, and there is no
 cross-session identity to leak. The browser client is a drop-in for umami — existing sites migrate
 by swapping a single script tag.
-
-## Deploy to Cloudflare
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/writerslogic/facet)
 
 ## Why Facet
 
@@ -56,6 +59,27 @@ rendered as lowercase hex. The salt rotates at UTC midnight, so the same person 
 hash the next day and cross-day re-identification is cryptographically prevented. The raw IP is used
 only to compute that hash in memory and is never stored, logged, or returned. See
 [`docs/privacy.md`](./docs/privacy.md) for the full model.
+
+## Architecture at a glance
+
+One Cloudflare Worker is the whole backend — ingest, the stats API, the dashboard assets, and the
+scheduled rollups all run in it. State lives in D1; there is no server to operate.
+
+```
+  browser beacon ─┐                          ┌─ GET /api/stats/*  ──► Dashboard (SPA, served by Worker)
+  POST /api/collect├─► Worker ─► privacy hash │
+  server events   ─┘   (ingest)   + validate  └─ GET /.well-known/* + /api/attestation/* (signed provenance)
+  POST /api/event                    │
+                                     ▼
+                            D1 (raw events, salts)
+                                     │
+                     hourly cron ────┤ sessionize · roll up · detect anomalies · purge past retention
+                                     ▼
+                         D1 (sessions, event_rollups)  ──► fast, aggregate-only reads
+```
+
+Ingest hashes and validates in-memory (raw IP never stored), writes raw events to D1, and an hourly
+cron folds them into sessions and durable rollups; the stats API and dashboard read only aggregates.
 
 ## Packages
 
@@ -117,15 +141,34 @@ Experiments, and Anomalies, plus an "Ask" tab for natural-language queries. Cust
 period-over-period comparison and CSV/JSON export are available throughout. A **Settings** tab
 (admin token) manages sites and API keys, with one-click multi-site switching.
 
+## Supply chain & provenance
+
+Every published release carries **two independent, Sigstore-signed provenance attestations** (recorded
+in the public Rekor transparency log), so you can verify that an `@writerslogic/*` package was built
+from this repo by its GitHub Actions workflow — currently **[SLSA](https://slsa.dev) Build Level 2**:
+
+```sh
+# npm provenance (source commit + build workflow)
+npm audit signatures
+
+# GitHub build-provenance attestation over the exact tarball
+gh attestation verify "$(npm pack @writerslogic/facet-cli --silent)" --repo writerslogic/facet
+```
+
+Beyond the packages, a *deployment* signs machine-readable statements about itself (keys, privacy
+processing, build/config evidence) — see [Trust & provenance](./docs/trust.md). Security policy and
+reporting: [SECURITY.md](./SECURITY.md).
+
 ## Documentation
 
 - [Usage](./docs/usage.md) — the tracking snippet, npm API, UTM & form tracking, umami migration
 - [Self-hosting](./docs/self-hosting.md) — one-command deploy on Cloudflare Workers + D1
 - [Privacy model](./docs/privacy.md) — the hashing design, salt rotation, and retention
 - [Trust & provenance](./docs/trust.md) — signed deployment attestations, verification, hardware-rooted keys
+- [Standards & conformance](./docs/standards.md) — the open standards Facet implements, and where
 - [API reference](./docs/api.md) — every endpoint, auth, and error code
 - [CHANGELOG](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
 
 ## License
 
-[Apache-2.0](./LICENSE) © 2026 David Condrey
+[Apache-2.0](./LICENSE) © 2026 WritersLogic, Inc.
