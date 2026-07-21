@@ -80,11 +80,18 @@ export async function signKeyAttestation(
 	return signStatement(KEY_ATTESTATION_TYPE, claims, attestorKey, now);
 }
 
+/** Clock-skew tolerance (seconds) for the future-dated freshness guard. */
+const FRESHNESS_SKEW_SECONDS = 300;
+
 /** Options for {@link verifyKeyAttestation}. */
 export interface VerifyKeyAttestationOptions {
 	/** Configured attestor public JWKs (vendor/org roots). The attestation's signer MUST be one of these
 	 * for `hardware` to be true. An empty or absent set ⇒ no anchor can match ⇒ `hardware: false`. */
 	trustAnchors: JWK[];
+	/** Verification time (unix ms). When supplied, an attestation dated in the future (its `iat` beyond
+	 * {@link FRESHNESS_SKEW_SECONDS} after `now`) is rejected — an attestor cannot vouch for a key before
+	 * it exists. Omit to skip the freshness check. */
+	now?: number;
 	/** The subject-key thumbprint the caller expects this attestation to be about. When supplied it MUST
 	 * match the attested subject thumbprint, else `hardware: false`. */
 	expectedThumbprint?: string;
@@ -131,6 +138,21 @@ export async function verifyKeyAttestation(
 	}
 
 	const claims = attestation.payload;
+
+	// Freshness: an attestation dated in the future (beyond clock skew) cannot be trusted — an attestor
+	// cannot vouch for a key before it exists. Only enforced when the caller supplies `now`.
+	if (
+		opts.now !== undefined &&
+		typeof claims.iat === 'number' &&
+		claims.iat > Math.floor(opts.now / 1000) + FRESHNESS_SKEW_SECONDS
+	) {
+		return {
+			valid: true,
+			hardware: false,
+			subjectThumbprint: claims.subjectThumbprint,
+			reason: 'attestation is dated in the future',
+		};
+	}
 
 	// All thumbprinting below runs on attacker-controlled attestation content (and caller-supplied
 	// anchors); a malformed JWK must yield hardware:false, never throw out of this never-throw verifier.
