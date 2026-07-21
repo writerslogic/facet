@@ -7,6 +7,7 @@ import { useEffect, useState } from 'react';
 import { useExperimentResult, useExperiments } from '../hooks/experiments.js';
 import { useGoals } from '../hooks/funnels.js';
 import { useFreshness } from '../hooks/stats.js';
+import { formatNumber, formatPercent } from '../lib/format.js';
 import { isAuthError } from '../lib/status.js';
 import type { Range } from '../state.js';
 import {
@@ -16,12 +17,6 @@ import {
 	ErrorState,
 	PendingNotice,
 } from './StatusStates.js';
-
-const numberFormat = new Intl.NumberFormat('en-US');
-const percentFormat = new Intl.NumberFormat('en-US', {
-	style: 'percent',
-	maximumFractionDigits: 1,
-});
 
 export function Experiments({
 	apiKey,
@@ -178,14 +173,12 @@ export function Experiments({
 								<tr key={row.key} className="text-neutral-700 tabular-nums">
 									<td className="py-2 font-medium text-neutral-900">{row.key}</td>
 									<td className="py-2 text-right">
-										{numberFormat.format(row.exposures)}
+										{formatNumber(row.exposures)}
 									</td>
 									<td className="py-2 text-right">
-										{numberFormat.format(row.conversions)}
+										{formatNumber(row.conversions)}
 									</td>
-									<td className="py-2 text-right">
-										{percentFormat.format(row.rate)}
-									</td>
+									<td className="py-2 text-right">{formatPercent(row.rate)}</td>
 									<td className="py-2 text-right">
 										{row.p_value === null ? '—' : row.p_value.toFixed(4)}
 									</td>

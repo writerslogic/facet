@@ -4,14 +4,9 @@
 import type { Goal } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { useConversions } from '../hooks/funnels.js';
+import { formatNumber, formatPercent } from '../lib/format.js';
 import type { Range } from '../state.js';
 import { CardSkeletons, EmptyState, ErrorState } from './StatusStates.js';
-
-const numberFormat = new Intl.NumberFormat('en-US');
-const percentFormat = new Intl.NumberFormat('en-US', {
-	style: 'percent',
-	maximumFractionDigits: 1,
-});
 
 function GoalRow({
 	apiKey,
@@ -34,9 +29,9 @@ function GoalRow({
 				</span>
 			</span>
 			<span className="pl-3 text-neutral-600 tabular-nums">
-				{data ? numberFormat.format(data.conversions) : '—'}
+				{data ? formatNumber(data.conversions) : '—'}
 				<span className="ml-2 font-medium text-neutral-900">
-					{data ? percentFormat.format(data.rate) : ''}
+					{data ? formatPercent(data.rate) : ''}
 				</span>
 			</span>
 		</li>

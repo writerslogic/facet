@@ -4,12 +4,7 @@
 
 import type { FunnelReportResult } from '@facet/shared';
 import type { ReactElement } from 'react';
-
-const numberFormat = new Intl.NumberFormat('en-US');
-const percentFormat = new Intl.NumberFormat('en-US', {
-	style: 'percent',
-	maximumFractionDigits: 1,
-});
+import { formatNumber, formatPercent } from '../lib/format.js';
 
 export function FunnelChart({
 	report,
@@ -25,7 +20,7 @@ export function FunnelChart({
 				<span className="text-sm text-neutral-600">
 					Overall{' '}
 					<span className="font-semibold text-neutral-900 tabular-nums">
-						{percentFormat.format(report.overall_rate)}
+						{formatPercent(report.overall_rate)}
 					</span>
 				</span>
 			</div>
@@ -48,10 +43,10 @@ export function FunnelChart({
 										{step.match_value}
 									</span>
 									<span className="pl-3 text-neutral-600 tabular-nums">
-										{numberFormat.format(step.count)}
+										{formatNumber(step.count)}
 										{dropOff !== undefined && dropOff > 0 ? (
 											<span className="ml-2 text-xs text-red-500">
-												-{percentFormat.format(dropOff)}
+												-{formatPercent(dropOff)}
 											</span>
 										) : null}
 									</span>

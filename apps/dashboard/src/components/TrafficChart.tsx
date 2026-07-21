@@ -6,6 +6,7 @@ import type { SeriesPoint } from '@facet/shared';
 import { type ReactElement, useEffect, useMemo, useRef } from 'react';
 import uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+import { formatCompact, formatNumber } from '../lib/format.js';
 import { Card } from './Card.js';
 
 interface TrafficChartProps {
@@ -20,12 +21,6 @@ const ACCENT = '#6366f1';
 const INK = '#0f172a';
 const GRID = '#f1f0ee';
 const AXIS = '#a3a3a3';
-
-const numberFmt = new Intl.NumberFormat('en-US');
-const compactFmt = new Intl.NumberFormat('en-US', {
-	notation: 'compact',
-	maximumFractionDigits: 1,
-});
 
 function buildData(series: SeriesPoint[]): uPlot.AlignedData {
 	const x: number[] = [];
@@ -84,7 +79,7 @@ function ChartCanvas({
 					width: 2,
 					fill: (u) => fill(u.ctx, 'rgba(15,23,42,0.10)', 'rgba(15,23,42,0.00)', height),
 					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : numberFmt.format(v)),
+					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
 				},
 				{
 					label: 'Visitors',
@@ -93,7 +88,7 @@ function ChartCanvas({
 					fill: (u) =>
 						fill(u.ctx, 'rgba(99,102,241,0.16)', 'rgba(99,102,241,0.00)', height),
 					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : numberFmt.format(v)),
+					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
 				},
 			],
 			axes: [
@@ -110,7 +105,7 @@ function ChartCanvas({
 					ticks: { show: false },
 					font: '11px Inter, sans-serif',
 					size: 44,
-					values: (_u, splits) => splits.map((v) => compactFmt.format(v)),
+					values: (_u, splits) => splits.map((v) => formatCompact(v)),
 				},
 			],
 			scales: { x: { time: true } },
