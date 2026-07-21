@@ -16,6 +16,8 @@ and no cross-session identity to leak.
 <p align="center">
   <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/writerslogic/facet"><img alt="Deploy to Cloudflare" src="https://img.shields.io/badge/Deploy%20to-Cloudflare-f38020.svg?logo=cloudflare&logoColor=white"></a>
   <a href="https://github.com/writerslogic/facet/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/writerslogic/facet/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/writerslogic/facet"><img alt="OpenSSF Scorecard" src="https://api.securityscorecards.dev/projects/github.com/writerslogic/facet/badge"></a>
+  <a href="https://slsa.dev"><img alt="SLSA Build Level 2" src="https://img.shields.io/badge/SLSA-Build%20L2-2ea44f.svg?logo=slsa&logoColor=white"></a>
   <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.7-blue.svg"></a>
   <a href="https://workers.cloudflare.com"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg"></a>
   <a href="https://github.com/writerslogic/facet/blob/main/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-blue.svg"></a>
@@ -57,6 +59,27 @@ rendered as lowercase hex. The salt rotates at UTC midnight, so the same person 
 hash the next day and cross-day re-identification is cryptographically prevented. The raw IP is used
 only to compute that hash in memory and is never stored, logged, or returned. See
 [`docs/privacy.md`](./docs/privacy.md) for the full model.
+
+## Architecture at a glance
+
+One Cloudflare Worker is the whole backend — ingest, the stats API, the dashboard assets, and the
+scheduled rollups all run in it. State lives in D1; there is no server to operate.
+
+```
+  browser beacon ─┐                          ┌─ GET /api/stats/*  ──► Dashboard (SPA, served by Worker)
+  POST /api/collect├─► Worker ─► privacy hash │
+  server events   ─┘   (ingest)   + validate  └─ GET /.well-known/* + /api/attestation/* (signed provenance)
+  POST /api/event                    │
+                                     ▼
+                            D1 (raw events, salts)
+                                     │
+                     hourly cron ────┤ sessionize · roll up · detect anomalies · purge past retention
+                                     ▼
+                         D1 (sessions, event_rollups)  ──► fast, aggregate-only reads
+```
+
+Ingest hashes and validates in-memory (raw IP never stored), writes raw events to D1, and an hourly
+cron folds them into sessions and durable rollups; the stats API and dashboard read only aggregates.
 
 ## Packages
 
@@ -117,6 +140,24 @@ view Overview (KPIs, traffic chart, top-lists, channels, realtime), Funnels & co
 Experiments, and Anomalies, plus an "Ask" tab for natural-language queries. Custom date ranges with
 period-over-period comparison and CSV/JSON export are available throughout. A **Settings** tab
 (admin token) manages sites and API keys, with one-click multi-site switching.
+
+## Supply chain & provenance
+
+Every published release carries **two independent, Sigstore-signed provenance attestations** (recorded
+in the public Rekor transparency log), so you can verify that an `@writerslogic/*` package was built
+from this repo by its GitHub Actions workflow — currently **[SLSA](https://slsa.dev) Build Level 2**:
+
+```sh
+# npm provenance (source commit + build workflow)
+npm audit signatures
+
+# GitHub build-provenance attestation over the exact tarball
+gh attestation verify "$(npm pack @writerslogic/facet-cli --silent)" --repo writerslogic/facet
+```
+
+Beyond the packages, a *deployment* signs machine-readable statements about itself (keys, privacy
+processing, build/config evidence) — see [Trust & provenance](./docs/trust.md). Security policy and
+reporting: [SECURITY.md](./SECURITY.md).
 
 ## Documentation
 
