@@ -26,8 +26,20 @@ export function deploymentDid(url: URL): string {
 	return didWebFromHost(url.host);
 }
 
+/** Why an Ed25519 key was unavailable. */
+export type Ed25519KeyError = 'unconfigured' | 'not_ed25519';
+
 /** Either a loaded key, or why it is unavailable. */
-export type Ed25519KeyResult = { key: SigningKey } | { error: 'unconfigured' | 'not_ed25519' };
+export type Ed25519KeyResult = { key: SigningKey } | { error: Ed25519KeyError };
+
+/** Map an {@link Ed25519KeyError} to a caller-chosen error code — the single place the
+ * "no key configured" vs "key is ECDSA" distinction is turned into a response label. */
+export function ed25519KeyErrorCode(
+	error: Ed25519KeyError,
+	labels: { unconfigured: string; notEd25519: string },
+): string {
+	return error === 'unconfigured' ? labels.unconfigured : labels.notEd25519;
+}
 
 /** Load the deployment signing key and require Ed25519 (needed by Data Integrity, did:web, and the
  * attestation/report/DID endpoints). Distinguishes "no key configured" from "key is ECDSA" so each

@@ -14,7 +14,12 @@ import type { AppEnv } from '../env.js';
 import { deploymentDescriptor } from '../lib/attestation.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
 import { buildSecurityTxt } from '../lib/security-txt.js';
-import { deploymentDid, getSigningKey, loadEd25519Key } from '../lib/signing.js';
+import {
+	deploymentDid,
+	ed25519KeyErrorCode,
+	getSigningKey,
+	loadEd25519Key,
+} from '../lib/signing.js';
 
 export const wellKnownRoutes = new Hono<AppEnv>();
 
@@ -55,7 +60,10 @@ wellKnownRoutes.get('/did.json', async (c) => {
 	if ('error' in r) {
 		return c.json(
 			{
-				error: r.error === 'unconfigured' ? 'not_configured' : 'did_requires_ed25519',
+				error: ed25519KeyErrorCode(r.error, {
+					unconfigured: 'not_configured',
+					notEd25519: 'did_requires_ed25519',
+				}),
 			},
 			404,
 		);
@@ -75,7 +83,10 @@ wellKnownRoutes.get('/did-configuration.json', async (c) => {
 	if ('error' in r) {
 		return c.json(
 			{
-				error: r.error === 'unconfigured' ? 'not_configured' : 'did_requires_ed25519',
+				error: ed25519KeyErrorCode(r.error, {
+					unconfigured: 'not_configured',
+					notEd25519: 'did_requires_ed25519',
+				}),
 			},
 			404,
 		);

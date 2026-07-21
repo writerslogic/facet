@@ -15,7 +15,7 @@ import { deploymentDescriptor } from '../lib/attestation.js';
 import { requireAdmin } from '../lib/auth.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
 import { registerExternal, registerLocal } from '../lib/scitt.js';
-import { deploymentDid, loadEd25519Key } from '../lib/signing.js';
+import { deploymentDid, ed25519KeyErrorCode, loadEd25519Key } from '../lib/signing.js';
 
 export const scittRoutes = new Hono<AppEnv>();
 
@@ -24,10 +24,10 @@ scittRoutes.post('/attestation', requireAdmin, async (c) => {
 	if ('error' in r) {
 		return c.json(
 			{
-				error:
-					r.error === 'unconfigured'
-						? 'signing_unavailable'
-						: 'attestation_requires_ed25519',
+				error: ed25519KeyErrorCode(r.error, {
+					unconfigured: 'signing_unavailable',
+					notEd25519: 'attestation_requires_ed25519',
+				}),
 			},
 			501,
 		);

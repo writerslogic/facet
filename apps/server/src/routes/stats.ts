@@ -52,7 +52,13 @@ import {
 } from '../lib/constants.js';
 import { toCsv } from '../lib/csv.js';
 import { ApiError } from '../lib/http.js';
-import { deploymentDid, getSigningKey, jwksUrl, loadEd25519Key } from '../lib/signing.js';
+import {
+	deploymentDid,
+	ed25519KeyErrorCode,
+	getSigningKey,
+	jwksUrl,
+	loadEd25519Key,
+} from '../lib/signing.js';
 
 export const statsRoutes = new Hono<AppEnv>();
 
@@ -321,7 +327,10 @@ statsRoutes.get('/stats/report', requireApiKey, async (c) => {
 	const r = await loadEd25519Key(c.env);
 	if ('error' in r) {
 		throw new ApiError(
-			r.error === 'unconfigured' ? 'signing_unavailable' : 'report_requires_ed25519',
+			ed25519KeyErrorCode(r.error, {
+				unconfigured: 'signing_unavailable',
+				notEd25519: 'report_requires_ed25519',
+			}),
 			501,
 		);
 	}

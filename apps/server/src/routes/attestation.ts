@@ -16,7 +16,12 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { buildProcessEvidence, deploymentDescriptor } from '../lib/attestation.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
-import { deploymentDid, getSigningKey, loadEd25519Key } from '../lib/signing.js';
+import {
+	deploymentDid,
+	ed25519KeyErrorCode,
+	getSigningKey,
+	loadEd25519Key,
+} from '../lib/signing.js';
 
 export const attestationRoutes = new Hono<AppEnv>();
 
@@ -25,10 +30,10 @@ attestationRoutes.get('/privacy', async (c) => {
 	if ('error' in r) {
 		return c.json(
 			{
-				error:
-					r.error === 'unconfigured'
-						? 'signing_unavailable'
-						: 'attestation_requires_ed25519',
+				error: ed25519KeyErrorCode(r.error, {
+					unconfigured: 'signing_unavailable',
+					notEd25519: 'attestation_requires_ed25519',
+				}),
 			},
 			501,
 		);
