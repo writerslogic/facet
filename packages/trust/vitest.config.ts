@@ -2,18 +2,16 @@
 // Node, so every crypto path we ship is proven to run where the Worker runs. No bindings are needed
 // beyond Web Crypto; nodejs_compat mirrors the server so jose resolves its workerd export condition.
 
-import { defineWorkersConfig } from '@cloudflare/vitest-pool-workers/config';
+import { cloudflareTest } from '@cloudflare/vitest-pool-workers';
+import { defineConfig } from 'vitest/config';
 
-export default defineWorkersConfig({
-	test: {
-		poolOptions: {
-			workers: {
-				singleWorker: true,
-				miniflare: {
-					compatibilityDate: '2026-07-01',
-					compatibilityFlags: ['nodejs_compat'],
-				},
+export default defineConfig({
+	plugins: [
+		cloudflareTest({
+			miniflare: {
+				compatibilityDate: '2026-07-01',
+				compatibilityFlags: ['nodejs_compat'],
 			},
-		},
-	},
+		}),
+	],
 });

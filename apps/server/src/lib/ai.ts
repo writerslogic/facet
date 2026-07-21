@@ -30,7 +30,8 @@ series (optional): set true for a trend/over-time question (ignored when a dimen
 
 /** Production runner wrapping the Workers AI binding. */
 export function aiRunner(env: Env): LlmRunner {
-	return (prompt) => env.AI.run(MODEL, { prompt }).then((r) => r.response ?? '');
+	return (prompt) =>
+		env.AI.run(MODEL, { prompt }).then((r) => (r as { response?: string }).response ?? '');
 }
 
 /** Strip Markdown code fences the model may wrap its JSON in. */
