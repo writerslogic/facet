@@ -5,14 +5,21 @@
 import { describe, expect, it } from 'vitest';
 import {
 	type InclusionProof,
+	type NodeStore,
 	accumulatorHashes,
 	addLeafHash,
+	appendLeaves,
+	arrayStore,
 	baggedRoot,
 	indexHeight,
 	leafHash,
+	mmrRoot,
+	mmrRootStore,
 	peakIndices,
 	proveConsistency,
+	proveConsistencyStore,
 	proveInclusion,
+	proveInclusionStore,
 	verifyConsistency,
 	verifyInclusion,
 } from '../src/mmr.js';
@@ -134,5 +141,77 @@ describe('MMR consistency', () => {
 			],
 		};
 		expect(await verifyConsistency(forged, rootFrom, rootTo)).toBe(false);
+	});
+});
+
+describe('store-backed MMR (bounded reads)', () => {
+	/** A NodeStore wrapping an array that records every index it is asked for. */
+	function countingStore(nodes: Uint8Array[]): {
+		store: NodeStore;
+		reads: Set<number>;
+	} {
+		const reads = new Set<number>();
+		const store: NodeStore = {
+			getMany: (indices) => {
+				for (const i of indices) reads.add(i);
+				return Promise.resolve(indices.map((i) => nodes[i] as Uint8Array));
+			},
+		};
+		return { store, reads };
+	}
+
+	it('appendLeaves reproduces addLeafHash node-for-node without loading the tree', async () => {
+		// Grow an array MMR and an incremental store-backed one in lockstep; nodes must match exactly.
+		const arrNodes: Uint8Array[] = [];
+		const persisted: Uint8Array[] = [];
+		for (let k = 0; k < 20; k++) {
+			await addLeafHash(arrNodes, await leafHash(`e-${k}`));
+			const { store, reads } = countingStore(persisted);
+			const res = await appendLeaves(store, persisted.length, [await leafHash(`e-${k}`)]);
+			// Append reads only current peaks — never the whole tree.
+			expect(reads.size).toBeLessThanOrEqual(peakIndices(persisted.length).length);
+			for (const n of res.newNodes) persisted[n.index] = n.hash;
+		}
+		expect(persisted.map((n) => [...n])).toEqual(arrNodes.map((n) => [...n]));
+		expect(await mmrRootStore(arrayStore(persisted), persisted.length)).toEqual(
+			await mmrRoot(arrNodes),
+		);
+	});
+
+	it('proveInclusionStore equals proveInclusion, verifies, and reads O(log n) nodes', async () => {
+		const N = 100;
+		const nodes: Uint8Array[] = [];
+		const leaves: number[] = [];
+		for (let k = 0; k < N; k++) leaves.push(await addLeafHash(nodes, await leafHash(`i-${k}`)));
+		const count = nodes.length;
+		const root = await mmrRoot(nodes);
+		const idx = leaves[42] as number;
+
+		const arrayProof = proveInclusion(nodes, idx, count);
+		const { store, reads } = countingStore(nodes);
+		const storeProof = await proveInclusionStore(store, idx, count);
+
+		expect(storeProof.path.map((h) => [...h])).toEqual(arrayProof.path.map((h) => [...h]));
+		expect(storeProof.peaks.map((h) => [...h])).toEqual(arrayProof.peaks.map((h) => [...h]));
+		expect(await verifyInclusion(storeProof, root)).toBe(true);
+		// A 100-leaf tree has ~199 nodes; the store must touch far fewer than all of them.
+		expect(reads.size).toBeLessThan(count / 2);
+	});
+
+	it('proveConsistencyStore equals proveConsistency and verifies', async () => {
+		const nodes: Uint8Array[] = [];
+		for (let k = 0; k < 9; k++) await addLeafHash(nodes, await leafHash(`x-${k}`));
+		const sizeFrom = nodes.length;
+		const rootFrom = await mmrRoot(nodes);
+		for (let k = 9; k < 25; k++) await addLeafHash(nodes, await leafHash(`x-${k}`));
+		const sizeTo = nodes.length;
+		const rootTo = await mmrRoot(nodes);
+
+		const storeProof = await proveConsistencyStore(arrayStore(nodes), sizeFrom, sizeTo);
+		const arrayProof = proveConsistency(nodes, sizeFrom, sizeTo);
+		expect(storeProof.peaksFrom.map((h) => [...h])).toEqual(
+			arrayProof.peaksFrom.map((h) => [...h]),
+		);
+		expect(await verifyConsistency(storeProof, rootFrom, rootTo)).toBe(true);
 	});
 });

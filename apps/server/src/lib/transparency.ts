@@ -2,28 +2,30 @@
 // (only when a signing key is configured) it appends a leaf per newly-finalized rollup and emits a
 // signed checkpoint. Leaves commit the aggregate rollup row (JCS bytes) — never raw events or PII.
 // This is the log maintained inside Facet; operating a production transparency SERVICE is a separate
-// deployment concern (see SCITT, P4.9). Node loading is O(tree) for simplicity — a documented test
-// double, not a scale-optimized ledger.
+// deployment concern (see SCITT, P4.9). Every operation goes through a batched `NodeStore` and reads
+// only the O(log n) nodes it needs (peaks for append/root, the sibling path for proofs) — the tree is
+// never loaded whole.
 
 import {
 	type Checkpoint,
 	type ConsistencyReceipt,
 	type InclusionReceipt,
+	type NodeStore,
 	type SignedStatement,
 	type SigningKey,
-	addLeafHash,
+	appendLeaves,
 	canonicalizeBytes,
 	consistencyToReceipt,
 	fromHex,
 	inclusionToReceipt,
 	leafHash,
-	mmrRoot,
-	proveConsistency,
-	proveInclusion,
+	mmrRootStore,
+	proveConsistencyStore,
+	proveInclusionStore,
 	signCheckpoint,
 	toHex,
 } from '@facet/trust';
-import { asc, eq } from 'drizzle-orm';
+import { asc, count, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -61,13 +63,29 @@ function rollupLeafBytes(r: {
 	});
 }
 
-/** Load the full MMR node array (hex → bytes), ordered by index. */
-async function loadNodes(env: Env): Promise<Uint8Array[]> {
-	const rows = await db(env)
-		.select({ hash: schema.mmrNodes.hash })
-		.from(schema.mmrNodes)
-		.orderBy(asc(schema.mmrNodes.nodeIndex));
-	return rows.map((row) => fromHex(row.hash));
+/** A batched {@link NodeStore} over the `mmr_nodes` table — one `WHERE node_index IN (…)` per read. */
+function d1NodeStore(env: Env): NodeStore {
+	return {
+		async getMany(indices) {
+			if (indices.length === 0) return [];
+			const unique = [...new Set(indices)];
+			const rows = await db(env)
+				.select({
+					index: schema.mmrNodes.nodeIndex,
+					hash: schema.mmrNodes.hash,
+				})
+				.from(schema.mmrNodes)
+				.where(inArray(schema.mmrNodes.nodeIndex, unique));
+			const byIndex = new Map(rows.map((r) => [r.index, fromHex(r.hash)]));
+			return indices.map((i) => byIndex.get(i) as Uint8Array);
+		},
+	};
+}
+
+/** The current MMR node count (the tree size), without loading any node. */
+async function nodeCount(env: Env): Promise<number> {
+	const [row] = await db(env).select({ n: count() }).from(schema.mmrNodes);
+	return row?.n ?? 0;
 }
 
 /** Append every finalized, not-yet-logged rollup as a leaf. Returns the number appended. */
@@ -90,48 +108,46 @@ export async function appendFinalizedRollups(env: Env, now: number): Promise<num
 		),
 	);
 
-	const nodes = await loadNodes(env);
-	const startCount = nodes.length;
-	let leafNo = (await client.select({ k: schema.mmrLeaves.leafNo }).from(schema.mmrLeaves))
-		.length;
-	const newLeaves: (typeof schema.mmrLeaves.$inferInsert)[] = [];
-
+	const finalized: { key: string; leaf: Uint8Array }[] = [];
 	for (const r of rollups) {
 		const intervalMs = r.interval === 'day' ? 24 * HOUR_MS : HOUR_MS;
 		if (r.bucketStart + intervalMs > hourFloor) continue; // not finalized yet
 		const key = rollupKey(r);
 		if (logged.has(key)) continue;
-		const leaf = await leafHash(rollupLeafBytes(r));
-		const nodeIndex = await addLeafHash(nodes, leaf);
-		newLeaves.push({
-			leafNo: leafNo++,
-			nodeIndex,
-			rollupKey: key,
-			leafHash: toHex(leaf),
-		});
+		finalized.push({ key, leaf: await leafHash(rollupLeafBytes(r)) });
 	}
+	if (finalized.length === 0) return 0;
 
-	if (nodes.length > startCount) {
-		const nodeRows = [];
-		for (let i = startCount; i < nodes.length; i++) {
-			nodeRows.push({
-				nodeIndex: i,
-				hash: toHex(nodes[i] as Uint8Array),
-			});
-		}
-		await client.insert(schema.mmrNodes).values(nodeRows);
-	}
-	if (newLeaves.length > 0) {
-		await client.insert(schema.mmrLeaves).values(newLeaves);
-	}
-	return newLeaves.length;
+	const startCount = await nodeCount(env);
+	const appended = await appendLeaves(
+		d1NodeStore(env),
+		startCount,
+		finalized.map((f) => f.leaf),
+	);
+	await client.insert(schema.mmrNodes).values(
+		appended.newNodes.map((n) => ({
+			nodeIndex: n.index,
+			hash: toHex(n.hash),
+		})),
+	);
+
+	const leafNo = (await client.select({ k: schema.mmrLeaves.leafNo }).from(schema.mmrLeaves))
+		.length;
+	await client.insert(schema.mmrLeaves).values(
+		finalized.map((f, k) => ({
+			leafNo: leafNo + k,
+			nodeIndex: appended.leafIndices[k] as number,
+			rollupKey: f.key,
+			leafHash: toHex(f.leaf),
+		})),
+	);
+	return finalized.length;
 }
 
-/** Compute the current bagged root + size from the persisted nodes. */
+/** Compute the current bagged root + size, reading only the accumulator peaks. */
 async function currentRoot(env: Env): Promise<{ size: number; root: string }> {
-	const nodes = await loadNodes(env);
-	const size = nodes.length;
-	const root = toHex(await mmrRoot(nodes));
+	const size = await nodeCount(env);
+	const root = toHex(await mmrRootStore(d1NodeStore(env), size));
 	return { size, root };
 }
 
@@ -180,10 +196,10 @@ export async function inclusionForRollup(
 		.from(schema.mmrLeaves)
 		.where(eq(schema.mmrLeaves.rollupKey, key));
 	if (leaf[0] === undefined) return null;
-	const nodes = await loadNodes(env);
-	const size = nodes.length;
-	const proof = proveInclusion(nodes, leaf[0].nodeIndex, size);
-	const root = toHex(await mmrRoot(nodes));
+	const store = d1NodeStore(env);
+	const size = await nodeCount(env);
+	const proof = await proveInclusionStore(store, leaf[0].nodeIndex, size);
+	const root = toHex(await mmrRootStore(store, size));
 	return { receipt: inclusionToReceipt(proof), root, size };
 }
 
@@ -193,8 +209,7 @@ export async function consistencyBetween(
 	sizeFrom: number,
 	sizeTo: number,
 ): Promise<ConsistencyReceipt> {
-	const nodes = await loadNodes(env);
-	return consistencyToReceipt(proveConsistency(nodes, sizeFrom, sizeTo));
+	return consistencyToReceipt(await proveConsistencyStore(d1NodeStore(env), sizeFrom, sizeTo));
 }
 
 /** Cron entry: maintain the transparency log + emit a checkpoint. No-op unless a signing key is set

@@ -196,6 +196,129 @@ export function proveConsistency(
 	};
 }
 
+// ————————————————————————————————————————————————————————————————————————————————————————————————
+// Store-backed MMR. The array API above materializes the whole tree; these variants read only the
+// nodes an operation actually needs (O(log n) for append/inclusion/root, O(log² n) for consistency),
+// so a persisted log never loads all N nodes per request. Index math is value-free (`indexHeight`,
+// `peakIndices`, `inclusionProofPath`), so only value lookups go through the store.
+
+/** A batched reader of MMR node hashes by index, backed by any store (D1, KV, memory). */
+export interface NodeStore {
+	/** Read the hashes at `indices` (each index < the committed node count), in the given order. */
+	getMany(indices: number[]): Promise<Uint8Array[]>;
+}
+
+/** A {@link NodeStore} over an in-memory node array (for tests and small trees). */
+export function arrayStore(nodes: Uint8Array[]): NodeStore {
+	return {
+		getMany: (indices) => Promise.resolve(indices.map((i) => nodes[i] as Uint8Array)),
+	};
+}
+
+/** One appended node and where it lives, for the caller to persist. */
+export interface AppendedNode {
+	index: number;
+	hash: Uint8Array;
+}
+
+/** Result of {@link appendLeaves}: the NEW nodes to persist, the leaf node indices, and the new count. */
+export interface AppendResult {
+	newNodes: AppendedNode[];
+	leafIndices: number[];
+	count: number;
+}
+
+/**
+ * Append `leaves` (leaf hashes) to a tree of `startCount` nodes, reading only the current peaks from
+ * `store` (the sole pre-existing nodes any merge touches) plus the nodes created within this batch.
+ * Returns the new nodes to persist — never loads the whole tree.
+ */
+export async function appendLeaves(
+	store: NodeStore,
+	startCount: number,
+	leaves: Uint8Array[],
+): Promise<AppendResult> {
+	// Every pre-existing node a merge reads is a current peak; preload them once.
+	const peakIdx = peakIndices(startCount);
+	const peakHashes = peakIdx.length ? await store.getMany(peakIdx) : [];
+	const known = new Map<number, Uint8Array>();
+	peakIdx.forEach((idx, k) => known.set(idx, peakHashes[k] as Uint8Array));
+
+	const newNodes: AppendedNode[] = [];
+	const leafIndices: number[] = [];
+	let count = startCount;
+	const add = (index: number, hash: Uint8Array): void => {
+		known.set(index, hash);
+		newNodes.push({ index, hash });
+	};
+
+	for (const f of leaves) {
+		leafIndices.push(count);
+		add(count, f);
+		count += 1;
+		let g = 0;
+		// `count` is the next free slot (the draft's post-append length, i.e. `i`).
+		while (indexHeight(count) > g) {
+			const i = count;
+			const left = known.get(i - (2 << g)) as Uint8Array;
+			const right = known.get(i - 1) as Uint8Array;
+			add(i, await hashPosPair(i + 1, left, right));
+			count += 1;
+			g += 1;
+		}
+	}
+	return { newNodes, leafIndices, count };
+}
+
+/** The bagged root over a tree of `count` nodes, reading only its peaks from `store`. */
+export async function mmrRootStore(store: NodeStore, count: number): Promise<Uint8Array> {
+	const peaks = await store.getMany(peakIndices(count));
+	return baggedRoot(count, peaks);
+}
+
+/** An inclusion proof for the node at `index`, reading only its sibling path + the accumulator peaks. */
+export async function proveInclusionStore(
+	store: NodeStore,
+	index: number,
+	count: number,
+): Promise<InclusionProof> {
+	const pathIdx = inclusionProofPath(index, count - 1);
+	const peakIdx = peakIndices(count);
+	// One batched read: leaf, then the path siblings, then the peaks.
+	const values = await store.getMany([index, ...pathIdx, ...peakIdx]);
+	const leaf = values[0] as Uint8Array;
+	const path = values.slice(1, 1 + pathIdx.length);
+	const peaks = values.slice(1 + pathIdx.length);
+	return { index, leaf, path, size: count, peaks };
+}
+
+/** A consistency proof between two tree sizes, reading only the old peaks, their paths, and new peaks. */
+export async function proveConsistencyStore(
+	store: NodeStore,
+	sizeFrom: number,
+	sizeTo: number,
+): Promise<ConsistencyProof> {
+	const peaksFromIdx = peakIndices(sizeFrom);
+	const pathsIdx = peaksFromIdx.map((index) => inclusionProofPath(index, sizeTo - 1));
+	const peaksToIdx = peakIndices(sizeTo);
+	// Gather every needed index into one batched read, then slice it back apart.
+	const all = [...peaksFromIdx, ...pathsIdx.flat(), ...peaksToIdx];
+	const values = await store.getMany(all);
+	const at = new Map<number, Uint8Array>();
+	all.forEach((idx, k) => at.set(idx, values[k] as Uint8Array));
+	return {
+		sizeFrom,
+		sizeTo,
+		peaksFrom: peaksFromIdx.map((i) => at.get(i) as Uint8Array),
+		inclusions: peaksFromIdx.map((index, k) => ({
+			index,
+			leaf: at.get(index) as Uint8Array,
+			path: (pathsIdx[k] as number[]).map((i) => at.get(i) as Uint8Array),
+		})),
+		peaksTo: peaksToIdx.map((i) => at.get(i) as Uint8Array),
+	};
+}
+
 /** Verify a consistency proof against both signed roots. */
 export async function verifyConsistency(
 	proof: ConsistencyProof,
