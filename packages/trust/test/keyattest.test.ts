@@ -61,6 +61,21 @@ describe('key-attestation verification (workerd)', () => {
 		expect(good.vendor).toBe('ACME KMS-HSM');
 	});
 
+	it('never embeds private key material even if a PRIVATE JWK is passed as the subject', async () => {
+		const attestor = await edKey();
+		const { privateJwk, publicJwk } = await generateSigningJwk('EdDSA');
+		expect(privateJwk.d).toBeTruthy();
+		// A caller mistake: pass the PRIVATE jwk. The attestation must strip `d`, not publish it.
+		const att = await signKeyAttestation(privateJwk, DEVICE, attestor, NOW);
+		expect((att.payload.subjectPublicJwk as { d?: string }).d).toBeUndefined();
+		const res = await verifyKeyAttestation(att, {
+			trustAnchors: [attestor.publicJwk],
+			now: NOW,
+			expectedThumbprint: await calculateJwkThumbprint(publicJwk),
+		});
+		expect(res.hardware).toBe(true);
+	});
+
 	it('yields hardware:false with a WRONG trust anchor (signature valid, not anchored)', async () => {
 		const attestor = await edKey();
 		const wrongAnchor = await edKey();

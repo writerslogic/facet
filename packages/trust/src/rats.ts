@@ -33,7 +33,12 @@ import { canonicalizeBytes } from './canonicalize.js';
 import { signDetachedJws, verifyDetachedJws } from './jws.js';
 import { type KeyAttestation, verifyKeyAttestation } from './keyattest.js';
 import type { SigningKey } from './keys.js';
-import { type SignedStatement, signStatement, verifyStatement } from './statement.js';
+import {
+	type SignedStatement,
+	type StatementProof,
+	signStatement,
+	verifyStatement,
+} from './statement.js';
 
 /** EAT profile URN for creation/process evidence (draft-condrey). */
 export const EAT_PROCESS_PROFILE = 'urn:ietf:params:rats:eat:profile:process-evidence:1.0' as const;
@@ -227,6 +232,19 @@ async function verifyEmbeddedHardwareRoot(
 	return result.hardware;
 }
 
+/** True when the `cnf` subject key IS the key that actually signed the EAT — compared by RFC 7638
+ * thumbprint of the real key material in `cnf.jwk` vs the proof's embedded public key. This is the
+ * genuine key binding: the self-asserted `kid` labels are attacker-controlled and prove nothing. */
+async function cnfBoundToSigner(claims: EatClaims, proof: StatementProof): Promise<boolean> {
+	const cnfJwk = claims.cnf?.jwk as JWK | undefined;
+	if (!cnfJwk || !proof?.publicJwk) return false;
+	const [cnf, signer] = await Promise.all([
+		calculateJwkThumbprint(cnfJwk),
+		calculateJwkThumbprint(proof.publicJwk),
+	]);
+	return cnf === signer;
+}
+
 /**
  * Verify a process-evidence EAT and produce an attestation result: the EAT signature must verify, the
  * `content-ref` digest must match the process-evidence, the `cnf` subject key must match the signing
@@ -259,15 +277,15 @@ export async function verifyProcessEvidence(
 			reason: 'content-ref digest does not match evidence',
 		};
 	}
-	// Key binding: the cnf subject key must be the key that signed the EAT.
-	const cnfKid = (claims.cnf?.jwk as { kid?: string } | undefined)?.kid;
-	const keyBound = cnfKid !== undefined && cnfKid === stmt.proof.kid;
+	// Key binding: the cnf subject key must BE the key that signed the EAT — compared by RFC 7638
+	// thumbprint of the actual key material, NOT the self-asserted `kid` labels (which a forger controls).
+	const keyBound = await cnfBoundToSigner(claims, stmt.proof);
 	if (!keyBound) {
 		return {
 			valid: false,
 			keyBound: false,
 			hardwareRootOfTrust: false,
-			reason: 'cnf subject key is not bound to the signing key',
+			reason: 'cnf subject key is not the EAT signing key',
 		};
 	}
 	if (opts.nonce !== undefined && claims.eat_nonce !== opts.nonce) {

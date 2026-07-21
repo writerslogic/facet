@@ -72,6 +72,17 @@ describe('MMR inclusion', () => {
 		const rootB = await baggedRoot(b.nodes.length, accumulatorHashes(b.nodes, b.nodes.length));
 		expect(await verifyInclusion(proof, rootB)).toBe(false);
 	});
+
+	it('rejects an inclusion proof for an INTERIOR (non-leaf) node', async () => {
+		// Node index 2 is an interior aggregation node (height 1), not a committed leaf. A proof for it
+		// folds to a real peak, so it must be rejected explicitly, not accepted as a member.
+		const { nodes } = await build(8);
+		const count = nodes.length;
+		const root = await baggedRoot(count, accumulatorHashes(nodes, count));
+		expect(indexHeight(2)).not.toBe(0);
+		const interiorProof = proveInclusion(nodes, 2, count);
+		expect(await verifyInclusion(interiorProof, root)).toBe(false);
+	});
 });
 
 describe('MMR consistency', () => {
@@ -92,5 +103,36 @@ describe('MMR consistency', () => {
 		// A wrong "from" root must fail.
 		const bogus = await baggedRoot(sizeFrom, accumulatorHashes(nodes, sizeTo));
 		expect(await verifyConsistency(proof, bogus, rootTo)).toBe(false);
+	});
+
+	it('rejects a forged proof whose inclusions do not cover the old peaks', async () => {
+		// Old peaks bag to the genuine rootFrom, but the inclusions are swapped for a proof of an
+		// UNRELATED leaf that still folds to a new peak. Without binding inc.leaf to peaksFrom[i] this
+		// forgery would pass, letting a log rewrite history between checkpoints.
+		const nodes: Uint8Array[] = [];
+		for (let k = 0; k < 5; k++) await addLeafHash(nodes, await leafHash(`c-${k}`));
+		const sizeFrom = nodes.length;
+		const rootFrom = await baggedRoot(sizeFrom, accumulatorHashes(nodes, sizeFrom));
+		for (let k = 5; k < 12; k++) await addLeafHash(nodes, await leafHash(`c-${k}`));
+		const sizeTo = nodes.length;
+		const rootTo = await baggedRoot(sizeTo, accumulatorHashes(nodes, sizeTo));
+
+		const proof = proveConsistency(nodes, sizeFrom, sizeTo);
+		expect(await verifyConsistency(proof, rootFrom, rootTo)).toBe(true);
+
+		const unrelated = proveInclusion(nodes, 0, sizeTo);
+		expect(unrelated.leaf).not.toEqual(proof.peaksFrom[0]);
+		const forged = {
+			...proof,
+			inclusions: [
+				{
+					index: unrelated.index,
+					leaf: unrelated.leaf,
+					path: unrelated.path,
+				},
+				...proof.inclusions.slice(1),
+			],
+		};
+		expect(await verifyConsistency(forged, rootFrom, rootTo)).toBe(false);
 	});
 });

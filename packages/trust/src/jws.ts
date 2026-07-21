@@ -44,6 +44,7 @@ export interface DetachedProof {
 	type: string;
 	jws: string;
 	kid: string;
+	alg?: string;
 	publicJwk: JWK;
 }
 
@@ -71,6 +72,13 @@ export async function verifyDetachedProof(
 			return {
 				ok: false,
 				reason: 'protected-header kid does not match proof kid',
+			};
+		}
+		// The declared proof.alg must equal the SIGNED protected-header alg, else it is unauthenticated.
+		if (proof.alg !== undefined && protectedHeader.alg !== proof.alg) {
+			return {
+				ok: false,
+				reason: 'protected-header alg does not match proof alg',
 			};
 		}
 		return { ok: true };

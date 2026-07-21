@@ -77,6 +77,21 @@ describe('RATS process-evidence', () => {
 		expect(result.valid).toBe(false);
 		expect(result.keyBound).toBe(false);
 	});
+
+	it('rejects a cnf whose kid LABEL is spoofed to the signer but whose key material differs', async () => {
+		// The forgery the old kid-string binding allowed: sign with your own key, then set cnf to the
+		// VICTIM's key material carrying the SIGNER's kid label. Binding by RFC 7638 thumbprint of the
+		// actual key material (not the self-asserted kid) must reject it.
+		const key = await edKey();
+		const victim = await generateSigningJwk('EdDSA');
+		const eat = await signProcessEvidence(EVIDENCE, key, {
+			now: 1_770_000_000_000,
+		});
+		eat.payload.cnf = { jwk: { ...victim.publicJwk, kid: key.kid } };
+		const result = await verifyProcessEvidence(eat);
+		expect(result.keyBound).toBe(false);
+		expect(result.valid).toBe(false);
+	});
 });
 
 describe('RATS challenge-response proof-of-possession', () => {

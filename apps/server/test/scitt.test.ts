@@ -7,12 +7,18 @@ import { env } from 'cloudflare:test';
 import {
 	type ScittReceiptPayload,
 	type SignedStatement,
+	canonicalizeBytes,
 	generateSigningJwk,
+	loadSigningKey,
+	sha256,
+	signSignedStatement,
+	toHex,
 	verifyScittReceipt,
 	verifySignedStatement,
 } from '@facet/trust';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
+import { registerExternal } from '../src/lib/scitt.js';
 
 const ADMIN = 'Bearer test-admin-token';
 let signingEnv: typeof env & { FACET_SIGNING_JWK: string };
@@ -96,5 +102,54 @@ describe('POST /api/scitt/attestation', () => {
 			env,
 		);
 		expect(res.status).toBe(501);
+	});
+});
+
+describe('registerExternal statement binding', () => {
+	afterEach(() => vi.unstubAllGlobals());
+
+	it('reports statementMatches only when the receipt attests the submitted statement', async () => {
+		const gen = await generateSigningJwk('EdDSA');
+		const key = await loadSigningKey(JSON.stringify(gen.privateJwk));
+		const stmt = await signSignedStatement({ vc: 'x' }, key, 0);
+		const ourHash = toHex(await sha256(canonicalizeBytes(stmt)));
+		const externalEnv = { ...signingEnv, SCITT_URL: 'https://ts.example' };
+
+		// The external service returns a receipt-shaped body about a DIFFERENT statement.
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						JSON.stringify({
+							proof: { type: 'DetachedJWS' },
+							payload: {
+								inclusion: {},
+								statementHash: 'deadbeef',
+							},
+						}),
+						{ status: 200 },
+					),
+			),
+		);
+		const mismatch = await registerExternal(externalEnv, stmt);
+		expect(mismatch?.statementMatches).toBe(false);
+
+		// A receipt whose statementHash equals ours binds.
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(
+				async () =>
+					new Response(
+						JSON.stringify({
+							proof: { type: 'DetachedJWS' },
+							payload: { inclusion: {}, statementHash: ourHash },
+						}),
+						{ status: 200 },
+					),
+			),
+		);
+		const match = await registerExternal(externalEnv, stmt);
+		expect(match?.statementMatches).toBe(true);
 	});
 });

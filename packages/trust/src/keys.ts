@@ -118,3 +118,35 @@ export function requireCryptoKey(key: KeyLike): SubtleKey {
 	}
 	return key as SubtleKey;
 }
+
+/** Web Crypto sign/verify algorithm params for a `SigningAlg` (distinct from `signImportParams`, which
+ * is for `importKey`). The single home for the alg→params map, shared by every raw `crypto.subtle`
+ * sign/verify path (COSE_Sign1, RFC 9421) so a new alg is added in exactly one place. */
+export function subtleSignParams(
+	alg: SigningAlg,
+): { name: 'Ed25519' } | { name: 'ECDSA'; hash: 'SHA-256' } {
+	return alg === 'EdDSA' ? { name: 'Ed25519' } : { name: 'ECDSA', hash: 'SHA-256' };
+}
+
+/** Import a PUBLIC JWK as a real Web Crypto `CryptoKey` for the raw `crypto.subtle.verify` paths (COSE,
+ * RFC 9421). Uses `crypto.subtle.importKey('jwk', …)` so the result is a `CryptoKey` in BOTH workerd AND
+ * Node — unlike jose's `importJWK`, which yields a Node `KeyObject` that `crypto.subtle` cannot use (the
+ * cause of COSE/HTTP-sig verification failing under Node). */
+export async function importVerifyKey(jwk: JWK): Promise<{ key: SubtleKey; alg: SigningAlg }> {
+	const alg = jwk.alg === 'ES256' || jwk.alg === 'EdDSA' ? jwk.alg : algForJwk(jwk);
+	const key = await crypto.subtle.importKey('jwk', jwk as never, signImportParams(alg), false, [
+		'verify',
+	]);
+	return { key, alg };
+}
+
+/** Private JWK members (JWK/JWA): the fields that make a JWK a *private* key. */
+const PRIVATE_JWK_MEMBERS = ['d', 'p', 'q', 'dp', 'dq', 'qi', 'oth', 'k'] as const;
+
+/** Return a copy of `jwk` with every private member stripped — a public-only JWK safe to publish or
+ * embed. Guards against a private key leaking on the wire when a public one is expected. */
+export function toPublicJwkFields(jwk: JWK): JWK {
+	const out = { ...jwk } as Record<string, unknown>;
+	for (const m of PRIVATE_JWK_MEMBERS) delete out[m];
+	return out as unknown as JWK;
+}

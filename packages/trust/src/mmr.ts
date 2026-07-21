@@ -152,6 +152,9 @@ export function proveInclusion(nodes: Uint8Array[], index: number, count: number
 /** Verify an inclusion proof against a signed bagged `root`: the node folds to an accumulator peak,
  * and the accumulator bags to `root`. */
 export async function verifyInclusion(proof: InclusionProof, root: Uint8Array): Promise<boolean> {
+	// An inclusion receipt proves membership of a LEAF; reject interior (aggregation) nodes, else an
+	// internal node hash would verify as a committed log entry.
+	if (indexHeight(proof.index) !== 0) return false;
 	const peak = await includedRoot(proof.index, proof.leaf, proof.path);
 	if (!proof.peaks.some((p) => bytesEqual(p, peak))) return false;
 	return bytesEqual(await baggedRoot(proof.size, proof.peaks), root);
@@ -193,12 +196,19 @@ export async function verifyConsistency(
 	rootFrom: Uint8Array,
 	rootTo: Uint8Array,
 ): Promise<boolean> {
+	// The larger tree cannot be smaller, and there must be exactly one inclusion per old peak.
+	if (proof.sizeTo < proof.sizeFrom) return false;
+	if (proof.inclusions.length !== proof.peaksFrom.length) return false;
 	// The old accumulator must bag to the old signed root.
 	if (!bytesEqual(await baggedRoot(proof.sizeFrom, proof.peaksFrom), rootFrom)) return false;
 	// The new accumulator must bag to the new signed root.
 	if (!bytesEqual(await baggedRoot(proof.sizeTo, proof.peaksTo), rootTo)) return false;
-	// Every old peak must still be provable in the new tree (folds to a new accumulator peak).
-	for (const inc of proof.inclusions) {
+	// Each OLD PEAK must itself be the leaf of its inclusion proof AND fold to a new accumulator peak.
+	// Binding inc.leaf to peaksFrom[i] is what actually proves the old tree is a prefix of the new one;
+	// without it a prover could supply inclusions for unrelated nodes and forge a consistency proof.
+	for (let i = 0; i < proof.inclusions.length; i++) {
+		const inc = proof.inclusions[i] as ConsistencyProof['inclusions'][number];
+		if (!bytesEqual(inc.leaf, proof.peaksFrom[i] as Uint8Array)) return false;
 		const peak = await includedRoot(inc.index, inc.leaf, inc.path);
 		if (!proof.peaksTo.some((p) => bytesEqual(p, peak))) return false;
 	}

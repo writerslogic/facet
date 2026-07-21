@@ -12,7 +12,7 @@
 // `hardware: true` without a trust-anchor-verified attestation.
 
 import { type JWK, calculateJwkThumbprint } from 'jose';
-import type { SigningKey } from './keys.js';
+import { type SigningKey, toPublicJwkFields } from './keys.js';
 import { type SignedStatement, signStatement, verifyStatement } from './statement.js';
 
 /** Statement type for a Facet hardware key-attestation. */
@@ -65,10 +65,12 @@ export async function signKeyAttestation(
 	attestorKey: SigningKey,
 	now: number,
 ): Promise<KeyAttestation> {
-	const subjectThumbprint = await calculateJwkThumbprint(subjectPublicJwk);
+	// Strip any private members so a caller passing a private JWK by mistake never leaks it on the wire.
+	const publicJwk = toPublicJwkFields(subjectPublicJwk);
+	const subjectThumbprint = await calculateJwkThumbprint(publicJwk);
 	const claims: KeyAttestationClaims = {
 		subjectThumbprint,
-		subjectPublicJwk,
+		subjectPublicJwk: publicJwk,
 		deviceClass: deviceProps.deviceClass,
 		...(deviceProps.fipsLevel !== undefined ? { fipsLevel: deviceProps.fipsLevel } : {}),
 		extractable: false,

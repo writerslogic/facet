@@ -4,7 +4,7 @@
 // Integrity `eddsa-jcs-2022` is Ed25519-only). Reuses @facet/trust's generator so the `kid` is the
 // RFC 7638 thumbprint, exactly as the Worker expects.
 
-import { writeFile } from 'node:fs/promises';
+import { chmod, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { type SigningAlg, generateSigningJwk } from '@facet/trust';
 import pc from 'picocolors';
@@ -42,6 +42,9 @@ async function runGenerate(args: string[]): Promise<number> {
 
 	if (values.out) {
 		await writeFile(values.out, `${privateJson}\n`, { mode: 0o600 });
+		// `mode` only applies when the file is CREATED; enforce 0600 explicitly so overwriting a
+		// pre-existing (possibly world-readable) file never leaves the private key exposed.
+		await chmod(values.out, 0o600);
 		process.stdout.write(`${pc.green('✓')} wrote private signing JWK → ${values.out}\n`);
 		process.stdout.write(
 			`  ${pc.dim(`kid ${publicJwk.kid} (${alg}). Store it as a secret: wrangler secret put FACET_SIGNING_JWK < ${values.out}`)}\n`,
