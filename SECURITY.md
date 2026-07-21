@@ -44,9 +44,13 @@ especially valuable include:
 
 ## Handling of secrets
 
-The only secret in a v1 deployment is `ADMIN_TOKEN` (a Worker secret). API keys are stored only as
-`SHA-256` hashes; plaintext keys are shown once at issuance and are never retrievable. Never commit
-`.dev.vars`, tokens, or database ids in a report or PR.
+Worker secrets: `ADMIN_TOKEN` (admin auth) and `CF_API_TOKEN` (Analytics Engine reads) are required;
+`WEBHOOK_SECRET` (anomaly-webhook HMAC), `FACET_SIGNING_JWK` (attestation/provenance signing key), and
+`SCITT_TOKEN` (external transparency service) are optional and only used when their features are
+enabled. API keys are stored only as `SHA-256` hashes; plaintext keys are shown once at issuance and
+are never retrievable. `FACET_SIGNING_JWK` holds a private key — its public half is published at
+`/.well-known/jwks.json`, but the private JWK must live only as a Worker secret. Never commit
+`.dev.vars`, tokens, private keys, or database ids in a report or PR.
 
 ## Supply-chain provenance
 
