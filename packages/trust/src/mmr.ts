@@ -128,6 +128,12 @@ export function accumulatorHashes(nodes: Uint8Array[], count: number): Uint8Arra
 	return peakIndices(count).map((i) => nodes[i] as Uint8Array);
 }
 
+/** The bagged root over the full node array — `baggedRoot(nodes.length, accumulator)`. The single
+ * "compute the current tree root" helper, so callers never re-spell the accumulator+bag composition. */
+export function mmrRoot(nodes: Uint8Array[]): Promise<Uint8Array> {
+	return baggedRoot(nodes.length, accumulatorHashes(nodes, nodes.length));
+}
+
 /** An inclusion proof: the leaf's node index, its hash, the sibling path, and the committed tree. */
 export interface InclusionProof {
 	index: number;

@@ -11,14 +11,13 @@ import {
 	type InclusionReceipt,
 	type SignedStatement,
 	type SigningKey,
-	accumulatorHashes,
 	addLeafHash,
-	baggedRoot,
 	canonicalizeBytes,
 	consistencyToReceipt,
 	fromHex,
 	inclusionToReceipt,
 	leafHash,
+	mmrRoot,
 	proveConsistency,
 	proveInclusion,
 	signCheckpoint,
@@ -132,7 +131,7 @@ export async function appendFinalizedRollups(env: Env, now: number): Promise<num
 async function currentRoot(env: Env): Promise<{ size: number; root: string }> {
 	const nodes = await loadNodes(env);
 	const size = nodes.length;
-	const root = toHex(await baggedRoot(size, accumulatorHashes(nodes, size)));
+	const root = toHex(await mmrRoot(nodes));
 	return { size, root };
 }
 
@@ -184,7 +183,7 @@ export async function inclusionForRollup(
 	const nodes = await loadNodes(env);
 	const size = nodes.length;
 	const proof = proveInclusion(nodes, leaf[0].nodeIndex, size);
-	const root = toHex(await baggedRoot(size, accumulatorHashes(nodes, size)));
+	const root = toHex(await mmrRoot(nodes));
 	return { receipt: inclusionToReceipt(proof), root, size };
 }
 

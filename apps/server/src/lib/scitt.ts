@@ -13,13 +13,12 @@ import {
 	type ScittReceiptPayload,
 	type ScittReceiptVerification,
 	type SignedStatement,
-	accumulatorHashes,
 	addLeafHash,
-	baggedRoot,
 	canonicalDigestHex,
 	fromHex,
 	inclusionToReceipt,
 	leafHash,
+	mmrRoot,
 	proveInclusion,
 	signScittReceipt,
 	toHex,
@@ -81,7 +80,7 @@ export async function registerLocal(
 	const entryId = rows.findIndex((r) => r.entryId === inserted.entryId);
 	if (entryId < 0) return null;
 	const size = nodes.length;
-	const root = toHex(await baggedRoot(size, accumulatorHashes(nodes, size)));
+	const root = toHex(await mmrRoot(nodes));
 	const inclusion = inclusionToReceipt(
 		proveInclusion(nodes, leafNodeIndices[entryId] as number, size),
 	);
