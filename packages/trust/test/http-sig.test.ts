@@ -105,3 +105,69 @@ describe('RFC 9421 signResponse/verifyResponse', () => {
 		expect(ok).toBe(false);
 	});
 });
+
+/** Standard base64 of raw bytes, computed without touching the implementation under test. */
+function b64(bytes: Uint8Array): string {
+	let s = '';
+	for (const byte of bytes) s += String.fromCharCode(byte);
+	return btoa(s);
+}
+
+describe('RFC 9421 conformance (independent signature-base reconstruction)', () => {
+	// Rebuild the §2.5 signature base, §2.3 signature params, and RFC 9530 content-digest here from the
+	// RFC's own rules — NOT from http-sig.ts — then sign the base with the same key via Web Crypto
+	// directly. Ed25519 is deterministic, so if the implementation assembles the base exactly as the RFC
+	// prescribes, its emitted signature must equal this independently produced one, byte for byte.
+	it('signResponse output matches a from-scratch RFC 9421 construction', async () => {
+		const { privateJwk, publicJwk } = await generateSigningJwk('EdDSA');
+		const key = await loadSigningKey(JSON.stringify(privateJwk));
+		const body = enc.encode(JSON.stringify({ site: 'a', visitors: 42 }));
+		const created = 1_770_000_000;
+
+		// Independent RFC 9530 Content-Digest: sha-256=:<base64(SHA-256(body))>:
+		const digestBytes = new Uint8Array(await crypto.subtle.digest('SHA-256', body));
+		const contentDigest = `sha-256=:${b64(digestBytes)}:`;
+
+		// Independent §2.3 signature params + §2.5 base string (covered components in fixed order).
+		const params = `("content-digest" "content-type");created=${created};keyid="${key.kid}";alg="ed25519"`;
+		const base = [
+			`"content-digest": ${contentDigest}`,
+			`"content-type": ${CT}`,
+			`"@signature-params": ${params}`,
+		].join('\n');
+
+		// Independent Ed25519 signature over the base, using the same private key material.
+		const priv = await crypto.subtle.importKey(
+			'jwk',
+			privateJwk as unknown as JsonWebKey,
+			{ name: 'Ed25519' },
+			false,
+			['sign'],
+		);
+		const expectedSig = new Uint8Array(
+			await crypto.subtle.sign({ name: 'Ed25519' }, priv, enc.encode(base)),
+		);
+
+		const headers = await signResponse({
+			body,
+			contentType: CT,
+			created,
+			key,
+		});
+
+		expect(headers['content-digest']).toBe(contentDigest);
+		expect(headers['signature-input']).toBe(`sig1=${params}`);
+		expect(headers.signature).toBe(`sig1=:${b64(expectedSig)}:`);
+
+		// And the independently produced signature verifies through the implementation's verify path.
+		const ok = await verifyResponse({
+			body,
+			contentType: CT,
+			contentDigest,
+			signatureInput: `sig1=${params}`,
+			signature: `sig1=:${b64(expectedSig)}:`,
+			publicJwk,
+		});
+		expect(ok).toBe(true);
+	});
+});

@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { base58decode, base58encode } from '../src/base58.js';
+import { canonicalDigest } from '../src/canonicalize.js';
 import {
 	buildDidConfiguration,
 	buildDidDocument,
@@ -101,6 +102,48 @@ describe('eddsa-jcs-2022 credential', () => {
 				created: 'now',
 			}),
 		).rejects.toThrow();
+	});
+
+	// Reconstruct the W3C vc-di-eddsa hashData — SHA-256(JCS(proofConfig)) || SHA-256(JCS(unsecured)) —
+	// from the spec's own steps here (not from vc.ts), sign it with Web Crypto directly, and multibase-
+	// encode. Ed25519 determinism means a spec-conformant issuer must emit exactly this proofValue: this
+	// pins the proof-config field set, the hash concatenation order, and the z-base58btc encoding.
+	it('proofValue matches a from-scratch eddsa-jcs-2022 construction', async () => {
+		const { privateJwk, publicJwk } = await generateSigningJwk('EdDSA');
+		const key = await loadSigningKey(JSON.stringify(privateJwk));
+		const created = '2026-07-01T00:00:00.000Z';
+		const verificationMethod = `did:web:facet.example#${key.kid}`;
+
+		// Independent proof configuration (proof options, no proofValue) per the cryptosuite.
+		const proofConfigObj = {
+			'@context': base['@context'],
+			type: 'DataIntegrityProof',
+			cryptosuite: 'eddsa-jcs-2022',
+			created,
+			verificationMethod,
+			proofPurpose: 'assertionMethod',
+		};
+		// hashData = proofConfigHash || documentHash (the unsecured credential has no proof to strip).
+		const hashData = new Uint8Array(64);
+		hashData.set(await canonicalDigest(proofConfigObj), 0);
+		hashData.set(await canonicalDigest(base), 32);
+
+		const priv = await crypto.subtle.importKey(
+			'jwk',
+			privateJwk as unknown as JsonWebKey,
+			{ name: 'Ed25519' },
+			false,
+			['sign'],
+		);
+		const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, priv, hashData));
+		const expectedProofValue = `z${base58encode(sig)}`;
+
+		const vc = await issueCredential(base, key, {
+			verificationMethod,
+			created,
+		});
+		expect(vc.proof?.proofValue).toBe(expectedProofValue);
+		expect((await verifyCredential(vc, { publicJwk })).valid).toBe(true);
 	});
 });
 
