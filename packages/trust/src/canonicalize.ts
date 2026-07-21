@@ -5,30 +5,26 @@
 // finite JSON number, exponent forms included (see canonicalize.test.ts §3.2.2/§3.2.3 vectors).
 // Reused for detached-JWS export proofs and the eddsa-jcs Data Integrity suite.
 
-import { sha256, toHex } from "./bytes.js";
+import { sha256, toHex } from './bytes.js';
 
 /** Canonicalize a JSON value to its RFC 8785 string form. Rejects non-finite numbers. */
 export function canonicalizeJson(value: unknown): string {
-	if (value === null) return "null";
-	if (typeof value === "number") {
-		if (!Number.isFinite(value))
-			throw new Error("cannot canonicalize a non-finite number");
+	if (value === null) return 'null';
+	if (typeof value === 'number') {
+		if (!Number.isFinite(value)) throw new Error('cannot canonicalize a non-finite number');
 		return JSON.stringify(value);
 	}
-	if (typeof value === "boolean" || typeof value === "string")
-		return JSON.stringify(value);
+	if (typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
 	if (Array.isArray(value)) {
-		return `[${value.map((v) => canonicalizeJson(v)).join(",")}]`;
+		return `[${value.map((v) => canonicalizeJson(v)).join(',')}]`;
 	}
-	if (typeof value === "object") {
+	if (typeof value === 'object') {
 		const obj = value as Record<string, unknown>;
 		const keys = Object.keys(obj)
 			.filter((k) => obj[k] !== undefined)
 			.sort();
-		const members = keys.map(
-			(k) => `${JSON.stringify(k)}:${canonicalizeJson(obj[k])}`,
-		);
-		return `{${members.join(",")}}`;
+		const members = keys.map((k) => `${JSON.stringify(k)}:${canonicalizeJson(obj[k])}`);
+		return `{${members.join(',')}}`;
 	}
 	throw new Error(`cannot canonicalize value of type ${typeof value}`);
 }

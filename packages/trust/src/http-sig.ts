@@ -110,6 +110,10 @@ export interface VerifyResponseInput {
 	signatureInput: string;
 	signature: string;
 	publicJwk: JWK;
+	/** Optional anti-replay bound: reject a signature whose `created` is older than this many seconds
+	 * relative to `now`. Both must be supplied together; omit to leave freshness to the caller. */
+	now?: number;
+	maxAgeSeconds?: number;
 }
 
 /** Verify an RFC 9421-signed response. Recomputes the digest + base and checks the raw signature. */
@@ -119,8 +123,14 @@ export async function verifyResponse(input: VerifyResponseInput): Promise<boolea
 	if (expectedDigest !== input.contentDigest) return false;
 
 	const { label, params } = parseSignatureInput(input.signatureInput);
-	const { alg } = parseSignatureParams(params);
+	const { alg, created } = parseSignatureParams(params);
 	if (alg !== 'ed25519' && alg !== 'ecdsa-p256-sha256') return false;
+
+	// Optional anti-replay: a signature older than maxAgeSeconds is stale even if otherwise valid.
+	if (input.now !== undefined && input.maxAgeSeconds !== undefined) {
+		if (created === undefined) return false;
+		if (input.now / 1000 - created > input.maxAgeSeconds) return false;
+	}
 
 	const base = signatureBase(
 		{

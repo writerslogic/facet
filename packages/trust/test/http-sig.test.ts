@@ -170,4 +170,31 @@ describe('RFC 9421 conformance (independent signature-base reconstruction)', () 
 		});
 		expect(ok).toBe(true);
 	});
+
+	it('rejects a stale signature only when maxAgeSeconds is set', async () => {
+		const { key, publicJwk } = await fixture('EdDSA');
+		const created = 1_770_000_000;
+		const body = enc.encode('x');
+		const headers = await signResponse({
+			body,
+			contentType: CT,
+			created,
+			key,
+		});
+		const common = {
+			body,
+			contentType: CT,
+			contentDigest: headers['content-digest'],
+			signatureInput: headers['signature-input'],
+			signature: headers.signature,
+			publicJwk,
+		};
+		const now = (created + 600) * 1000; // 10 minutes after signing
+
+		// No freshness bound → an otherwise-valid old signature still verifies.
+		expect(await verifyResponse(common)).toBe(true);
+		// Within the window verifies; past it is rejected as stale.
+		expect(await verifyResponse({ ...common, now, maxAgeSeconds: 900 })).toBe(true);
+		expect(await verifyResponse({ ...common, now, maxAgeSeconds: 300 })).toBe(false);
+	});
 });

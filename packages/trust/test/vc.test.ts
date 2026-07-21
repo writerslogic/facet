@@ -145,6 +145,29 @@ describe('eddsa-jcs-2022 credential', () => {
 		expect(vc.proof?.proofValue).toBe(expectedProofValue);
 		expect((await verifyCredential(vc, { publicJwk })).valid).toBe(true);
 	});
+
+	it('enforces validFrom/validUntil only when a clock is supplied', async () => {
+		const { key, publicJwk } = await edKey();
+		// validFrom 2026-07-01, validUntil 2026-08-01 — both are inside the signed document.
+		const vc = await issueCredential({ ...base, validUntil: '2026-08-01T00:00:00.000Z' }, key, {
+			verificationMethod: `did:web:facet.example#${key.kid}`,
+			created: '2026-07-01T00:00:00.000Z',
+		});
+		const within = Date.parse('2026-07-15T00:00:00.000Z');
+		const before = Date.parse('2026-06-01T00:00:00.000Z');
+		const after = Date.parse('2026-09-01T00:00:00.000Z');
+
+		// No clock → temporal validity is the caller's problem; signature alone decides.
+		expect((await verifyCredential(vc, { publicJwk })).valid).toBe(true);
+		// With a clock, the window is enforced against the authentic (signed) bounds.
+		expect((await verifyCredential(vc, { publicJwk, now: within })).valid).toBe(true);
+		const early = await verifyCredential(vc, { publicJwk, now: before });
+		expect(early.valid).toBe(false);
+		expect(early.reason).toBe('credential not yet valid');
+		const expired = await verifyCredential(vc, { publicJwk, now: after });
+		expect(expired.valid).toBe(false);
+		expect(expired.reason).toBe('credential expired');
+	});
 });
 
 describe('did:web', () => {

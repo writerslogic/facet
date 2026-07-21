@@ -102,6 +102,10 @@ export interface VerifyOptions {
 	/** The expected public key, as an Ed25519 JWK or a Multikey publicKeyMultibase. */
 	publicJwk?: { kty: string; crv?: string; x?: string };
 	publicKeyMultibase?: string;
+	/** When set (epoch ms), also enforce the credential's `validFrom`/`validUntil` window. Both bounds
+	 * are inside the signed document, so an authentic-but-expired credential is rejected here rather
+	 * than silently accepted. Omit to leave temporal validity to the caller (the default). */
+	now?: number;
 }
 
 export interface CredentialVerification {
@@ -154,13 +158,18 @@ export async function verifyCredential(
 		const signature = base58decode(proof.proofValue.slice(1));
 		const { key } = await importVerifyKey(jwk);
 		const ok = await crypto.subtle.verify(subtleSignParams('EdDSA'), key, signature, data);
-		return ok
-			? {
-					valid: true,
-					issuer,
-					verificationMethod: proof.verificationMethod,
-				}
-			: fail('signature did not verify');
+		if (!ok) return fail('signature did not verify');
+		if (opts.now !== undefined) {
+			const from = credential.validFrom ? Date.parse(credential.validFrom) : Number.NaN;
+			if (!Number.isNaN(from) && from > opts.now) return fail('credential not yet valid');
+			const until = credential.validUntil ? Date.parse(credential.validUntil) : Number.NaN;
+			if (!Number.isNaN(until) && until < opts.now) return fail('credential expired');
+		}
+		return {
+			valid: true,
+			issuer,
+			verificationMethod: proof.verificationMethod,
+		};
 	} catch (e) {
 		return fail(e instanceof Error ? e.message : 'verification error');
 	}
