@@ -51,7 +51,7 @@ import {
 	REALTIME_WINDOW_MS,
 } from '../lib/constants.js';
 import { toCsv } from '../lib/csv.js';
-import { ApiError } from '../lib/http.js';
+import { ApiError, validationErrorHook } from '../lib/http.js';
 import {
 	deploymentDid,
 	ed25519KeyErrorCode,
@@ -89,11 +89,7 @@ function toStatsFilter(query: StatsQueryInput, siteId: string): StatsFilter {
 statsRoutes.get(
 	'/stats',
 	requireApiKey,
-	vValidator('query', StatsQuerySchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const query = c.req.valid('query');
 		const f = toStatsFilter(query, c.get('siteId'));
@@ -141,11 +137,7 @@ statsRoutes.get(
 statsRoutes.get(
 	'/stats/sessions',
 	requireApiKey,
-	vValidator('query', StatsQuerySchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
 		return c.json({
@@ -158,11 +150,7 @@ statsRoutes.get(
 statsRoutes.get(
 	'/stats/channels',
 	requireApiKey,
-	vValidator('query', StatsQuerySchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
 		return c.json({
@@ -177,11 +165,7 @@ statsRoutes.get(
 statsRoutes.get(
 	'/stats/interactions',
 	requireApiKey,
-	vValidator('query', StatsQuerySchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
 		return c.json({ interactions: await topInteractions(c.env, f) });
@@ -362,11 +346,7 @@ statsRoutes.get('/stats/report', requireApiKey, async (c) => {
 statsRoutes.get(
 	'/stats/anomalies',
 	requireApiKey,
-	vValidator('query', StatsQuerySchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
 		return c.json({

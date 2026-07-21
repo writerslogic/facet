@@ -11,7 +11,7 @@ import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import { issueKey, listKeys, revokeKey } from '../lib/apikeys.js';
 import { requireAdmin } from '../lib/auth.js';
-import { ApiError } from '../lib/http.js';
+import { ApiError, validationErrorHook } from '../lib/http.js';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -22,11 +22,7 @@ export const adminRoutes = new Hono<AppEnv>();
 adminRoutes.post(
 	'/sites',
 	requireAdmin,
-	vValidator('json', CreateSiteSchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('json', CreateSiteSchema, validationErrorHook),
 	async (c) => {
 		const { name, domain } = c.req.valid('json');
 		const site: Site = {
@@ -61,11 +57,7 @@ adminRoutes.get('/sites', requireAdmin, async (c) => {
 adminRoutes.post(
 	'/keys',
 	requireAdmin,
-	vValidator('json', IssueKeySchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('json', IssueKeySchema, validationErrorHook),
 	async (c) => {
 		const { site_id, label } = c.req.valid('json');
 		const issued = await issueKey(c.env, site_id, label ?? null, Date.now());

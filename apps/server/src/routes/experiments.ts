@@ -13,6 +13,7 @@ import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import { requireAdmin } from '../lib/auth.js';
+import { validationErrorHook } from '../lib/http.js';
 
 const UuidSchema = v.pipe(v.string(), v.uuid());
 
@@ -31,11 +32,7 @@ experimentsRoutes.get('/active', async (c) => {
 experimentsRoutes.post(
 	'/',
 	requireAdmin,
-	vValidator('json', ExperimentSchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('json', ExperimentSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
 		const experiment: Experiment = {

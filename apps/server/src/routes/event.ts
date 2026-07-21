@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { requireApiKey } from '../lib/auth.js';
 import { isGpcOptOut } from '../lib/gpc.js';
+import { validationErrorHook } from '../lib/http.js';
 import { ingestEvent } from '../lib/ingest.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, device } from '../lib/request-meta.js';
@@ -22,11 +23,7 @@ eventRoute.post(
 	'/',
 	requireApiKey,
 	rateLimit((c) => `event:${c.get('siteId')}`),
-	vValidator('json', ServerEventSchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('json', ServerEventSchema, validationErrorHook),
 	async (c) => {
 		// GPC opt-out: an authenticated backend still relays the visitor's signal; drop before write.
 		if (isGpcOptOut(c.req.raw)) {

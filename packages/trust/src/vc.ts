@@ -8,7 +8,7 @@
 
 import { base58decode, base58encode } from './base58.js';
 import { canonicalDigest } from './canonicalize.js';
-import { type SigningKey, importVerifyKey } from './keys.js';
+import { type SigningKey, importVerifyKey, subtleSignParams } from './keys.js';
 import { ed25519RawFromJwk, publicKeyMultibaseToJwk, rawToEd25519Jwk } from './multikey.js';
 
 /** The W3C VC 2.0 base context. */
@@ -85,7 +85,7 @@ export async function issueCredential(
 	const config = proofConfig(credential, opts);
 	const data = await hashData(unsecured, config);
 	const signature = new Uint8Array(
-		await crypto.subtle.sign({ name: 'Ed25519' }, key.privateKey, data),
+		await crypto.subtle.sign(subtleSignParams('EdDSA'), key.privateKey, data),
 	);
 	const proof: DataIntegrityProof = {
 		type: 'DataIntegrityProof',
@@ -153,7 +153,7 @@ export async function verifyCredential(
 		const data = await hashData(unsecured, config);
 		const signature = base58decode(proof.proofValue.slice(1));
 		const { key } = await importVerifyKey(jwk);
-		const ok = await crypto.subtle.verify({ name: 'Ed25519' }, key, signature, data);
+		const ok = await crypto.subtle.verify(subtleSignParams('EdDSA'), key, signature, data);
 		return ok
 			? {
 					valid: true,

@@ -25,7 +25,7 @@ import {
 	signCheckpoint,
 	toHex,
 } from '@facet/trust';
-import { asc, count, eq, inArray } from 'drizzle-orm';
+import { asc, count, desc, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -176,13 +176,14 @@ export async function emitCheckpoint(
 	return signed;
 }
 
-/** The latest signed checkpoint, or null when none has been emitted. */
+/** The latest signed checkpoint, or null when none has been emitted. Reads one row (newest id), not
+ * the whole checkpoint history — each row carries a full signed-checkpoint JSON blob. */
 export async function latestCheckpoint(env: Env): Promise<SignedStatement<Checkpoint> | null> {
-	const rows = await db(env)
-		.select()
+	const [last] = await db(env)
+		.select({ signed: schema.mmrCheckpoints.signed })
 		.from(schema.mmrCheckpoints)
-		.orderBy(asc(schema.mmrCheckpoints.id));
-	const last = rows[rows.length - 1];
+		.orderBy(desc(schema.mmrCheckpoints.id))
+		.limit(1);
 	return last ? (JSON.parse(last.signed) as SignedStatement<Checkpoint>) : null;
 }
 

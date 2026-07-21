@@ -10,7 +10,7 @@ import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import { requireAdmin, requireApiKey } from '../lib/auth.js';
 import { DAY_MS, MAX_RANGE_DAYS } from '../lib/constants.js';
-import { ApiError } from '../lib/http.js';
+import { ApiError, validationErrorHook } from '../lib/http.js';
 
 export const funnelsRoutes = new Hono<AppEnv>();
 
@@ -20,11 +20,7 @@ export const funnelsRoutes = new Hono<AppEnv>();
 funnelsRoutes.post(
 	'/',
 	requireAdmin,
-	vValidator('json', FunnelSchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('json', FunnelSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
 		const funnel: Funnel = {

@@ -7,6 +7,7 @@ import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { isGpcOptOut } from '../lib/gpc.js';
+import { validationErrorHook } from '../lib/http.js';
 import { ingestEvent } from '../lib/ingest.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, country, device } from '../lib/request-meta.js';
@@ -16,11 +17,7 @@ export const collectRoute = new Hono<AppEnv>();
 collectRoute.post(
 	'/',
 	rateLimit((c) => clientIp(c.req.raw)),
-	vValidator('json', CollectPayloadSchema, (result, c) => {
-		if (!result.success) {
-			return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-		}
-	}),
+	vValidator('json', CollectPayloadSchema, validationErrorHook),
 	async (c) => {
 		// GPC opt-out: drop silently (202) before any hashing or write, like a client opt-out.
 		if (isGpcOptOut(c.req.raw)) {
