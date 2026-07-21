@@ -129,4 +129,4 @@ period-over-period comparison and CSV/JSON export are available throughout. A **
 
 ## License
 
-[Apache-2.0](./LICENSE) © 2026 David Condrey
+[Apache-2.0](./LICENSE) © 2026 WritersLogic, Inc.
