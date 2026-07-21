@@ -1,21 +1,26 @@
 <!-- Facet: privacy-first, Cloudflare-native analytics + experimentation. Project landing README. -->
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="./assets/logo-white.png">
-    <img alt="Facet" src="./assets/logo-black.png" width="140" height="140">
-  </picture>
-</p>
+<!-- Header: title + subtitle at left, logo floated right (theme-aware via GitHub's #gh-*-mode-only). -->
+<img align="right" width="150" height="150" hspace="40" alt="Facet logo" src="./assets/logo-black.png#gh-light-mode-only">
+<img align="right" width="150" height="150" hspace="40" alt="Facet logo" src="./assets/logo-white.png#gh-dark-mode-only">
 
 # Facet
 
-[![CI](https://github.com/writerslogic/facet/actions/workflows/ci.yml/badge.svg)](https://github.com/writerslogic/facet/actions/workflows/ci.yml)
-[![TypeScript](https://img.shields.io/badge/typescript-5.7-blue.svg)](https://www.typescriptlang.org)
-[![Cloudflare Workers](https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg)](https://workers.cloudflare.com)
-[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://github.com/writerslogic/facet/blob/main/LICENSE)
-[![ORCID](https://img.shields.io/badge/ORCID-0009--0003--1849--2963-green.svg)](https://orcid.org/0009-0003-1849-2963)
+### Privacy-first, cookieless web analytics &amp; experimentation
 
-**Privacy-first, cookieless analytics and experimentation that runs entirely on the Cloudflare edge.**
+Runs entirely on the Cloudflare edge — no cookies, no external database,<br>
+and no cross-session identity to leak.
+
+<br clear="right">
+
+<p align="center">
+  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/writerslogic/facet"><img alt="Deploy to Cloudflare" src="https://img.shields.io/badge/Deploy%20to-Cloudflare-f38020.svg?logo=cloudflare&logoColor=white"></a>
+  <a href="https://github.com/writerslogic/facet/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/writerslogic/facet/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.7-blue.svg"></a>
+  <a href="https://workers.cloudflare.com"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg"></a>
+  <a href="https://github.com/writerslogic/facet/blob/main/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-blue.svg"></a>
+  <a href="https://orcid.org/0009-0003-1849-2963"><img alt="ORCID" src="https://img.shields.io/badge/ORCID-0009--0003--1849--2963-green.svg"></a>
+</p>
 
 Facet is a self-hosted analytics platform that runs 100% on Cloudflare Workers + D1 — no external
 database, no long-running server, one `wrangler deploy`. It measures your site by *facet*: pages,
@@ -24,10 +29,6 @@ referrers, countries, devices, channels, sessions, goals, funnels, and experimen
 daily-rotating, salted `SHA-256` hash, **raw IP addresses are never stored**, and there is no
 cross-session identity to leak. The browser client is a drop-in for umami — existing sites migrate
 by swapping a single script tag.
-
-## Deploy to Cloudflare
-
-[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/writerslogic/facet)
 
 ## Why Facet
 
