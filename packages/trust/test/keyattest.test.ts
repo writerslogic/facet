@@ -61,6 +61,30 @@ describe('key-attestation verification (workerd)', () => {
 		expect(good.vendor).toBe('ACME KMS-HSM');
 	});
 
+	it('returns hardware:false (never throws) when the attested subject key is malformed', async () => {
+		const attestor = await edKey();
+		// Attacker self-signs an attestation whose subjectPublicJwk is not a valid JWK; thumbprinting it
+		// must not throw out of the never-throw verifier.
+		const att = await signStatement(
+			KEY_ATTESTATION_TYPE,
+			{
+				subjectThumbprint: 'x',
+				subjectPublicJwk: {},
+				deviceClass: 'hsm',
+				extractable: false,
+				vendor: 'evil',
+				iat: 0,
+			},
+			attestor,
+			NOW,
+		);
+		const res = await verifyKeyAttestation(att as never, {
+			trustAnchors: [attestor.publicJwk],
+			now: NOW,
+		});
+		expect(res.hardware).toBe(false);
+	});
+
 	it('never embeds private key material even if a PRIVATE JWK is passed as the subject', async () => {
 		const attestor = await edKey();
 		const { privateJwk, publicJwk } = await generateSigningJwk('EdDSA');

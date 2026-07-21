@@ -134,57 +134,68 @@ export async function verifyKeyAttestation(
 
 	const claims = attestation.payload;
 
-	// (2) The attestation must not lie about which key it is for: the declared thumbprint must be the
-	// real RFC 7638 thumbprint of the echoed subject key.
-	const recomputed = await calculateJwkThumbprint(claims.subjectPublicJwk);
-	if (recomputed !== claims.subjectThumbprint) {
-		return {
-			valid: true,
-			hardware: false,
-			subjectThumbprint: claims.subjectThumbprint,
-			reason: 'subject thumbprint does not match the attested subject key',
-		};
-	}
+	// All thumbprinting below runs on attacker-controlled attestation content (and caller-supplied
+	// anchors); a malformed JWK must yield hardware:false, never throw out of this never-throw verifier.
+	try {
+		// (2) The attestation must not lie about which key it is for: the declared thumbprint must be the
+		// real RFC 7638 thumbprint of the echoed subject key.
+		const recomputed = await calculateJwkThumbprint(claims.subjectPublicJwk);
+		if (recomputed !== claims.subjectThumbprint) {
+			return {
+				valid: true,
+				hardware: false,
+				subjectThumbprint: claims.subjectThumbprint,
+				reason: 'subject thumbprint does not match the attested subject key',
+			};
+		}
 
-	// (3) Bind to the key the caller actually cares about, when they say which.
-	if (
-		opts.expectedThumbprint !== undefined &&
-		opts.expectedThumbprint !== claims.subjectThumbprint
-	) {
+		// (3) Bind to the key the caller actually cares about, when they say which.
+		if (
+			opts.expectedThumbprint !== undefined &&
+			opts.expectedThumbprint !== claims.subjectThumbprint
+		) {
+			return {
+				valid: true,
+				hardware: false,
+				subjectThumbprint: claims.subjectThumbprint,
+				vendor: claims.vendor,
+				reason: 'attested subject thumbprint does not match the expected key',
+			};
+		}
+
+		// (4) THE security-critical gate: the signer must be a configured trust anchor. This is the only
+		// way `hardware` becomes true. An empty/absent anchor set can never match ⇒ hardware stays false.
+		const signerThumbprint = await signerThumbprintOf(attestation);
+		const anchorThumbprints = await Promise.all(
+			opts.trustAnchors.map((a) => calculateJwkThumbprint(a)),
+		);
+		const anchored =
+			signerThumbprint !== undefined && anchorThumbprints.includes(signerThumbprint);
+		if (!anchored) {
+			return {
+				valid: true,
+				hardware: false,
+				subjectThumbprint: claims.subjectThumbprint,
+				vendor: claims.vendor,
+				reason: 'attestor is not a configured trust anchor',
+			};
+		}
+
 		return {
 			valid: true,
-			hardware: false,
+			hardware: true,
+			deviceClass: claims.deviceClass,
+			...(claims.fipsLevel !== undefined ? { fipsLevel: claims.fipsLevel } : {}),
 			subjectThumbprint: claims.subjectThumbprint,
 			vendor: claims.vendor,
-			reason: 'attested subject thumbprint does not match the expected key',
 		};
-	}
-
-	// (4) THE security-critical gate: the signer must be a configured trust anchor. This is the only way
-	// `hardware` becomes true. An empty/absent anchor set can never match ⇒ hardware stays false.
-	const signerThumbprint = await signerThumbprintOf(attestation);
-	const anchorThumbprints = await Promise.all(
-		opts.trustAnchors.map((a) => calculateJwkThumbprint(a)),
-	);
-	const anchored = signerThumbprint !== undefined && anchorThumbprints.includes(signerThumbprint);
-	if (!anchored) {
+	} catch {
 		return {
 			valid: true,
 			hardware: false,
-			subjectThumbprint: claims.subjectThumbprint,
-			vendor: claims.vendor,
-			reason: 'attestor is not a configured trust anchor',
+			reason: 'malformed key material in the attestation or trust anchors',
 		};
 	}
-
-	return {
-		valid: true,
-		hardware: true,
-		deviceClass: claims.deviceClass,
-		...(claims.fipsLevel !== undefined ? { fipsLevel: claims.fipsLevel } : {}),
-		subjectThumbprint: claims.subjectThumbprint,
-		vendor: claims.vendor,
-	};
 }
 
 /** The RFC 7638 thumbprint of the key that signed the attestation (from the proof's embedded JWK). The
