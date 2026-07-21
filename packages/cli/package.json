@@ -27,32 +27,32 @@
 		"check:package": "publint"
 	},
 	"dependencies": {
-		"@clack/prompts": "0.9.1",
-		"@digitalbazaar/bbs-2023-cryptosuite": "2.0.0",
+		"@clack/prompts": "0.11.0",
+		"@digitalbazaar/bbs-2023-cryptosuite": "2.0.1",
 		"@digitalbazaar/bbs-signatures": "1.2.0",
-		"@digitalbazaar/bls12-381-multikey": "2.1.0",
+		"@digitalbazaar/bls12-381-multikey": "2.2.0",
 		"@digitalbazaar/credentials-context": "3.2.0",
 		"@digitalbazaar/data-integrity": "2.5.0",
 		"@digitalbazaar/data-integrity-context": "2.0.1",
 		"@digitalbazaar/ecdsa-multikey": "1.8.0",
 		"@digitalbazaar/ecdsa-sd-2023-cryptosuite": "3.4.1",
 		"@digitalbazaar/multikey-context": "2.0.1",
-		"cborg": "4.2.6",
-		"jose": "5.9.6",
+		"cborg": "4.5.8",
+		"jose": "5.10.0",
 		"jsonld": "8.3.3",
-		"jsonld-document-loader": "2.2.0",
-		"jsonld-signatures": "11.5.0",
+		"jsonld-document-loader": "2.3.0",
+		"jsonld-signatures": "11.6.0",
 		"picocolors": "1.1.1",
 		"rdf-canonize": "4.0.1"
 	},
 	"devDependencies": {
 		"@facet/shared": "workspace:*",
 		"@facet/trust": "workspace:*",
-		"@types/node": "22.10.5",
-		"publint": "0.3.5",
-		"tsup": "8.3.5",
-		"tsx": "4.19.2",
-		"typescript": "5.7.3",
-		"vitest": "2.1.8"
+		"@types/node": "22.20.1",
+		"publint": "0.3.21",
+		"tsup": "8.5.1",
+		"tsx": "4.23.1",
+		"typescript": "5.9.3",
+		"vitest": "2.1.9"
 	}
 }
