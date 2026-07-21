@@ -51,7 +51,6 @@ describe('key-attestation verification (workerd)', () => {
 
 		const good = await verifyKeyAttestation(att, {
 			trustAnchors: [attestor.publicJwk],
-			now: NOW,
 			expectedThumbprint: await calculateJwkThumbprint(subject.publicJwk),
 		});
 		expect(good.valid).toBe(true);
@@ -80,7 +79,6 @@ describe('key-attestation verification (workerd)', () => {
 		);
 		const res = await verifyKeyAttestation(att as never, {
 			trustAnchors: [attestor.publicJwk],
-			now: NOW,
 		});
 		expect(res.hardware).toBe(false);
 	});
@@ -94,7 +92,6 @@ describe('key-attestation verification (workerd)', () => {
 		expect((att.payload.subjectPublicJwk as { d?: string }).d).toBeUndefined();
 		const res = await verifyKeyAttestation(att, {
 			trustAnchors: [attestor.publicJwk],
-			now: NOW,
 			expectedThumbprint: await calculateJwkThumbprint(publicJwk),
 		});
 		expect(res.hardware).toBe(true);
@@ -108,7 +105,6 @@ describe('key-attestation verification (workerd)', () => {
 
 		const res = await verifyKeyAttestation(att, {
 			trustAnchors: [wrongAnchor.publicJwk],
-			now: NOW,
 		});
 		expect(res.valid).toBe(true);
 		expect(res.hardware).toBe(false);
@@ -122,7 +118,6 @@ describe('key-attestation verification (workerd)', () => {
 
 		const res = await verifyKeyAttestation(att, {
 			trustAnchors: [],
-			now: NOW,
 		});
 		expect(res.valid).toBe(true);
 		expect(res.hardware).toBe(false);
@@ -136,7 +131,6 @@ describe('key-attestation verification (workerd)', () => {
 
 		const res = await verifyKeyAttestation(att, {
 			trustAnchors: [attestor.publicJwk],
-			now: NOW,
 			expectedThumbprint: await calculateJwkThumbprint(other.publicJwk),
 		});
 		expect(res.hardware).toBe(false);
@@ -153,7 +147,6 @@ describe('key-attestation verification (workerd)', () => {
 
 		const res = await verifyKeyAttestation(att, {
 			trustAnchors: [attestor.publicJwk],
-			now: NOW,
 		});
 		expect(res.valid).toBe(false);
 		expect(res.hardware).toBe(false);
@@ -173,7 +166,6 @@ describe('key-attestation verification (workerd)', () => {
 		const forged = await signStatement(KEY_ATTESTATION_TYPE, lyingClaims, attestor, NOW);
 		const res = await verifyKeyAttestation(forged, {
 			trustAnchors: [attestor.publicJwk],
-			now: NOW,
 		});
 		// Signature verifies (valid), but the attestation lies about its subject key ⇒ not hardware.
 		expect(res.valid).toBe(true);
@@ -189,7 +181,6 @@ describe('key-attestation verification (workerd)', () => {
 		for (const trustAnchors of [[], [subject.publicJwk], [(await edKey()).publicJwk]]) {
 			const res = await verifyKeyAttestation(att, {
 				trustAnchors,
-				now: NOW,
 			});
 			expect(res.hardware).toBe(false);
 		}
@@ -198,7 +189,6 @@ describe('key-attestation verification (workerd)', () => {
 			(
 				await verifyKeyAttestation(att, {
 					trustAnchors: [attestor.publicJwk],
-					now: NOW,
 				})
 			).hardware,
 		).toBe(true);

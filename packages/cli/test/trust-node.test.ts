@@ -60,7 +60,6 @@ describe('trust raw-crypto verification under Node', () => {
 		);
 		const res = await verifyKeyAttestation(att, {
 			trustAnchors: [attestor.publicJwk],
-			now: 0,
 		});
 		expect(res.hardware).toBe(true);
 	});

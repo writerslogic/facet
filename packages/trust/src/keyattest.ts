@@ -85,8 +85,6 @@ export interface VerifyKeyAttestationOptions {
 	/** Configured attestor public JWKs (vendor/org roots). The attestation's signer MUST be one of these
 	 * for `hardware` to be true. An empty or absent set ⇒ no anchor can match ⇒ `hardware: false`. */
 	trustAnchors: JWK[];
-	/** Verification time, ms since epoch (reserved for future validity windows; kept for a stable API). */
-	now: number;
 	/** The subject-key thumbprint the caller expects this attestation to be about. When supplied it MUST
 	 * match the attested subject thumbprint, else `hardware: false`. */
 	expectedThumbprint?: string;

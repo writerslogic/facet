@@ -145,7 +145,6 @@ async function deriveHardware(
 	const expectedThumbprint = await calculateJwkThumbprint(subjectJwk);
 	const result = await verifyKeyAttestation(opts.keyAttestation, {
 		trustAnchors: opts.keyAttestationAnchors ?? [],
-		now: opts.now,
 		expectedThumbprint,
 	});
 	if (!result.hardware) return { hardware: false };
@@ -165,14 +164,14 @@ function popMessage(nonce: string): Uint8Array {
 	return utf8(`${EAT_PROCESS_PROFILE}|pop|${nonce}`);
 }
 
-/** A challenge-response proof-of-possession: a detached JWS over the nonce, made with the subject key. */
+/** A challenge-response proof-of-possession: a detached JWS over the nonce, made with the subject key.
+ * Verification binds the PoP to the EAT's `cnf` subject key (not any key carried alongside the PoP), so
+ * the subject key is not repeated here. */
 export interface PopProof {
 	/** The challenge nonce this PoP answers (must equal the EAT's `eat_nonce`). */
 	nonce: string;
 	/** Detached JWS over {@link popMessage}, signed by the `cnf` subject key. */
 	jws: string;
-	/** The subject public JWK the PoP is verified against (must equal the EAT's `cnf` key). */
-	publicJwk: JWK;
 }
 
 /**
@@ -195,7 +194,7 @@ export async function answerPopChallenge(
 	const jws = await signDetachedJws(popMessage(opts.nonce), subjectKey);
 	return {
 		eat,
-		pop: { nonce: opts.nonce, jws, publicJwk: subjectKey.publicJwk },
+		pop: { nonce: opts.nonce, jws },
 	};
 }
 
@@ -226,7 +225,6 @@ async function verifyEmbeddedHardwareRoot(
 	const expectedThumbprint = await calculateJwkThumbprint(cnfJwk);
 	const result = await verifyKeyAttestation(ref.attestation, {
 		trustAnchors,
-		now: Date.now(),
 		expectedThumbprint,
 	});
 	return result.hardware;

@@ -146,8 +146,8 @@ describe('RATS challenge-response proof-of-possession', () => {
 		const eatKey = await edKey();
 		const subjectKey = await edKey();
 		const attacker = await edKey();
-		// Attacker forges a PoP over the real challenge but with THEIR key, and swaps the pop.publicJwk.
-		const { eat, pop } = await answerPopChallenge(EVIDENCE, eatKey, subjectKey, {
+		// Attacker forges a PoP over the real challenge but with THEIR key.
+		const { eat } = await answerPopChallenge(EVIDENCE, eatKey, subjectKey, {
 			now: 1_770_000_000_000,
 			nonce: NONCE,
 		});
@@ -155,16 +155,10 @@ describe('RATS challenge-response proof-of-possession', () => {
 			now: 1_770_000_000_000,
 			nonce: NONCE,
 		});
-		// Keep the genuine EAT (cnf = subjectKey) but attach the attacker's PoP.
+		// Attach the attacker's PoP to the genuine EAT (cnf = subjectKey): verify checks the PoP against
+		// the EAT's cnf key, so the attacker's signature does not verify.
 		const result = await verifyPopChallenge(eat, forged.pop, NONCE);
 		expect(result.valid).toBe(false);
 		expect(result.popValid).toBe(false);
-		// And even swapping pop.publicJwk to the attacker key must not help: verify uses the EAT's cnf.
-		const swapped = {
-			...pop,
-			jws: forged.pop.jws,
-			publicJwk: attacker.publicJwk,
-		};
-		expect((await verifyPopChallenge(eat, swapped, NONCE)).valid).toBe(false);
 	});
 });
