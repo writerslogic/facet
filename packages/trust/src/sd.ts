@@ -9,8 +9,8 @@
 // Undisclosed claims never leave the issuer as anything but an opaque digest. This binds only DATASET
 // / DEPLOYMENT claims — never a person.
 
-import { bytesToBase64url, sha256 } from './bytes.js';
-import { canonicalizeBytes } from './canonicalize.js';
+import { bytesToBase64url } from './bytes.js';
+import { canonicalDigest } from './canonicalize.js';
 import type { SigningKey } from './keys.js';
 import {
 	type CredentialVerification,
@@ -29,7 +29,7 @@ export interface Disclosure {
 
 /** Digest of a disclosure: base64url(SHA-256(JCS([salt, name, value]))). */
 async function disclosureDigest(d: Disclosure): Promise<string> {
-	return bytesToBase64url(await sha256(canonicalizeBytes([d.salt, d.name, d.value])));
+	return bytesToBase64url(await canonicalDigest([d.salt, d.name, d.value]));
 }
 
 /** A fresh 128-bit salt as base64url. */

@@ -5,6 +5,8 @@
 // eddsa-jcs Data Integrity suite. Note: matches JCS for our domain (integers, decimals, strings); the
 // exotic large-exponent number forms JCS specifies are not produced by our data.
 
+import { sha256, toHex } from './bytes.js';
+
 /** Canonicalize a JSON value to its RFC 8785 string form. Rejects non-finite numbers. */
 export function canonicalizeJson(value: unknown): string {
 	if (value === null) return 'null';
@@ -30,4 +32,15 @@ export function canonicalizeJson(value: unknown): string {
 /** Canonicalize a JSON value to UTF-8 bytes (the input to signing/hashing). */
 export function canonicalizeBytes(value: unknown): Uint8Array {
 	return new TextEncoder().encode(canonicalizeJson(value));
+}
+
+/** SHA-256 of a value's canonical (RFC 8785) bytes — the "hash the canonical form" idiom used across
+ * VC Data Integrity, RATS evidence, SCITT statements, and selective disclosure, in one place. */
+export function canonicalDigest(value: unknown): Promise<Uint8Array> {
+	return sha256(canonicalizeBytes(value));
+}
+
+/** Hex-encoded {@link canonicalDigest}. */
+export async function canonicalDigestHex(value: unknown): Promise<string> {
+	return toHex(await canonicalDigest(value));
 }

@@ -7,8 +7,7 @@
 // crypto.subtle cannot use for raw verify).
 
 import { base58decode, base58encode } from './base58.js';
-import { sha256 } from './bytes.js';
-import { canonicalizeBytes } from './canonicalize.js';
+import { canonicalDigest } from './canonicalize.js';
 import type { SigningKey } from './keys.js';
 import { ed25519RawFromJwk, publicKeyMultibaseToJwk, rawToEd25519Jwk } from './multikey.js';
 
@@ -50,8 +49,8 @@ async function hashData(
 	unsecured: Record<string, unknown>,
 	proofConfig: Record<string, unknown>,
 ): Promise<Uint8Array> {
-	const proofConfigHash = await sha256(canonicalizeBytes(proofConfig));
-	const documentHash = await sha256(canonicalizeBytes(unsecured));
+	const proofConfigHash = await canonicalDigest(proofConfig);
+	const documentHash = await canonicalDigest(unsecured);
 	const out = new Uint8Array(64);
 	out.set(proofConfigHash, 0);
 	out.set(documentHash, 32);

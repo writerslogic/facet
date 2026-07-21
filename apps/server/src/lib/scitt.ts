@@ -16,12 +16,11 @@ import {
 	accumulatorHashes,
 	addLeafHash,
 	baggedRoot,
-	canonicalizeBytes,
+	canonicalDigestHex,
 	fromHex,
 	inclusionToReceipt,
 	leafHash,
 	proveInclusion,
-	sha256,
 	signScittReceipt,
 	toHex,
 	verifyScittReceipt,
@@ -36,8 +35,8 @@ import { getSigningKey } from './signing.js';
 export const LOCAL_LOG_ID = 'facet-scitt-local' as const;
 
 /** Hex SHA-256 of a Signed Statement's canonical bytes. */
-async function statementHash(stmt: SignedStatement): Promise<string> {
-	return toHex(await sha256(canonicalizeBytes(stmt)));
+function statementHash(stmt: SignedStatement): Promise<string> {
+	return canonicalDigestHex(stmt);
 }
 
 /**

@@ -28,8 +28,8 @@
 // signatures run under both JWS and the COSE_Sign1 wire form (both workerd-verified).
 
 import { type JWK, calculateJwkThumbprint } from 'jose';
-import { sha256, toHex, utf8 } from './bytes.js';
-import { canonicalizeBytes } from './canonicalize.js';
+import { utf8 } from './bytes.js';
+import { canonicalDigestHex } from './canonicalize.js';
 import { signDetachedJws, verifyDetachedJws } from './jws.js';
 import { type KeyAttestation, verifyKeyAttestation } from './keyattest.js';
 import type { SigningKey } from './keys.js';
@@ -110,7 +110,7 @@ export async function signProcessEvidence(
 	key: SigningKey,
 	opts: IssueEvidenceOptions,
 ): Promise<SignedStatement<EatClaims>> {
-	const digest = toHex(await sha256(canonicalizeBytes(evidence)));
+	const digest = await canonicalDigestHex(evidence);
 	const subjectJwk = opts.subjectPublicJwk ?? key.publicJwk;
 	// Derive `hardware` from a VERIFIED key-attestation bound to the subject key. Anything short of a
 	// trust-anchor-verified, thumbprint-matched attestation leaves the software-attestation default.
@@ -272,7 +272,7 @@ export async function verifyProcessEvidence(
 		};
 
 	const claims = stmt.payload;
-	const expectedDigest = toHex(await sha256(canonicalizeBytes(claims['process-evidence'])));
+	const expectedDigest = await canonicalDigestHex(claims['process-evidence']);
 	if (claims['content-ref']?.digest !== expectedDigest) {
 		return {
 			valid: false,
@@ -348,7 +348,7 @@ export async function verifyPopChallenge(
 		};
 	}
 	const claims = eat.payload;
-	const expectedDigest = toHex(await sha256(canonicalizeBytes(claims['process-evidence'])));
+	const expectedDigest = await canonicalDigestHex(claims['process-evidence']);
 	if (claims['content-ref']?.digest !== expectedDigest) {
 		return {
 			valid: false,
