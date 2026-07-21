@@ -165,6 +165,7 @@ reporting: [SECURITY.md](./SECURITY.md).
 - [Self-hosting](./docs/self-hosting.md) — one-command deploy on Cloudflare Workers + D1
 - [Privacy model](./docs/privacy.md) — the hashing design, salt rotation, and retention
 - [Trust & provenance](./docs/trust.md) — signed deployment attestations, verification, hardware-rooted keys
+- [Standards & conformance](./docs/standards.md) — the open standards Facet implements, and where
 - [API reference](./docs/api.md) — every endpoint, auth, and error code
 - [CHANGELOG](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
 

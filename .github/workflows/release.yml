@@ -57,6 +57,27 @@ jobs:
         with:
           subject-path: 'dist-tarballs/*.tgz'
 
+      # Software Bill of Materials (SPDX) for the release, attested (Sigstore) against the same tarballs.
+      - name: Generate SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: spdx-json
+          output-file: facet-sbom.spdx.json
+
+      - name: Attest SBOM
+        uses: actions/attest-sbom@v2
+        with:
+          subject-path: 'dist-tarballs/*.tgz'
+          sbom-path: facet-sbom.spdx.json
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-spdx
+          path: facet-sbom.spdx.json
+          retention-days: 90
+
       - name: Publish
         run: pnpm publish --filter @writerslogic/facet --filter @writerslogic/facet-cli --access public --no-git-checks --provenance
         env:
