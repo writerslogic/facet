@@ -33,7 +33,12 @@ import { canonicalizeBytes } from './canonicalize.js';
 import { signDetachedJws, verifyDetachedJws } from './jws.js';
 import { type KeyAttestation, verifyKeyAttestation } from './keyattest.js';
 import type { SigningKey } from './keys.js';
-import { type SignedStatement, signStatement, verifyStatement } from './statement.js';
+import {
+	type SignedStatement,
+	type StatementProof,
+	signStatement,
+	verifyStatement,
+} from './statement.js';
 
 /** EAT profile URN for creation/process evidence (draft-condrey). */
 export const EAT_PROCESS_PROFILE = 'urn:ietf:params:rats:eat:profile:process-evidence:1.0' as const;
@@ -140,7 +145,6 @@ async function deriveHardware(
 	const expectedThumbprint = await calculateJwkThumbprint(subjectJwk);
 	const result = await verifyKeyAttestation(opts.keyAttestation, {
 		trustAnchors: opts.keyAttestationAnchors ?? [],
-		now: opts.now,
 		expectedThumbprint,
 	});
 	if (!result.hardware) return { hardware: false };
@@ -160,14 +164,14 @@ function popMessage(nonce: string): Uint8Array {
 	return utf8(`${EAT_PROCESS_PROFILE}|pop|${nonce}`);
 }
 
-/** A challenge-response proof-of-possession: a detached JWS over the nonce, made with the subject key. */
+/** A challenge-response proof-of-possession: a detached JWS over the nonce, made with the subject key.
+ * Verification binds the PoP to the EAT's `cnf` subject key (not any key carried alongside the PoP), so
+ * the subject key is not repeated here. */
 export interface PopProof {
 	/** The challenge nonce this PoP answers (must equal the EAT's `eat_nonce`). */
 	nonce: string;
 	/** Detached JWS over {@link popMessage}, signed by the `cnf` subject key. */
 	jws: string;
-	/** The subject public JWK the PoP is verified against (must equal the EAT's `cnf` key). */
-	publicJwk: JWK;
 }
 
 /**
@@ -190,7 +194,7 @@ export async function answerPopChallenge(
 	const jws = await signDetachedJws(popMessage(opts.nonce), subjectKey);
 	return {
 		eat,
-		pop: { nonce: opts.nonce, jws, publicJwk: subjectKey.publicJwk },
+		pop: { nonce: opts.nonce, jws },
 	};
 }
 
@@ -221,10 +225,28 @@ async function verifyEmbeddedHardwareRoot(
 	const expectedThumbprint = await calculateJwkThumbprint(cnfJwk);
 	const result = await verifyKeyAttestation(ref.attestation, {
 		trustAnchors,
-		now: Date.now(),
 		expectedThumbprint,
 	});
 	return result.hardware;
+}
+
+/** True when the `cnf` subject key IS the key that actually signed the EAT — compared by RFC 7638
+ * thumbprint of the real key material in `cnf.jwk` vs the proof's embedded public key. This is the
+ * genuine key binding: the self-asserted `kid` labels are attacker-controlled and prove nothing. */
+async function cnfBoundToSigner(claims: EatClaims, proof: StatementProof): Promise<boolean> {
+	const cnfJwk = claims.cnf?.jwk as JWK | undefined;
+	if (!cnfJwk || !proof?.publicJwk) return false;
+	try {
+		// cnf.jwk is attacker-controlled payload; a malformed JWK must yield keyBound:false, not throw
+		// out of the never-throw verify path.
+		const [cnf, signer] = await Promise.all([
+			calculateJwkThumbprint(cnfJwk),
+			calculateJwkThumbprint(proof.publicJwk),
+		]);
+		return cnf === signer;
+	} catch {
+		return false;
+	}
 }
 
 /**
@@ -259,15 +281,15 @@ export async function verifyProcessEvidence(
 			reason: 'content-ref digest does not match evidence',
 		};
 	}
-	// Key binding: the cnf subject key must be the key that signed the EAT.
-	const cnfKid = (claims.cnf?.jwk as { kid?: string } | undefined)?.kid;
-	const keyBound = cnfKid !== undefined && cnfKid === stmt.proof.kid;
+	// Key binding: the cnf subject key must BE the key that signed the EAT — compared by RFC 7638
+	// thumbprint of the actual key material, NOT the self-asserted `kid` labels (which a forger controls).
+	const keyBound = await cnfBoundToSigner(claims, stmt.proof);
 	if (!keyBound) {
 		return {
 			valid: false,
 			keyBound: false,
 			hardwareRootOfTrust: false,
-			reason: 'cnf subject key is not bound to the signing key',
+			reason: 'cnf subject key is not the EAT signing key',
 		};
 	}
 	if (opts.nonce !== undefined && claims.eat_nonce !== opts.nonce) {

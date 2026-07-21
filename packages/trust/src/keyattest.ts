@@ -12,7 +12,7 @@
 // `hardware: true` without a trust-anchor-verified attestation.
 
 import { type JWK, calculateJwkThumbprint } from 'jose';
-import type { SigningKey } from './keys.js';
+import { type SigningKey, toPublicJwkFields } from './keys.js';
 import { type SignedStatement, signStatement, verifyStatement } from './statement.js';
 
 /** Statement type for a Facet hardware key-attestation. */
@@ -65,10 +65,12 @@ export async function signKeyAttestation(
 	attestorKey: SigningKey,
 	now: number,
 ): Promise<KeyAttestation> {
-	const subjectThumbprint = await calculateJwkThumbprint(subjectPublicJwk);
+	// Strip any private members so a caller passing a private JWK by mistake never leaks it on the wire.
+	const publicJwk = toPublicJwkFields(subjectPublicJwk);
+	const subjectThumbprint = await calculateJwkThumbprint(publicJwk);
 	const claims: KeyAttestationClaims = {
 		subjectThumbprint,
-		subjectPublicJwk,
+		subjectPublicJwk: publicJwk,
 		deviceClass: deviceProps.deviceClass,
 		...(deviceProps.fipsLevel !== undefined ? { fipsLevel: deviceProps.fipsLevel } : {}),
 		extractable: false,
@@ -78,13 +80,18 @@ export async function signKeyAttestation(
 	return signStatement(KEY_ATTESTATION_TYPE, claims, attestorKey, now);
 }
 
+/** Clock-skew tolerance (seconds) for the future-dated freshness guard. */
+const FRESHNESS_SKEW_SECONDS = 300;
+
 /** Options for {@link verifyKeyAttestation}. */
 export interface VerifyKeyAttestationOptions {
 	/** Configured attestor public JWKs (vendor/org roots). The attestation's signer MUST be one of these
 	 * for `hardware` to be true. An empty or absent set ⇒ no anchor can match ⇒ `hardware: false`. */
 	trustAnchors: JWK[];
-	/** Verification time, ms since epoch (reserved for future validity windows; kept for a stable API). */
-	now: number;
+	/** Verification time (unix ms). When supplied, an attestation dated in the future (its `iat` beyond
+	 * {@link FRESHNESS_SKEW_SECONDS} after `now`) is rejected — an attestor cannot vouch for a key before
+	 * it exists. Omit to skip the freshness check. */
+	now?: number;
 	/** The subject-key thumbprint the caller expects this attestation to be about. When supplied it MUST
 	 * match the attested subject thumbprint, else `hardware: false`. */
 	expectedThumbprint?: string;
@@ -132,57 +139,83 @@ export async function verifyKeyAttestation(
 
 	const claims = attestation.payload;
 
-	// (2) The attestation must not lie about which key it is for: the declared thumbprint must be the
-	// real RFC 7638 thumbprint of the echoed subject key.
-	const recomputed = await calculateJwkThumbprint(claims.subjectPublicJwk);
-	if (recomputed !== claims.subjectThumbprint) {
-		return {
-			valid: true,
-			hardware: false,
-			subjectThumbprint: claims.subjectThumbprint,
-			reason: 'subject thumbprint does not match the attested subject key',
-		};
-	}
-
-	// (3) Bind to the key the caller actually cares about, when they say which.
+	// Freshness: an attestation dated in the future (beyond clock skew) cannot be trusted — an attestor
+	// cannot vouch for a key before it exists. Only enforced when the caller supplies `now`.
 	if (
-		opts.expectedThumbprint !== undefined &&
-		opts.expectedThumbprint !== claims.subjectThumbprint
+		opts.now !== undefined &&
+		typeof claims.iat === 'number' &&
+		claims.iat > Math.floor(opts.now / 1000) + FRESHNESS_SKEW_SECONDS
 	) {
 		return {
 			valid: true,
 			hardware: false,
 			subjectThumbprint: claims.subjectThumbprint,
-			vendor: claims.vendor,
-			reason: 'attested subject thumbprint does not match the expected key',
+			reason: 'attestation is dated in the future',
 		};
 	}
 
-	// (4) THE security-critical gate: the signer must be a configured trust anchor. This is the only way
-	// `hardware` becomes true. An empty/absent anchor set can never match ⇒ hardware stays false.
-	const signerThumbprint = await signerThumbprintOf(attestation);
-	const anchorThumbprints = await Promise.all(
-		opts.trustAnchors.map((a) => calculateJwkThumbprint(a)),
-	);
-	const anchored = signerThumbprint !== undefined && anchorThumbprints.includes(signerThumbprint);
-	if (!anchored) {
+	// All thumbprinting below runs on attacker-controlled attestation content (and caller-supplied
+	// anchors); a malformed JWK must yield hardware:false, never throw out of this never-throw verifier.
+	try {
+		// (2) The attestation must not lie about which key it is for: the declared thumbprint must be the
+		// real RFC 7638 thumbprint of the echoed subject key.
+		const recomputed = await calculateJwkThumbprint(claims.subjectPublicJwk);
+		if (recomputed !== claims.subjectThumbprint) {
+			return {
+				valid: true,
+				hardware: false,
+				subjectThumbprint: claims.subjectThumbprint,
+				reason: 'subject thumbprint does not match the attested subject key',
+			};
+		}
+
+		// (3) Bind to the key the caller actually cares about, when they say which.
+		if (
+			opts.expectedThumbprint !== undefined &&
+			opts.expectedThumbprint !== claims.subjectThumbprint
+		) {
+			return {
+				valid: true,
+				hardware: false,
+				subjectThumbprint: claims.subjectThumbprint,
+				vendor: claims.vendor,
+				reason: 'attested subject thumbprint does not match the expected key',
+			};
+		}
+
+		// (4) THE security-critical gate: the signer must be a configured trust anchor. This is the only
+		// way `hardware` becomes true. An empty/absent anchor set can never match ⇒ hardware stays false.
+		const signerThumbprint = await signerThumbprintOf(attestation);
+		const anchorThumbprints = await Promise.all(
+			opts.trustAnchors.map((a) => calculateJwkThumbprint(a)),
+		);
+		const anchored =
+			signerThumbprint !== undefined && anchorThumbprints.includes(signerThumbprint);
+		if (!anchored) {
+			return {
+				valid: true,
+				hardware: false,
+				subjectThumbprint: claims.subjectThumbprint,
+				vendor: claims.vendor,
+				reason: 'attestor is not a configured trust anchor',
+			};
+		}
+
+		return {
+			valid: true,
+			hardware: true,
+			deviceClass: claims.deviceClass,
+			...(claims.fipsLevel !== undefined ? { fipsLevel: claims.fipsLevel } : {}),
+			subjectThumbprint: claims.subjectThumbprint,
+			vendor: claims.vendor,
+		};
+	} catch {
 		return {
 			valid: true,
 			hardware: false,
-			subjectThumbprint: claims.subjectThumbprint,
-			vendor: claims.vendor,
-			reason: 'attestor is not a configured trust anchor',
+			reason: 'malformed key material in the attestation or trust anchors',
 		};
 	}
-
-	return {
-		valid: true,
-		hardware: true,
-		deviceClass: claims.deviceClass,
-		...(claims.fipsLevel !== undefined ? { fipsLevel: claims.fipsLevel } : {}),
-		subjectThumbprint: claims.subjectThumbprint,
-		vendor: claims.vendor,
-	};
 }
 
 /** The RFC 7638 thumbprint of the key that signed the attestation (from the proof's embedded JWK). The

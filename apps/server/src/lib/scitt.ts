@@ -57,20 +57,30 @@ export async function registerLocal(
 	const client = db(env);
 
 	const hash = await statementHash(stmt);
-	await client.insert(schema.scittLog).values({ statementHash: hash, registeredAt: now });
+	// Capture OUR row's autoincrement id so we can locate our own leaf even if a concurrent registration
+	// inserts between this write and the read below — a row-count assumption would point at the wrong leaf.
+	const [inserted] = await client
+		.insert(schema.scittLog)
+		.values({ statementHash: hash, registeredAt: now })
+		.returning({ entryId: schema.scittLog.entryId });
+	if (!inserted) return null;
 
 	const rows = await client
-		.select({ hash: schema.scittLog.statementHash })
+		.select({
+			entryId: schema.scittLog.entryId,
+			hash: schema.scittLog.statementHash,
+		})
 		.from(schema.scittLog)
 		.orderBy(asc(schema.scittLog.entryId));
 
-	// Rebuild the MMR over all registered statement hashes; the just-registered entry is the last leaf.
+	// Rebuild the MMR over all registered statement hashes; our leaf is the one whose row id we captured.
 	const nodes: Uint8Array[] = [];
 	const leafNodeIndices: number[] = [];
 	for (const row of rows) {
 		leafNodeIndices.push(await addLeafHash(nodes, await leafHash(fromHex(row.hash))));
 	}
-	const entryId = rows.length - 1;
+	const entryId = rows.findIndex((r) => r.entryId === inserted.entryId);
+	if (entryId < 0) return null;
 	const size = nodes.length;
 	const root = toHex(await baggedRoot(size, accumulatorHashes(nodes, size)));
 	const inclusion = inclusionToReceipt(
@@ -95,6 +105,10 @@ export interface ExternalRegistration {
 	receipt: unknown;
 	/** Verification of the returned receipt, or null when it is not a Facet-format SignedStatement. */
 	verification: ScittReceiptVerification | null;
+	/** Whether the returned receipt actually attests OUR submitted statement (its `statementHash` equals
+	 * the hash we POSTed). A receipt that verifies internally but is about a different statement proves
+	 * nothing about this deployment, so consumers MUST require `statementMatches && verification.valid`. */
+	statementMatches: boolean;
 }
 
 /** True when a value looks like a Facet SignedStatement receipt (has a proof + an inclusion payload). */
@@ -125,6 +139,12 @@ export async function registerExternal(
 	});
 	if (!res.ok) throw new Error(`external SCITT registration failed: ${res.status}`);
 	const receipt = await res.json();
-	const verification = isReceiptShape(receipt) ? await verifyScittReceipt(receipt) : null;
-	return { receipt, verification };
+	if (!isReceiptShape(receipt)) {
+		return { receipt, verification: null, statementMatches: false };
+	}
+	const verification = await verifyScittReceipt(receipt);
+	// Bind the receipt to what we actually submitted: an internally-valid receipt over a DIFFERENT
+	// statement proves nothing about this deployment.
+	const statementMatches = receipt.payload.statementHash === (await statementHash(stmt));
+	return { receipt, verification, statementMatches };
 }

@@ -6,8 +6,15 @@
 // unchanged in workerd and Node. The JWS forms remain for HTTP contexts; COSE is the SCITT-native one.
 
 import { decode as cborDecode, encode as cborEncode } from 'cborg';
+import type { JWK } from 'jose';
 import { base64urlToBytes } from './bytes.js';
-import { type SigningAlg, type SigningKey, type SubtleKey, importPublicJwk } from './keys.js';
+import {
+	type SigningAlg,
+	type SigningKey,
+	type SubtleKey,
+	importVerifyKey,
+	subtleSignParams,
+} from './keys.js';
 
 /** COSE algorithm identifiers (IANA COSE Algorithms registry): EdDSA = -8, ES256 = -7. */
 const COSE_ALG: Record<SigningAlg, number> = { EdDSA: -8, ES256: -7 };
@@ -24,12 +31,6 @@ const HDR_KID = 4;
 const COSE_SIGN1_TAG = 18;
 
 const enc = new TextEncoder();
-
-/** Web Crypto sign/verify params for a COSE alg (typed locally: the DOM lib types are not in the
- * workers-types environment). */
-function algParams(alg: SigningAlg): { name: string; hash?: string } {
-	return alg === 'EdDSA' ? { name: 'Ed25519' } : { name: 'ECDSA', hash: 'SHA-256' };
-}
 
 /** Build the RFC 9052 Sig_structure bytes that are actually signed/verified. */
 function sigStructure(protectedBytes: Uint8Array, payload: Uint8Array): Uint8Array {
@@ -54,7 +55,7 @@ export async function signCoseSign1(payload: Uint8Array, key: SigningKey): Promi
 	const protectedBytes = cborEncode(protectedMap);
 	const toSign = sigStructure(protectedBytes, payload);
 	const signature = new Uint8Array(
-		await crypto.subtle.sign(algParams(key.alg), key.privateKey as SubtleKey, toSign),
+		await crypto.subtle.sign(subtleSignParams(key.alg), key.privateKey as SubtleKey, toSign),
 	);
 	const message = [protectedBytes, new Map<number, unknown>(), payload, signature];
 	// Prepend the 1-byte CBOR tag-18 head (0xd2) to the untagged 4-element array; cborg has no direct
@@ -112,14 +113,14 @@ function parseProtected(protectedBytes: Uint8Array): {
  */
 export async function verifyCoseSign1(
 	message: Uint8Array,
-	publicJwk: Parameters<typeof importPublicJwk>[0],
+	publicJwk: JWK,
 ): Promise<CoseSign1Verification> {
 	const [protectedBytes, , payload, signature] = decodeCoseSign1(message);
 	const header = parseProtected(protectedBytes);
-	const { key, alg } = await importPublicJwk(publicJwk);
+	const { key, alg } = await importVerifyKey(publicJwk);
 	if (alg !== header.alg) throw new Error('COSE alg does not match the verification key');
 	const toVerify = sigStructure(protectedBytes, payload);
-	const ok = await crypto.subtle.verify(algParams(alg), key as SubtleKey, signature, toVerify);
+	const ok = await crypto.subtle.verify(subtleSignParams(alg), key, signature, toVerify);
 	if (!ok) throw new Error('COSE_Sign1 signature did not verify');
 	return { protectedHeader: header, payload };
 }

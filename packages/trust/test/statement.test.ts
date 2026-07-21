@@ -43,6 +43,13 @@ describe('signed statements', () => {
 		(stmt.payload as { total: number }).total = 999;
 		expect((await verifyStatement(stmt)).valid).toBe(false);
 	});
+
+	it('fails when the declared proof.alg disagrees with the signed protected-header alg', async () => {
+		const key = await edKey();
+		const stmt = await signStatement('facet-test/1', { a: 1 }, key, 0);
+		(stmt.proof as { alg: string }).alg = 'ES256';
+		expect((await verifyStatement(stmt, 'facet-test/1')).valid).toBe(false);
+	});
 });
 
 describe('MMR checkpoints', () => {
@@ -82,6 +89,13 @@ describe('COSE_Sign1 statement wire form', () => {
 			const stmt = await signStatementCose('facet-test/1', { total: 100 }, key, 0);
 			(stmt.payload as { total: number }).total = 999;
 			expect((await verifyStatement(stmt)).valid).toBe(false);
+		});
+
+		it(`fails when a COSE proof.alg disagrees with the signed protected header (${make.name})`, async () => {
+			const key = await make();
+			const stmt = await signStatementCose('facet-test/1', { a: 1 }, key, 0);
+			(stmt.proof as { alg: string }).alg = key.alg === 'EdDSA' ? 'ES256' : 'EdDSA';
+			expect((await verifyStatement(stmt, 'facet-test/1')).valid).toBe(false);
 		});
 	}
 

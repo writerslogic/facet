@@ -6,7 +6,7 @@
 
 import type { JWK } from 'jose';
 import { base64ToBytes, bytesToBase64, sha256 } from './bytes.js';
-import { type SigningKey, importPublicJwk, requireCryptoKey } from './keys.js';
+import { type SigningKey, importVerifyKey, subtleSignParams } from './keys.js';
 
 /** Covered components, in signature-base order. Kept fixed so signer and verifier agree. */
 const COMPONENTS = ['content-digest', 'content-type'] as const;
@@ -17,13 +17,6 @@ const DEFAULT_LABEL = 'sig1';
 /** Map our JWS alg to the RFC 9421 algorithm registry label. */
 function rfc9421Alg(alg: SigningKey['alg']): 'ed25519' | 'ecdsa-p256-sha256' {
 	return alg === 'EdDSA' ? 'ed25519' : 'ecdsa-p256-sha256';
-}
-
-/** Web Crypto sign/verify parameters for a given RFC 9421 alg. */
-function subtleParams(
-	alg: 'ed25519' | 'ecdsa-p256-sha256',
-): { name: 'Ed25519' } | { name: 'ECDSA'; hash: 'SHA-256' } {
-	return alg === 'ed25519' ? { name: 'Ed25519' } : { name: 'ECDSA', hash: 'SHA-256' };
 }
 
 /** RFC 9530 Content-Digest value for a body: `sha-256=:<base64>:` (Structured Fields use base64). */
@@ -71,7 +64,11 @@ export async function signResponse(input: SignResponseInput): Promise<HttpSignat
 		params,
 	);
 	const sig = new Uint8Array(
-		await crypto.subtle.sign(subtleParams(alg), privateKey, new TextEncoder().encode(base)),
+		await crypto.subtle.sign(
+			subtleSignParams(input.key.alg),
+			privateKey,
+			new TextEncoder().encode(base),
+		),
 	);
 	return {
 		'content-digest': digest,
@@ -133,7 +130,8 @@ export async function verifyResponse(input: VerifyResponseInput): Promise<boolea
 		params,
 	);
 	const sig = parseSignature(input.signature, label);
-	const { key } = await importPublicJwk(input.publicJwk);
-	const publicKey = requireCryptoKey(key);
-	return crypto.subtle.verify(subtleParams(alg), publicKey, sig, new TextEncoder().encode(base));
+	const { key, alg: keyAlg } = await importVerifyKey(input.publicJwk);
+	// The signature-params `alg` must match the verification key's actual alg, else it is unauthenticated.
+	if (rfc9421Alg(keyAlg) !== alg) return false;
+	return crypto.subtle.verify(subtleSignParams(keyAlg), key, sig, new TextEncoder().encode(base));
 }

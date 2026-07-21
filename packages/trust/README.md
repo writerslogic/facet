@@ -37,7 +37,7 @@ Everything here is proven to run under `@cloudflare/vitest-pool-workers` (real w
 
 ### The trust-anchor gate (security-critical)
 
-`verifyKeyAttestation(att, { trustAnchors, now, expectedThumbprint })` returns `hardware: true` **only
+`verifyKeyAttestation(att, { trustAnchors, expectedThumbprint })` returns `hardware: true` **only
 when all** of these hold, and every early return yields `hardware: false` with a reason:
 
 1. the attestor signature over the statement verifies (`verifyStatement`);

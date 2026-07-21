@@ -5,6 +5,7 @@
 // was requested; verification dispatches on the proof `type`.
 
 import type { JWK } from 'jose';
+import { bytesEqual } from './bytes.js';
 import { canonicalizeBytes } from './canonicalize.js';
 import { coseFromBase64url, coseToBase64url, signCoseSign1, verifyCoseSign1 } from './cose.js';
 import { signDetachedJws, verifyDetachedProof } from './jws.js';
@@ -113,8 +114,14 @@ async function verifyCoseProof(
 				reason: 'COSE protected-header kid does not match proof kid',
 			};
 		}
-		const expected = canonicalizeBytes(payload);
-		if (signed.length !== expected.length || !signed.every((b, i) => b === expected[i])) {
+		// The declared proof.alg must equal the SIGNED protected-header alg, else it is unauthenticated.
+		if (protectedHeader.alg !== proof.alg) {
+			return {
+				ok: false,
+				reason: 'COSE protected-header alg does not match proof alg',
+			};
+		}
+		if (!bytesEqual(signed, canonicalizeBytes(payload))) {
 			return {
 				ok: false,
 				reason: 'COSE payload does not match the statement payload',

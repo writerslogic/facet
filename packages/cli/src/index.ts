@@ -9,6 +9,7 @@ import { isResourceCommand, runResource } from './commands/resources.js';
 import { runSd } from './commands/sd.js';
 import { runStats } from './commands/stats.js';
 import { runVerify } from './commands/verify.js';
+import { printError } from './util.js';
 
 const USAGE = `Usage: facet <command> [options]
 
@@ -58,36 +59,43 @@ Examples:
 
 export async function main(argv: string[]): Promise<number> {
 	const [command] = argv;
-	switch (command) {
-		case 'init':
-			return runInit(argv.slice(1));
-		case 'migrate':
-			return runMigrate(argv.slice(1));
-		case 'stats':
-			return runStats(argv.slice(1));
-		case 'config':
-			return runConfig(argv.slice(1));
-		case 'keys':
-			return runKeys(argv.slice(1));
-		case 'verify':
-			return runVerify(argv.slice(1));
-		case 'sd':
-			return runSd(argv.slice(1));
-		case 'keyattest':
-			return runKeyattest(argv.slice(1));
-		case '--help':
-		case '-h':
-			process.stdout.write(USAGE);
-			return 0;
-		case undefined:
-			process.stdout.write(USAGE);
-			return 0;
-		default:
-			if (isResourceCommand(command)) {
-				return runResource(command, argv.slice(1));
-			}
-			process.stderr.write(USAGE);
-			return 1;
+	// A single error boundary for every command: a bad/incomplete flag (parseArgs throws) or any other
+	// error becomes a clean one-line message and exit 1, never a raw Node stack trace.
+	try {
+		switch (command) {
+			case 'init':
+				return await runInit(argv.slice(1));
+			case 'migrate':
+				return await runMigrate(argv.slice(1));
+			case 'stats':
+				return await runStats(argv.slice(1));
+			case 'config':
+				return await runConfig(argv.slice(1));
+			case 'keys':
+				return await runKeys(argv.slice(1));
+			case 'verify':
+				return await runVerify(argv.slice(1));
+			case 'sd':
+				return await runSd(argv.slice(1));
+			case 'keyattest':
+				return await runKeyattest(argv.slice(1));
+			case '--help':
+			case '-h':
+				process.stdout.write(USAGE);
+				return 0;
+			case undefined:
+				process.stdout.write(USAGE);
+				return 0;
+			default:
+				if (isResourceCommand(command)) {
+					return await runResource(command, argv.slice(1));
+				}
+				process.stderr.write(USAGE);
+				return 1;
+		}
+	} catch (err) {
+		printError(err instanceof Error ? err.message : String(err));
+		return 1;
 	}
 }
 
