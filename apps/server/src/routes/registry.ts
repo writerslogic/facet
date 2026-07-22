@@ -6,6 +6,7 @@ import type { AppEnv } from '../env.js';
 import { adminRoutes } from './admin.js';
 import { attestationRoutes } from './attestation.js';
 import { collectRoute } from './collect.js';
+import { consentRoutes } from './consent.js';
 import { eventRoute } from './event.js';
 import { experimentsRoutes } from './experiments.js';
 import { flagsRoutes } from './flags.js';
@@ -30,6 +31,7 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/api/health', router: healthRoute },
 	{ path: '/api/collect', router: collectRoute },
 	{ path: '/api/event', router: eventRoute },
+	{ path: '/api/consent', router: consentRoutes },
 	{ path: '/api', router: statsRoutes },
 	{ path: '/api', router: adminRoutes },
 	{ path: '/api/goals', router: goalsRoutes },

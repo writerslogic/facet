@@ -2,9 +2,9 @@
 // (sites aren't site-scoped; keys use one-time issuance and never expose their hash), so they do
 // not use the generic crudRouter.
 
-import { CreateSiteSchema, IssueKeySchema, type Site } from '@facet/shared';
+import { CreateSiteSchema, IssueKeySchema, SetIdentitySchema, type Site } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
-import { desc } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
@@ -12,6 +12,7 @@ import type { AppEnv } from '../env.js';
 import { issueKey, listKeys, revokeKey } from '../lib/apikeys.js';
 import { requireAdmin } from '../lib/auth.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
+import { getSigningKey } from '../lib/signing.js';
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -53,6 +54,56 @@ adminRoutes.get('/sites', requireAdmin, async (c) => {
 		.orderBy(desc(schema.sites.createdAt));
 	return c.json({ sites });
 });
+
+// Set a site's identity tier + salt window. Its own requireAdmin (the router has no catch-all guard).
+// The site must exist, so a config row can't be orphaned onto a reused id. Any tier above `anonymous`
+// needs a deployment signing key (consent must be signable) — 501 rather than a silent clamp so the
+// operator sees why elevation didn't take. `anonymous` always forces the `day` window (Tier 0).
+adminRoutes.patch(
+	'/sites/:id/identity',
+	requireAdmin,
+	vValidator('json', SetIdentitySchema, validationErrorHook),
+	async (c) => {
+		const siteId = c.req.param('id') ?? '';
+		const body = c.req.valid('json');
+		const site = await db(c.env)
+			.select({ id: schema.sites.id })
+			.from(schema.sites)
+			.where(eq(schema.sites.id, siteId))
+			.get();
+		if (!site) {
+			return c.json({ error: 'not_found' }, 404);
+		}
+		if (body.tier !== 'anonymous' && getSigningKey(c.env) === null) {
+			return c.json({ error: 'identity_signing_unconfigured' }, 501);
+		}
+		const saltWindow = body.tier === 'anonymous' ? 'day' : body.salt_window;
+		const now = Date.now();
+		await db(c.env)
+			.insert(schema.siteConfig)
+			.values({
+				site_id: siteId,
+				tier: body.tier,
+				salt_window: saltWindow,
+				updated_at: now,
+			})
+			.onConflictDoUpdate({
+				target: schema.siteConfig.site_id,
+				set: {
+					tier: body.tier,
+					salt_window: saltWindow,
+					updated_at: now,
+				},
+			});
+		return c.json({
+			identity: {
+				site_id: siteId,
+				tier: body.tier,
+				salt_window: saltWindow,
+			},
+		});
+	},
+);
 
 adminRoutes.post(
 	'/keys',

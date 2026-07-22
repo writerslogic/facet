@@ -37,7 +37,7 @@ const claims = (over: Partial<ConsentClaims> = {}): ConsentClaims => ({
 	...over,
 });
 
-const ctx = (over: Partial<ConsentContext> = {}, kid: string): ConsentContext => ({
+const ctx = (over: Partial<ConsentContext>, kid: string): ConsentContext => ({
 	siteId: SITE,
 	visitorHash: VH,
 	tier: 'pseudonymous',
