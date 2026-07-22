@@ -71,4 +71,11 @@ export function getConfig(): FacetConfig | undefined {
 }
 
 export { assignment, variant, whenReady } from './experiments.js';
+export {
+	allFlags,
+	flag,
+	flagAssignment,
+	flagBool,
+	whenFlagsReady,
+} from './flags.js';
 export { isOptedOut, optIn, optOut } from './optout.js';

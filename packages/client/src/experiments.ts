@@ -2,8 +2,9 @@
 // in localStorage (`facet.exp`) that is NEVER sent to the server as identity. The server only
 // receives an aggregate `$exposure` event carrying { flag, variant }. Zero dependencies.
 
+import { localId } from './id.js';
 import { getConfig, track } from './index.js';
-import { isOptedOut, safeGet, safeSet } from './optout.js';
+import { isOptedOut } from './optout.js';
 
 interface FlagDef {
 	flag_key: string;
@@ -19,7 +20,6 @@ export interface Assignment {
 	status: AssignmentStatus;
 }
 
-const STORAGE_KEY = 'facet.exp';
 const CONTROL = 'control';
 
 let flags: FlagDef[] | null = null;
@@ -81,28 +81,6 @@ function loadFlags(): void {
 		.finally(() => {
 			settleReady();
 		});
-}
-
-/** Read (or lazily create) the stable local experiment id. Falls back gracefully without storage. */
-function localId(): string {
-	const existing = safeGet(STORAGE_KEY);
-	if (existing) return existing;
-	const id = randomHex();
-	safeSet(STORAGE_KEY, id);
-	return id;
-}
-
-/** 16 hex chars from crypto if available, else a Math.random fallback. */
-function randomHex(): string {
-	const bytes = new Uint8Array(8);
-	if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-		crypto.getRandomValues(bytes);
-	} else {
-		for (let i = 0; i < bytes.length; i++) bytes[i] = Math.floor(Math.random() * 256);
-	}
-	let out = '';
-	for (const b of bytes) out += b.toString(16).padStart(2, '0');
-	return out;
 }
 
 /** Small deterministic FNV-1a-style string hash → unsigned 32-bit. */
