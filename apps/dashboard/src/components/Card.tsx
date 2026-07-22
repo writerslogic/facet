@@ -13,7 +13,7 @@ export function Card({
 	return (
 		<section
 			className={cn(
-				'rounded-2xl border border-neutral-200/80 bg-white p-5 shadow-sm ring-1 ring-neutral-900/[0.02]',
+				'rounded-2xl border border-neutral-200/70 bg-white p-5 shadow-card ring-1 ring-neutral-900/5',
 				className,
 			)}
 		>

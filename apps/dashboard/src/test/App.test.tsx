@@ -1,8 +1,8 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import { App } from '../App.js';
-import { DashboardProvider } from '../state.js';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { App } from "../App.js";
+import { DashboardProvider } from "../state.js";
 
 function renderApp() {
 	const client = new QueryClient();
@@ -15,9 +15,11 @@ function renderApp() {
 	);
 }
 
-describe('App', () => {
-	it('renders the Facet heading', () => {
+describe("App", () => {
+	it("renders the Facet heading", () => {
 		renderApp();
-		expect(screen.getByRole('heading', { name: 'Facet' })).toBeInTheDocument();
+		expect(
+			screen.getByRole("heading", { name: /Facet/ }),
+		).toBeInTheDocument();
 	});
 });

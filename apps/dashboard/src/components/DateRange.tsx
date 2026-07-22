@@ -111,7 +111,7 @@ export function DateRange(): ReactElement {
 
 	return (
 		<div className="flex flex-wrap items-center gap-2">
-			<div className="inline-flex rounded-lg border border-neutral-200 bg-neutral-50 p-0.5">
+			<div className="inline-flex rounded-lg border border-neutral-200/80 bg-neutral-100/70 p-0.5">
 				{RANGE_PRESETS.map((option) => (
 					<button
 						key={option}
@@ -119,9 +119,9 @@ export function DateRange(): ReactElement {
 						aria-pressed={preset === option}
 						onClick={() => setPreset(option)}
 						className={cn(
-							'rounded-md px-3 py-1 text-sm font-medium transition',
+							'tabular rounded-md px-3 py-1 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
 							preset === option
-								? 'bg-white text-neutral-900 shadow-sm'
+								? 'bg-white text-accent-700 shadow-sm ring-1 ring-neutral-900/5'
 								: 'text-neutral-500 hover:text-neutral-900',
 						)}
 					>

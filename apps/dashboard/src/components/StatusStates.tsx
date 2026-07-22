@@ -8,12 +8,7 @@ import { cn } from '../lib/cn.js';
 
 /** Animated placeholder block for a not-yet-loaded region. */
 export function Skeleton({ className }: { className?: string }): ReactElement {
-	return (
-		<div
-			className={cn('animate-pulse rounded-lg bg-neutral-100', className)}
-			aria-hidden="true"
-		/>
-	);
+	return <div className={cn('shimmer rounded-lg', className)} aria-hidden="true" />;
 }
 
 /** Card-shaped loading skeleton grid used across tabs. */
@@ -94,10 +89,12 @@ export function EmptyState({
 	children?: ReactElement | string;
 }): ReactElement {
 	return (
-		<div className="rounded-xl border border-neutral-200 bg-white p-8 text-center shadow-sm">
-			<Inbox className="mx-auto h-6 w-6 text-neutral-300" aria-hidden="true" />
-			<p className="mt-2 text-sm font-medium text-neutral-600">{title}</p>
-			{children ? <div className="mt-1 text-sm text-neutral-400">{children}</div> : null}
+		<div className="rounded-2xl border border-neutral-200/70 bg-white p-10 text-center shadow-card ring-1 ring-neutral-900/5">
+			<span className="mx-auto flex size-12 items-center justify-center rounded-full bg-accent-50 ring-1 ring-accent-100">
+				<Inbox className="h-6 w-6 text-accent-400" aria-hidden="true" />
+			</span>
+			<p className="mt-3 text-sm font-semibold text-neutral-700">{title}</p>
+			{children ? <div className="mt-1 text-sm text-neutral-500">{children}</div> : null}
 		</div>
 	);
 }

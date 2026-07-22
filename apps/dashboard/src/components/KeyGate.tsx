@@ -5,6 +5,7 @@ import { type FormEvent, type ReactElement, useState } from 'react';
 import { cn } from '../lib/cn.js';
 import { validateApiKey, validateSiteId } from '../lib/validate.js';
 import { useDashboard } from '../state.js';
+import { BrandMark } from './Layout.js';
 
 export function KeyGate(): ReactElement {
 	const { addProfile } = useDashboard();
@@ -30,13 +31,16 @@ export function KeyGate(): ReactElement {
 	}
 
 	return (
-		<main className="flex min-h-screen items-center justify-center bg-neutral-50 px-4">
+		<main className="flex min-h-screen items-center justify-center px-4">
 			<form
 				onSubmit={onSubmit}
 				noValidate
-				className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-8 shadow-sm"
+				className="w-full max-w-sm rounded-3xl border border-neutral-200/70 bg-white/90 p-8 shadow-float ring-1 ring-neutral-900/5 backdrop-blur"
 			>
-				<h1 className="text-2xl font-semibold tracking-tight text-neutral-900">Facet</h1>
+				<BrandMark className="size-11" />
+				<h1 className="mt-4 text-2xl font-semibold tracking-[-0.02em] text-neutral-900">
+					Welcome to <span className="text-brand-gradient">Facet</span>
+				</h1>
 				<p className="mt-1 text-sm text-neutral-500">
 					Enter your API key and site to view analytics.
 				</p>
@@ -53,7 +57,7 @@ export function KeyGate(): ReactElement {
 					placeholder="clk_…"
 					aria-invalid={Boolean(showKeyError)}
 					aria-describedby={showKeyError ? 'kg-key-err' : undefined}
-					className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+					className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25"
 				/>
 				{showKeyError ? (
 					<p id="kg-key-err" role="alert" className="mt-1 text-xs text-red-600">
@@ -76,7 +80,7 @@ export function KeyGate(): ReactElement {
 					placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx"
 					aria-invalid={Boolean(showSiteError)}
 					aria-describedby={showSiteError ? 'kg-site-err' : undefined}
-					className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+					className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25"
 				/>
 				{showSiteError ? (
 					<p id="kg-site-err" role="alert" className="mt-1 text-xs text-red-600">
@@ -97,14 +101,14 @@ export function KeyGate(): ReactElement {
 					onChange={(e) => setLabel(e.target.value)}
 					autoComplete="off"
 					placeholder="Production"
-					className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+					className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25"
 				/>
 
 				<button
 					type="submit"
 					className={cn(
-						'mt-6 w-full rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition',
-						'hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-40',
+						'mt-6 w-full rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-card transition',
+						'hover:shadow-float hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 disabled:cursor-not-allowed disabled:opacity-40',
 					)}
 				>
 					View dashboard
