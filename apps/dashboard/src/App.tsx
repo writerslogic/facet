@@ -30,6 +30,7 @@ import {
 	Skeleton,
 } from './components/StatusStates.js';
 import { TrafficChart } from './components/TrafficChart.js';
+import { VerifiedMetric } from './components/VerifiedMetric.js';
 import { useCompareStats, useStats } from './hooks/stats.js';
 import { cn } from './lib/cn.js';
 import { isAuthError } from './lib/status.js';
@@ -112,7 +113,9 @@ function Overview({
 	return (
 		<div className="space-y-6">
 			{data.meta?.pending ? <PendingNotice /> : null}
-			<KpiCards summary={summary} compare={cmp?.summary} series={data.series} />
+			<VerifiedMetric label="Overview metrics">
+				<KpiCards summary={summary} compare={cmp?.summary} series={data.series} />
+			</VerifiedMetric>
 			<EngagementCards engagement={data.engagement} compare={cmp?.engagement} />
 			<TrafficChart series={data.series} loading={false} error={null} />
 			{isEmpty && data.series.length === 0 ? (

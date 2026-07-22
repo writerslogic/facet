@@ -1,7 +1,8 @@
-// Wraps a KPI card (or any metric surface) and, when this deployment runs a transparency log AND the
-// metric maps to a specific rollup bucket, overlays a "Verified" badge. Clicking it opens the ProofDrawer
-// with the MMR inclusion proof. Degrades to bare children when the log is off or no proof ref is given —
-// a range-summary KPI aggregates many rollups and so has no single proof, and correctly shows no badge.
+// Wraps a metric surface and, when this deployment runs a signed transparency log, overlays a "Verified"
+// badge. Clicking it opens the ProofDrawer, which shows the signed checkpoint (tree head) — a real
+// cryptographic artifact that stands on its own — plus, when `proofRef` names a specific rollup bucket,
+// that bucket's MMR inclusion proof. The badge truthfully means "this data is committed to a signed log",
+// not "this exact aggregate has one proof". Degrades to bare children when the log is off.
 
 import { ShieldCheck } from 'lucide-react';
 import { type ReactElement, type ReactNode, useState } from 'react';
@@ -23,7 +24,7 @@ export function VerifiedMetric({
 	const { apiKey } = useDashboard();
 	const { data: checkpoint } = useCheckpoint(apiKey);
 	const [open, setOpen] = useState(false);
-	const verifiable = Boolean(checkpoint && proofRef);
+	const verifiable = Boolean(checkpoint);
 
 	return (
 		<div className="relative">
@@ -32,14 +33,14 @@ export function VerifiedMetric({
 				<button
 					type="button"
 					onClick={() => setOpen(true)}
-					className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-					title="Backed by the cryptographic transparency log — click to view proof"
+					className="absolute -top-3 right-3 z-10 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 shadow-sm transition-colors hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+					title="Committed to the cryptographic transparency log — click to view proof"
 				>
 					<ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
 					Verified
 				</button>
 			) : null}
-			{open && proofRef ? (
+			{open ? (
 				<ProofDrawer
 					label={label}
 					proofRef={proofRef}
