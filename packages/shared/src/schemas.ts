@@ -60,7 +60,7 @@ export const ServerEventSchema = v.object({
 			campaign: v.optional(v.pipe(v.string(), v.maxLength(200))),
 		}),
 	),
-	ip: v.optional(v.pipe(v.string(), v.maxLength(45))),
+	ip: v.optional(v.pipe(v.string(), v.ip())),
 	user_agent: v.optional(v.pipe(v.string(), v.maxLength(512))),
 });
 
