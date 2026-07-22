@@ -62,7 +62,56 @@ export const ServerEventSchema = v.object({
 	),
 	ip: v.optional(v.pipe(v.string(), v.ip())),
 	user_agent: v.optional(v.pipe(v.string(), v.maxLength(512))),
+	// Tier 2 (identified) attempt: a site-supplied opaque user id + a per-event consent assertion.
+	// Both are only honored when the site is configured `identified` AND `consent === true`; otherwise
+	// the uid is ignored and the event ingests anonymously (misconfiguration degrades toward privacy).
+	user_id: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256))),
+	consent: v.optional(v.boolean()),
 });
+
+// Identity spectrum (U2). `salt_window` widens the pseudonym's linkage lifetime; `never` is
+// intentionally absent — every window is bounded by retention, so cross-window linkage is always
+// finite. Tiers are monotonic: an elevated site still emits the Tier-0 anonymous aggregates.
+export const IdentityTierSchema = v.picklist(['anonymous', 'pseudonymous', 'identified']);
+export const SaltWindowSchema = v.picklist(['day', 'week', 'month']);
+
+// Admin: set a site's identity tier + salt window (site_id comes from the path, never the body).
+export const SetIdentitySchema = v.object({
+	tier: IdentityTierSchema,
+	salt_window: SaltWindowSchema,
+});
+
+// Consent grant (site API key path). `site_id` is derived from the key, NEVER the body. `ip`/`ua` are
+// transient — used only to re-derive the same visitor hash the ingest path will, never stored. The
+// stored/signed record contains only the derived hash, never ip/ua/raw user_id.
+export const ConsentGrantSchema = v.pipe(
+	v.object({
+		tier: v.picklist(['pseudonymous', 'identified']),
+		salt_window: SaltWindowSchema,
+		user_id: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256))),
+		ip: v.optional(v.pipe(v.string(), v.ip())),
+		user_agent: v.optional(v.pipe(v.string(), v.maxLength(512))),
+		expires_at: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+	}),
+	v.check(
+		(b) => b.tier !== 'identified' || (b.user_id?.length ?? 0) > 0,
+		'user_id_required_for_identified',
+	),
+);
+
+export const ConsentRevokeSchema = v.pipe(
+	v.object({
+		tier: v.picklist(['pseudonymous', 'identified']),
+		salt_window: SaltWindowSchema,
+		user_id: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(256))),
+		ip: v.optional(v.pipe(v.string(), v.ip())),
+		user_agent: v.optional(v.pipe(v.string(), v.maxLength(512))),
+	}),
+	v.check(
+		(b) => (b.user_id?.length ?? 0) > 0 || (b.ip?.length ?? 0) > 0,
+		'revoke_needs_identifier',
+	),
+);
 
 export const StatsQuerySchema = v.object({
 	site_id: v.pipe(v.string(), v.uuid()),
@@ -211,3 +260,8 @@ export type FlagVariantInput = v.InferOutput<typeof FlagVariantSchema>;
 export type FlagRuleInput = v.InferOutput<typeof FlagRuleSchema>;
 export type FlagInput = v.InferOutput<typeof FlagSchema>;
 export type FlagEvalInput = v.InferOutput<typeof FlagEvalSchema>;
+export type IdentityTier = v.InferOutput<typeof IdentityTierSchema>;
+export type SaltWindow = v.InferOutput<typeof SaltWindowSchema>;
+export type SetIdentityInput = v.InferOutput<typeof SetIdentitySchema>;
+export type ConsentGrantInput = v.InferOutput<typeof ConsentGrantSchema>;
+export type ConsentRevokeInput = v.InferOutput<typeof ConsentRevokeSchema>;
