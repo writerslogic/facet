@@ -6,7 +6,7 @@
 import type { JWK } from 'jose';
 import { canonicalizeBytes } from './canonicalize.js';
 import { signDetachedJws, verifyDetachedProof } from './jws.js';
-import type { SigningAlg, SigningKey } from './keys.js';
+import { type SigningAlg, type SigningKey, toPublicJwkFields } from './keys.js';
 
 /** Envelope format identifier (versioned so future changes are detectable). */
 export const SIGNED_EXPORT_TYPE = 'facet-signed-export/1' as const;
@@ -52,7 +52,7 @@ export async function signExport(
 			alg: key.alg,
 			kid: key.kid,
 			jws,
-			publicJwk: key.publicJwk,
+			publicJwk: toPublicJwkFields(key.publicJwk),
 			jwksUrl: opts.jwksUrl,
 			created: new Date(opts.now).toISOString(),
 		},
@@ -68,8 +68,17 @@ export interface SignedExportVerification {
 	reason?: string;
 }
 
-/** Verify a signed-export envelope offline against its embedded public JWK. */
+/** Verify a signed-export envelope offline against its embedded public JWK. Fails closed on a
+ * null/non-object envelope rather than throwing on the destructure. */
 export async function verifySignedExport(env: SignedExport): Promise<SignedExportVerification> {
+	if (env == null || typeof env !== 'object') {
+		return {
+			valid: false,
+			kid: '',
+			alg: 'EdDSA',
+			reason: 'malformed envelope',
+		};
+	}
 	const { proof, payload } = env;
 	const kid = proof?.kid ?? '';
 	const alg = proof?.alg ?? 'EdDSA';

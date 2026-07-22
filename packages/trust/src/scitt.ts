@@ -7,7 +7,9 @@
 // @facet/server. Operating a production Transparency Service is a deployment concern, not a Facet
 // feature.
 
+import { fromHex, toHex } from './bytes.js';
 import type { SigningKey } from './keys.js';
+import { leafHash } from './mmr.js';
 import type { InclusionReceipt } from './receipt.js';
 import { verifyInclusionReceipt } from './receipt.js';
 import {
@@ -108,6 +110,28 @@ export async function verifyScittReceipt(
 			logId: p.logId,
 			entryId: p.entryId,
 			reason: 'inclusion proof failed',
+		};
+	}
+	// Bind the proven leaf to the reported statementHash: the leaf is H(statementHash bytes), so an
+	// inclusion proof for some other entry cannot be presented under this statementHash. Both fields are
+	// signed, so this catches a Transparency Service emitting an inconsistent (leaf, statementHash) pair.
+	let expectedLeaf: string;
+	try {
+		expectedLeaf = toHex(await leafHash(fromHex(p.statementHash)));
+	} catch {
+		return {
+			valid: false,
+			logId: p.logId,
+			entryId: p.entryId,
+			reason: 'malformed statementHash',
+		};
+	}
+	if (p.inclusion.leaf !== expectedLeaf) {
+		return {
+			valid: false,
+			logId: p.logId,
+			entryId: p.entryId,
+			reason: 'inclusion leaf does not match statementHash',
 		};
 	}
 	return { valid: true, logId: p.logId, entryId: p.entryId };

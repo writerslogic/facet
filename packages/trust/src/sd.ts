@@ -61,6 +61,20 @@ export async function issueSelectiveCredential(
 	key: SigningKey,
 	opts: IssueSdOptions,
 ): Promise<SelectiveCredential> {
+	// A selective claim must not shadow a mandatory/cleartext claim or a reserved key, else the same name
+	// would have two authoritative sources (one signed-cleartext, one disclosed).
+	for (const name of Object.keys(selective)) {
+		if (
+			name === '_sd' ||
+			name === 'id' ||
+			name in mandatory ||
+			name in base.credentialSubject
+		) {
+			throw new Error(
+				`selective claim "${name}" collides with a mandatory or reserved claim`,
+			);
+		}
+	}
 	const disclosures: Disclosure[] = Object.entries(selective).map(([name, value]) => ({
 		salt: makeSalt(),
 		name,
@@ -109,8 +123,12 @@ export async function verifySelectiveCredential(
 		// biome-ignore lint/style/useNamingConvention: `_sd` is the SD-JWT spec-defined digest array name.
 		_sd?: unknown;
 	};
-	const sd = Array.isArray(subject._sd) ? new Set(subject._sd as string[]) : new Set<string>();
+	const sd = Array.isArray(subject._sd)
+		? new Set((subject._sd as unknown[]).filter((x): x is string => typeof x === 'string'))
+		: new Set<string>();
+	const cleartext = presentation.credential.credentialSubject as Record<string, unknown>;
 	const revealed: Record<string, unknown> = {};
+	const consumed = new Set<string>();
 	for (const d of presentation.disclosures) {
 		const digest = await disclosureDigest(d);
 		if (!sd.has(digest)) {
@@ -118,6 +136,23 @@ export async function verifySelectiveCredential(
 				valid: false,
 				revealed: {},
 				reason: `disclosure "${d.name}" digest not in _sd`,
+			};
+		}
+		// Reject a digest presented twice and a name presented twice or colliding with a cleartext claim —
+		// SD-JWT requires exactly one authoritative value per claim name (no last-wins substitution).
+		if (consumed.has(digest)) {
+			return {
+				valid: false,
+				revealed: {},
+				reason: 'duplicate disclosure digest',
+			};
+		}
+		consumed.add(digest);
+		if (d.name in revealed || (d.name !== '_sd' && d.name in cleartext)) {
+			return {
+				valid: false,
+				revealed: {},
+				reason: `disclosure "${d.name}" collides with another claim`,
 			};
 		}
 		revealed[d.name] = d.value;

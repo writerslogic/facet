@@ -53,7 +53,9 @@ export function peakIndices(count: number): number[] {
 	const out: number[] = [];
 	let s = count;
 	while (s !== 0) {
-		const highest = (1 << Math.floor(Math.log2(s + 1))) - 1;
+		// 2 ** k (not 1 << k): the shift overflows Int32 and goes negative for trees past ~2^31 nodes,
+		// which would non-terminate this loop; 2 ** k is exact through 2^52.
+		const highest = 2 ** Math.floor(Math.log2(s + 1)) - 1;
 		peak += highest;
 		out.push(peak - 1);
 		s -= highest;
