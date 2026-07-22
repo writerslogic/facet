@@ -10,6 +10,22 @@ import { COLLECT_MAX_BODY_BYTES, CORS_MAX_AGE } from './lib/constants.js';
 import { ApiError, toErrorBody } from './lib/http.js';
 import { ROUTES } from './routes/registry.js';
 
+/** Add baseline security headers to a dashboard (non-API) response. Clones because ASSETS responses are
+ * immutable. Sets framing/sniff/referrer protection only — no resource-restricting CSP directive, so
+ * the SPA's own script/style/font loading is unaffected while clickjacking and MIME-sniffing are blocked. */
+function withDashboardSecurityHeaders(res: Response): Response {
+	const headers = new Headers(res.headers);
+	headers.set('X-Content-Type-Options', 'nosniff');
+	headers.set('X-Frame-Options', 'DENY');
+	headers.set('Content-Security-Policy', "frame-ancestors 'none'");
+	headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+	return new Response(res.body, {
+		status: res.status,
+		statusText: res.statusText,
+		headers,
+	});
+}
+
 export function createApp(): Hono<AppEnv> {
 	const app = new Hono<AppEnv>();
 
@@ -44,12 +60,12 @@ export function createApp(): Hono<AppEnv> {
 		if (pathname.startsWith('/api/')) {
 			return c.json({ error: 'not_found' }, 404);
 		}
-		const res = await c.env.ASSETS.fetch(c.req.raw);
+		let res = await c.env.ASSETS.fetch(c.req.raw);
 		if (res.status === 404 && (c.req.header('accept') ?? '').includes('text/html')) {
 			const indexUrl = new URL('/index.html', c.req.url);
-			return c.env.ASSETS.fetch(new Request(indexUrl, { method: 'GET' }));
+			res = await c.env.ASSETS.fetch(new Request(indexUrl, { method: 'GET' }));
 		}
-		return res;
+		return withDashboardSecurityHeaders(res);
 	});
 
 	app.notFound((c) => c.json({ error: 'not_found' }, 404));

@@ -9,8 +9,11 @@ import { DAY_MS, DEFAULT_RAW_RETENTION_DAYS } from './constants.js';
 
 /** Purge raw rows older than `RAW_RETENTION_DAYS` (falling back to the default when unset/NaN). */
 export async function enforceRetention(env: Env, now: number): Promise<void> {
+	// Require a positive integer: parseInt never yields Infinity, so `!Number.isFinite` would let "0",
+	// a negative, or a partial parse ("30days"→30 is fine, but "0"/"-5") through — and days<=0 makes the
+	// cutoff >= now, purging live/current events on every run. Fall back to the default instead.
 	let days = Number.parseInt(env.RAW_RETENTION_DAYS, 10);
-	if (!Number.isFinite(days)) {
+	if (!Number.isInteger(days) || days < 1) {
 		days = DEFAULT_RAW_RETENTION_DAYS;
 	}
 	const cutoff = now - days * DAY_MS;

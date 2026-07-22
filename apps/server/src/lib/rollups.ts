@@ -14,7 +14,10 @@ const pageviewCount = sql<number>`SUM(CASE WHEN ${schema.events.name} IS NULL TH
 const eventCount = sql<number>`SUM(CASE WHEN ${schema.events.name} IS NOT NULL THEN 1 ELSE 0 END)`;
 const visitorCount = sql<number>`COUNT(DISTINCT ${schema.events.visitorHash})`;
 
-/** Aggregate every (site, hostname) with events in [bucketStart, bucketEnd) into one rollup row. */
+/** Aggregate every (site, hostname) with events in [bucketStart, bucketEnd) into one rollup row.
+ * NOTE: `visitors` is COUNT(DISTINCT visitor) per (site, hostname, bucket) and is NOT additive across
+ * hostnames — a visitor on two hosts of one site counts once per host. For a site-level unique count,
+ * recompute COUNT(DISTINCT) from raw events (as db/stats.ts does); never SUM rollup `visitors`. */
 export async function rollupBucket(
 	env: Env,
 	interval: Interval,
