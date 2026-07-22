@@ -142,6 +142,36 @@ export interface RealtimeSnapshot {
 	until: number;
 }
 
+/** Cohort period bucket for retention analysis. */
+export type CohortPeriod = 'day' | 'week';
+
+/** One cohort row of the retention triangle. */
+export interface CohortRow {
+	/** Cohort label: the period bucket of first activity (`YYYY-MM-DD` for day, ISO week start
+	 * `YYYY-MM-DD` for week). */
+	cohort: string;
+	/** Distinct visitors whose first activity fell in this cohort period. */
+	size: number;
+	/** `retention[n]` is the fraction (0..1) of the cohort seen n periods after their first.
+	 * `retention[0]` is always 1 (the cohort period itself). */
+	retention: number[];
+}
+
+/**
+ * Cohort-retention triangle. Cohorts are grouped by the period of a visitor's first activity;
+ * each subsequent cell is the fraction of that cohort seen n periods later.
+ *
+ * CAVEAT (salt window): a visitor_hash is stable only WITHIN one salt window (default: daily). At
+ * the default daily window the same person gets a NEW hash each day, so cross-period retention is
+ * legitimately ~0 — that is honest, not a bug. `note` carries this explanation for the UI.
+ */
+export interface CohortRetentionResponse {
+	period: CohortPeriod;
+	cohorts: CohortRow[];
+	/** Human-readable salt-window caveat for the UI to surface. */
+	note: string;
+}
+
 export interface StatsResponse {
 	summary: StatsSummary;
 	series: SeriesPoint[];

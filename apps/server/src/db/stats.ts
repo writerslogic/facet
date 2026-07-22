@@ -3,6 +3,9 @@
 // unix ms; ranges are [start, end).
 
 import type {
+	CohortPeriod,
+	CohortRetentionResponse,
+	CohortRow,
 	CountRow,
 	CubeCell,
 	EngagementSummary,
@@ -316,4 +319,135 @@ export async function channels(env: Env, f: StatsFilter): Promise<CountRow[]> {
 		.groupBy(schema.eventSessions.channel)
 		.orderBy(desc(count), schema.eventSessions.channel);
 	return rows.map((r) => ({ key: String(r.key), count: Number(r.count) }));
+}
+
+/** Cohorts (and the trailing retention columns) are hard-capped so the matrix stays bounded and the
+ * response never grows with the range — the SQL over `sessions` is unbounded, so we window it here. */
+const COHORT_MAX_PERIODS = 12;
+
+const SALT_WINDOW_NOTE =
+	'Retention depth is bounded by the site salt window: a visitor_hash is stable only within one ' +
+	'window (default: daily). At the daily window a returning person gets a new hash each day, so ' +
+	'multi-period retention is legitimately ~0. Wider (weekly/monthly) retention requires a wider ' +
+	'salt window via the identity spectrum.';
+
+/** Convert a `YYYY-MM-DD` day_key to a UTC-midnight unix-ms timestamp. */
+function dayKeyToMs(dayKey: string): number {
+	return Date.parse(`${dayKey}T00:00:00.000Z`);
+}
+
+const WEEK_MS = 7 * DAY_MS;
+
+/** Snap a UTC-midnight timestamp to the start of its period bucket: the day itself, or (for `week`)
+ * its ISO-week Monday. UTC epoch (1970-01-01) was a Thursday, so shifting by 4 days lands Monday on
+ * the week boundary. Input is already day-aligned, so `t % DAY_MS === 0`. */
+function bucketStart(ms: number, period: CohortPeriod): number {
+	if (period === 'day') {
+		return ms;
+	}
+	return ms - ((ms / DAY_MS + 3) % 7) * DAY_MS;
+}
+
+/** Format a period-bucket start (unix ms) as its `YYYY-MM-DD` cohort label. */
+function cohortLabel(startMs: number): string {
+	return new Date(startMs).toISOString().slice(0, 10);
+}
+
+/**
+ * Cohort-retention triangle over the `sessions` table for a site+range. Visitors are grouped by the
+ * period (`day`|`week`) of their FIRST activity; each retention column is the fraction of that cohort
+ * seen n periods later. A visitor_hash is stable only within one salt window, so at the default daily
+ * window cross-period retention is honestly ~0 (see `SALT_WINDOW_NOTE`).
+ *
+ * The read is a bounded per-(visitor, day_key) scan; bucketing into periods and the retention matrix
+ * are computed in JS. Output is capped at the last `COHORT_MAX_PERIODS` cohorts, each with at most
+ * `COHORT_MAX_PERIODS` retention columns, so the response never grows with the range.
+ */
+export async function cohortRetention(
+	env: Env,
+	f: StatsFilter,
+	period: CohortPeriod,
+): Promise<CohortRetentionResponse> {
+	// One row per (visitor, day_key) they were active. day_key is the stable-within-window bucket.
+	const rows = await db(env)
+		.select({
+			visitorHash: schema.sessions.visitorHash,
+			dayKey: schema.sessions.dayKey,
+		})
+		.from(schema.sessions)
+		.where(
+			and(
+				eq(schema.sessions.siteId, f.siteId),
+				gte(schema.sessions.firstSeen, f.start),
+				lt(schema.sessions.firstSeen, f.end),
+			),
+		);
+
+	if (rows.length === 0) {
+		return { period, cohorts: [], note: SALT_WINDOW_NOTE };
+	}
+
+	const periodMs = period === 'day' ? DAY_MS : WEEK_MS;
+	// Origin: the bucket-start of the earliest active day, so bucket indices start at 0.
+	const originStart = bucketStart(
+		Math.min(...rows.map((r) => dayKeyToMs(String(r.dayKey)))),
+		period,
+	);
+
+	// Per visitor: their first bucket (cohort) and the full set of buckets they appear in.
+	const byVisitor = new Map<string, { first: number; seen: Set<number> }>();
+	for (const r of rows) {
+		const idx = Math.floor(
+			(bucketStart(dayKeyToMs(String(r.dayKey)), period) - originStart) / periodMs,
+		);
+		const key = String(r.visitorHash);
+		const entry = byVisitor.get(key);
+		if (entry) {
+			entry.first = Math.min(entry.first, idx);
+			entry.seen.add(idx);
+		} else {
+			byVisitor.set(key, { first: idx, seen: new Set([idx]) });
+		}
+	}
+
+	// Cohort → size and per-offset returning counts.
+	const cohorts = new Map<number, { size: number; returned: Map<number, number> }>();
+	for (const { first, seen } of byVisitor.values()) {
+		let cohort = cohorts.get(first);
+		if (!cohort) {
+			cohort = { size: 0, returned: new Map() };
+			cohorts.set(first, cohort);
+		}
+		cohort.size += 1;
+		for (const idx of seen) {
+			const offset = idx - first;
+			if (offset >= 0 && offset < COHORT_MAX_PERIODS) {
+				cohort.returned.set(offset, (cohort.returned.get(offset) ?? 0) + 1);
+			}
+		}
+	}
+
+	// Keep only the most recent COHORT_MAX_PERIODS cohorts, ascending by period.
+	const cohortIdxs = [...cohorts.keys()].sort((a, b) => a - b).slice(-COHORT_MAX_PERIODS);
+	const result: CohortRow[] = cohortIdxs.map((idx) => {
+		const c = cohorts.get(idx) as {
+			size: number;
+			returned: Map<number, number>;
+		};
+		const retention: number[] = [];
+		for (let offset = 0; offset < COHORT_MAX_PERIODS; offset++) {
+			const n = c.returned.get(offset) ?? 0;
+			if (offset > 0 && n === 0) {
+				break;
+			}
+			retention.push(c.size > 0 ? n / c.size : 0);
+		}
+		return {
+			cohort: cohortLabel(originStart + idx * periodMs),
+			size: c.size,
+			retention,
+		};
+	});
+
+	return { period, cohorts: result, note: SALT_WINDOW_NOTE };
 }

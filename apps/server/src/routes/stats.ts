@@ -28,6 +28,7 @@ import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import {
 	channels,
+	cohortRetention,
 	cube,
 	engagement,
 	realtime,
@@ -173,6 +174,25 @@ statsRoutes.get(
 			channels: await channels(c.env, f),
 			meta: await sessionFreshness(c.env, f),
 		});
+	},
+);
+
+// Cohort-retention triangle: visitors grouped by the period of their first activity, then the
+// fraction returning n periods later. Same site-scoping + range validation as the sibling reads.
+// `period` (day|week, default week) is a raw query param — StatsQuerySchema has no `period` field.
+// NOTE: retention depth is bounded by the site salt window (see the response `note`); at the
+// default daily window cross-period retention is honestly ~0, not a bug.
+statsRoutes.get(
+	'/stats/retention',
+	requireApiKey,
+	vValidator('query', StatsQuerySchema, validationErrorHook),
+	async (c) => {
+		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
+		const periodRaw = c.req.query('period') ?? 'week';
+		if (periodRaw !== 'day' && periodRaw !== 'week') {
+			throw new ApiError('bad_request', 400, 'period must be day or week');
+		}
+		return c.json(await cohortRetention(c.env, f, periodRaw));
 	},
 );
 
