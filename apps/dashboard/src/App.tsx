@@ -11,6 +11,7 @@ import { Anomalies } from './components/Anomalies.js';
 import { AskPanel } from './components/AskPanel.js';
 import { Breakdowns } from './components/Breakdowns.js';
 import { ChannelsPanel } from './components/ChannelsPanel.js';
+import { CubeFilterBar } from './components/CubeFilterBar.js';
 import { EngagementCards } from './components/EngagementCards.js';
 import { Experiments } from './components/Experiments.js';
 import { ExportButton } from './components/ExportButton.js';
@@ -31,8 +32,10 @@ import {
 } from './components/StatusStates.js';
 import { TrafficChart } from './components/TrafficChart.js';
 import { VerifiedMetric } from './components/VerifiedMetric.js';
+import { useCube } from './hooks/cube.js';
 import { useCompareStats, useStats } from './hooks/stats.js';
 import { cn } from './lib/cn.js';
+import { type CubeFilter, cubeSeries, isFilterActive, sliceCube } from './lib/cube.js';
 import { isAuthError } from './lib/status.js';
 import { useDashboard } from './state.js';
 
@@ -82,6 +85,8 @@ function Overview({
 		interval,
 	};
 	const compareStats = useCompareStats(apiKey, compareQuery, Boolean(compare && compareRange));
+	const cube = useCube(apiKey, siteId, range, interval);
+	const [cubeFilter, setCubeFilter] = useState<CubeFilter>({});
 
 	if (error && isAuthError(error)) {
 		return <AuthErrorBanner />;
@@ -110,14 +115,43 @@ function Overview({
 	const isEmpty = summary.pageviews === 0 && summary.visitors === 0 && summary.events === 0;
 	const cmp = compare ? (compareStats.data ?? null) : null;
 
+	// Instant client-side slicing over the in-memory cube. When a filter is active, the KPIs and chart
+	// render from the sliced cube (no server round-trip); pageviews/events are exact, visitors is an
+	// upper bound flagged below. Engagement is session-derived (not in the cube), so it hides under a
+	// filter rather than showing unfiltered numbers next to filtered ones.
+	const cubeCells = cube.data?.cells ?? [];
+	const filtered = isFilterActive(cubeFilter);
+	const slice = filtered ? sliceCube(cubeCells, cubeFilter) : null;
+	const displaySummary = slice
+		? {
+				pageviews: slice.pageviews,
+				visitors: slice.visitors,
+				events: slice.events,
+			}
+		: summary;
+	const displaySeries = filtered ? cubeSeries(cubeCells, cubeFilter) : data.series;
+
 	return (
 		<div className="space-y-6">
 			{data.meta?.pending ? <PendingNotice /> : null}
+			<CubeFilterBar cells={cubeCells} filter={cubeFilter} onChange={setCubeFilter} />
 			<VerifiedMetric label="Overview metrics">
-				<KpiCards summary={summary} compare={cmp?.summary} series={data.series} />
+				<KpiCards
+					summary={displaySummary}
+					compare={filtered ? undefined : cmp?.summary}
+					series={displaySeries}
+				/>
 			</VerifiedMetric>
-			<EngagementCards engagement={data.engagement} compare={cmp?.engagement} />
-			<TrafficChart series={data.series} loading={false} error={null} />
+			{slice?.visitorsApproximate ? (
+				<p className="-mt-3 text-xs text-neutral-400">
+					Visitors is an upper bound under this slice (a visitor counted in more than one
+					cell); pageviews and events are exact.
+				</p>
+			) : null}
+			{filtered ? null : (
+				<EngagementCards engagement={data.engagement} compare={cmp?.engagement} />
+			)}
+			<TrafficChart series={displaySeries} loading={false} error={null} />
 			{isEmpty && data.series.length === 0 ? (
 				<EmptyState title="No data yet">
 					<span>

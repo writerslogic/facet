@@ -56,6 +56,29 @@ export interface SeriesPoint {
 	visitors: number;
 }
 
+/** One cell of the low-cardinality dimensional cube: counts for a (bucket, device, country, channel).
+ * Shipped once per range so the client can slice by these axes with zero further server round-trips.
+ * High-cardinality dimensions (path, referrer) are intentionally NOT in the cube. */
+export interface CubeCell {
+	/** Bucket start, unix epoch milliseconds. */
+	t: number;
+	device: string;
+	/** Country folded to the top-N by volume plus `'other'`, so the cube stays bounded and complete. */
+	country: string;
+	channel: string;
+	pageviews: number;
+	events: number;
+	/** COUNT(DISTINCT visitor) WITHIN this cell. NOT additive across cells — summing over-counts a
+	 * visitor who spans multiple cells. Exact only per-cell and for the unfiltered whole-range total. */
+	visitors: number;
+}
+
+/** The dimensional cube for a range, plus the interval its buckets use. */
+export interface CubeResponse {
+	interval: Interval;
+	cells: CubeCell[];
+}
+
 /** A detected anomaly in a metric's hourly series, with an optional root-cause diagnosis. */
 export interface Anomaly {
 	metric: 'pageviews';

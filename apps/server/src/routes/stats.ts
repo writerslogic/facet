@@ -28,6 +28,7 @@ import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import {
 	channels,
+	cube,
 	engagement,
 	realtime,
 	series,
@@ -131,6 +132,21 @@ statsRoutes.get(
 			meta: freshness,
 		};
 		return c.json(body);
+	},
+);
+
+// The low-cardinality dimensional cube for a range: the client hydrates this once and slices by
+// device/country/channel instantly, with no further server round-trips.
+statsRoutes.get(
+	'/stats/cube',
+	requireApiKey,
+	vValidator('query', StatsQuerySchema, validationErrorHook),
+	async (c) => {
+		const query = c.req.valid('query');
+		const f = toStatsFilter(query, c.get('siteId'));
+		const interval =
+			query.interval ?? (query.end - query.start <= 48 * HOUR_MS ? 'hour' : 'day');
+		return c.json({ interval, cells: await cube(c.env, f, interval) });
 	},
 );
 

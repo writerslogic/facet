@@ -4,6 +4,7 @@
 
 import type {
 	CountRow,
+	CubeCell,
 	EngagementSummary,
 	Freshness,
 	Interval,
@@ -76,6 +77,59 @@ export async function series(env: Env, f: StatsFilter, interval: Interval): Prom
 		});
 	}
 	return points;
+}
+
+/** How many countries the cube keeps distinct before folding the long tail into `'other'`. */
+const CUBE_TOP_COUNTRIES = 30;
+
+/** A small dimensional cube for the range: per (bucket, device, country, channel) counts, for instant
+ * client-side slicing by those low-cardinality axes with no further server reads. Country is folded to
+ * the top-N by volume plus `'other'`, so the cube is both bounded AND complete (every event lands in a
+ * cell — totals stay exact). Path/referrer are deliberately excluded (high cardinality → server-side). */
+export async function cube(env: Env, f: StatsFilter, interval: Interval): Promise<CubeCell[]> {
+	const bucketMs = interval === 'hour' ? HOUR_MS : DAY_MS;
+	const bucket = sql<number>`(${schema.events.createdAt} - (${schema.events.createdAt} % ${bucketMs}))`;
+
+	// Bound country cardinality without dropping data: keep the top-N countries, fold the rest to 'other'.
+	const topCountries = (
+		await topByColumn(env, f, schema.events.country, {
+			excludeNull: true,
+			limit: CUBE_TOP_COUNTRIES,
+		})
+	).map((r) => r.key);
+	const country =
+		topCountries.length > 0
+			? sql<string>`CASE WHEN ${schema.events.country} IN (${sql.join(
+					topCountries.map((c) => sql`${c}`),
+					sql`, `,
+				)}) THEN ${schema.events.country} ELSE 'other' END`
+			: sql<string>`COALESCE(${schema.events.country}, 'other')`;
+	const device = sql<string>`COALESCE(${schema.events.device}, 'unknown')`;
+	const channel = sql<string>`COALESCE(${schema.events.channel}, 'unknown')`;
+
+	const rows = await db(env)
+		.select({
+			t: bucket,
+			device,
+			country,
+			channel,
+			pageviews: pageviewCount,
+			events: eventCount,
+			visitors: visitorCount,
+		})
+		.from(schema.events)
+		.where(buildEventWhere(f))
+		.groupBy(bucket, device, country, channel);
+
+	return rows.map((r) => ({
+		t: Number(r.t),
+		device: String(r.device),
+		country: String(r.country),
+		channel: String(r.channel),
+		pageviews: Number(r.pageviews ?? 0),
+		events: Number(r.events ?? 0),
+		visitors: Number(r.visitors ?? 0),
+	}));
 }
 
 /** Shared top-N count over one column, sorted by count desc (key asc for stable ties). */
