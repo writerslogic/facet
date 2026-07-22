@@ -26,7 +26,9 @@ eventRoute.post(
 	vValidator('json', ServerEventSchema, validationErrorHook),
 	async (c) => {
 		// GPC opt-out: an authenticated backend still relays the visitor's signal; drop before write.
-		if (isGpcOptOut(c.req.raw)) {
+		// GPC-at-request-time beats any stored consent — the opt-out is the visitor's, not the caller's.
+		const gpc = isGpcOptOut(c.req.raw);
+		if (gpc) {
 			return c.body(null, 202);
 		}
 		const body = c.req.valid('json');
@@ -44,6 +46,11 @@ eventRoute.post(
 			country: null,
 			device: device(ua),
 			now: Date.now(),
+			gpc,
+			url: new URL(c.req.url),
+			// Tier-2 attempt: honored only when the site is `identified` AND consent === true.
+			uid: body.user_id ?? null,
+			consent: body.consent ?? false,
 		});
 		return c.body(null, 202);
 	},

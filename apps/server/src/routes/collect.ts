@@ -20,11 +20,13 @@ collectRoute.post(
 	vValidator('json', CollectPayloadSchema, validationErrorHook),
 	async (c) => {
 		// GPC opt-out: drop silently (202) before any hashing or write, like a client opt-out.
-		if (isGpcOptOut(c.req.raw)) {
+		const gpc = isGpcOptOut(c.req.raw);
+		if (gpc) {
 			return c.body(null, 202);
 		}
 		const body = c.req.valid('json');
 		const ua = c.req.header('user-agent') ?? '';
+		// The public beacon carries no trusted identity, so it can only ever produce a Tier 0/1 hash.
 		await ingestEvent(c.env, {
 			siteId: body.site_id,
 			ip: clientIp(c.req.raw),
@@ -38,6 +40,10 @@ collectRoute.post(
 			country: country(c.req.raw),
 			device: device(ua),
 			now: Date.now(),
+			gpc,
+			url: new URL(c.req.url),
+			uid: null,
+			consent: false,
 		});
 		return c.body(null, 202);
 	},
