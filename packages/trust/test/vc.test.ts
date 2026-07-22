@@ -202,4 +202,24 @@ describe('did:web', () => {
 		const bad = await verifyDidConfiguration(config, didDoc, 'https://evil.example');
 		expect(bad.valid).toBe(false);
 	});
+
+	it('rejects a linkage credential whose issuer is not the DID', async () => {
+		const { key, publicJwk } = await edKey();
+		const did = didWebFromHost('facet.example');
+		const origin = 'https://facet.example';
+		const didDoc = buildDidDocument(did, key.kid, publicJwk);
+		const cred = await issueDomainLinkageCredential({
+			did,
+			origin,
+			key,
+			created: '2026-07-01T00:00:00.000Z',
+		});
+		// A credential that still names the DID as its subject but claims a different issuer must be
+		// rejected at the issuer gate — a self-signed credential can't forge a domain linkage.
+		const forged = { ...cred, issuer: 'did:web:evil.example' };
+		const config = buildDidConfiguration([forged]);
+		const res = await verifyDidConfiguration(config, didDoc, origin);
+		expect(res.valid).toBe(false);
+		expect(res.reason).toBe('credential issuer does not match DID');
+	});
 });

@@ -37,9 +37,11 @@ function algForJwk(jwk: JWK): SigningAlg {
 	throw new Error(`unsupported key type for signing: kty=${jwk.kty} crv=${jwk.crv}`);
 }
 
-/** Public-JWK view of a private JWK: drop the private scalar `d` and stamp use/alg/kid. */
+/** Public-JWK view of a private JWK: strip every private member (not just `d`) and stamp use/alg/kid.
+ * Uses the full private-member stripper so no private scalar can reach the wire if the key set ever
+ * grows beyond OKP/EC. The thumbprint is over RFC 7638 required members only, so this is kid-stable. */
 async function toPublicJwk(privateJwk: JWK, alg: SigningAlg): Promise<JWK> {
-	const { d: D, ...pub } = privateJwk;
+	const pub = toPublicJwkFields(privateJwk);
 	const kid = await calculateJwkThumbprint(pub);
 	return { ...pub, alg, use: 'sig', kid };
 }

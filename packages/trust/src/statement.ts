@@ -4,7 +4,7 @@
 // COSE_Sign1 (RFC 9052 — the SCITT/COSE-receipts native format). A statement carries whichever proof
 // was requested; verification dispatches on the proof `type`.
 
-import type { JWK } from 'jose';
+import { type JWK, calculateJwkThumbprint } from 'jose';
 import { bytesEqual } from './bytes.js';
 import { canonicalizeBytes } from './canonicalize.js';
 import { coseFromBase64url, coseToBase64url, signCoseSign1, verifyCoseSign1 } from './cose.js';
@@ -112,6 +112,13 @@ async function verifyCoseProof(
 			return {
 				ok: false,
 				reason: 'COSE protected-header kid does not match proof kid',
+			};
+		}
+		// kid must be the RFC 7638 thumbprint of publicJwk, binding the label to the actual key.
+		if (proof.kid !== (await calculateJwkThumbprint(proof.publicJwk))) {
+			return {
+				ok: false,
+				reason: 'kid is not the RFC 7638 thumbprint of publicJwk',
 			};
 		}
 		// The declared proof.alg must equal the SIGNED protected-header alg, else it is unauthenticated.

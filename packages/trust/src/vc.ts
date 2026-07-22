@@ -160,10 +160,15 @@ export async function verifyCredential(
 		const ok = await crypto.subtle.verify(subtleSignParams('EdDSA'), key, signature, data);
 		if (!ok) return fail('signature did not verify');
 		if (opts.now !== undefined) {
-			const from = credential.validFrom ? Date.parse(credential.validFrom) : Number.NaN;
-			if (!Number.isNaN(from) && from > opts.now) return fail('credential not yet valid');
-			const until = credential.validUntil ? Date.parse(credential.validUntil) : Number.NaN;
-			if (!Number.isNaN(until) && until < opts.now) return fail('credential expired');
+			// A present-but-unparseable bound fails closed (treated as out-of-window), not skipped.
+			if (credential.validFrom) {
+				const from = Date.parse(credential.validFrom);
+				if (Number.isNaN(from) || from > opts.now) return fail('credential not yet valid');
+			}
+			if (credential.validUntil) {
+				const until = Date.parse(credential.validUntil);
+				if (Number.isNaN(until) || until < opts.now) return fail('credential expired');
+			}
 		}
 		return {
 			valid: true,

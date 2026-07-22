@@ -153,16 +153,44 @@ export async function verifyDidConfiguration(
 			reason: 'origin mismatch',
 		};
 	}
+	// DIF spec: the linkage credential must be issued by the DID itself, and signed by a key the DID
+	// controls and authorizes for assertions. Without these, a self-signed credential naming the DID as
+	// its subject would pass as a valid linkage.
+	const issuer =
+		typeof credential.issuer === 'string' ? credential.issuer : credential.issuer?.id;
+	if (issuer !== did) {
+		return {
+			valid: false,
+			did,
+			reason: 'credential issuer does not match DID',
+		};
+	}
 	const vmId = credential.proof?.verificationMethod ?? '';
-	const publicKeyMultibase = publicKeyMultibaseFor(didDoc, vmId);
-	if (!publicKeyMultibase) {
+	const vm = didDoc.verificationMethod.find((m) => m.id === vmId);
+	if (!vm) {
 		return {
 			valid: false,
 			did,
 			reason: 'verification method not found in DID document',
 		};
 	}
-	const result = await verifyCredential(credential, { publicKeyMultibase });
+	if (vm.controller !== did) {
+		return {
+			valid: false,
+			did,
+			reason: 'verification method not controlled by DID',
+		};
+	}
+	if (!didDoc.assertionMethod.includes(vmId)) {
+		return {
+			valid: false,
+			did,
+			reason: 'verification method not authorized for assertions',
+		};
+	}
+	const result = await verifyCredential(credential, {
+		publicKeyMultibase: vm.publicKeyMultibase,
+	});
 	if (!result.valid)
 		return {
 			valid: false,

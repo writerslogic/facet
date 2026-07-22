@@ -49,9 +49,17 @@ export function receiptToInclusion(r: InclusionReceipt): InclusionProof {
 	};
 }
 
-/** Verify a hex inclusion receipt against a checkpoint's hex root. */
-export function verifyInclusionReceipt(r: InclusionReceipt, rootHex: string): Promise<boolean> {
-	return verifyInclusion(receiptToInclusion(r), fromHex(rootHex));
+/** Verify a hex inclusion receipt against a checkpoint's hex root. Fails closed: a malformed hex or
+ * numeric field returns false rather than throwing, regardless of caller error handling. */
+export async function verifyInclusionReceipt(
+	r: InclusionReceipt,
+	rootHex: string,
+): Promise<boolean> {
+	try {
+		return await verifyInclusion(receiptToInclusion(r), fromHex(rootHex));
+	} catch {
+		return false;
+	}
 }
 
 /** Serialize a binary consistency proof to a hex receipt. */
@@ -84,11 +92,19 @@ export function receiptToConsistency(r: ConsistencyReceipt): ConsistencyProof {
 	};
 }
 
-/** Verify a hex consistency receipt against two checkpoint hex roots. */
-export function verifyConsistencyReceipt(
+/** Verify a hex consistency receipt against two checkpoint hex roots. Fails closed on malformed input. */
+export async function verifyConsistencyReceipt(
 	r: ConsistencyReceipt,
 	rootFromHex: string,
 	rootToHex: string,
 ): Promise<boolean> {
-	return verifyConsistency(receiptToConsistency(r), fromHex(rootFromHex), fromHex(rootToHex));
+	try {
+		return await verifyConsistency(
+			receiptToConsistency(r),
+			fromHex(rootFromHex),
+			fromHex(rootToHex),
+		);
+	} catch {
+		return false;
+	}
 }

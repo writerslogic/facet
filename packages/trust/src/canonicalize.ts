@@ -7,8 +7,14 @@
 
 import { sha256, toHex } from './bytes.js';
 
+/** Max nesting depth. Comfortably exceeds any legitimate VC/SCITT/RATS document while staying an order
+ * of magnitude below the engine's stack limit, so adversarial nesting throws a deterministic domain
+ * error here rather than an engine stack overflow deep inside recursion. */
+const MAX_DEPTH = 256;
+
 /** Canonicalize a JSON value to its RFC 8785 string form. Rejects non-finite numbers. */
-export function canonicalizeJson(value: unknown): string {
+export function canonicalizeJson(value: unknown, depth = 0): string {
+	if (depth > MAX_DEPTH) throw new Error('cannot canonicalize: nesting too deep');
 	if (value === null) return 'null';
 	if (typeof value === 'number') {
 		if (!Number.isFinite(value)) throw new Error('cannot canonicalize a non-finite number');
@@ -16,14 +22,16 @@ export function canonicalizeJson(value: unknown): string {
 	}
 	if (typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
 	if (Array.isArray(value)) {
-		return `[${value.map((v) => canonicalizeJson(v)).join(',')}]`;
+		return `[${value.map((v) => canonicalizeJson(v, depth + 1)).join(',')}]`;
 	}
 	if (typeof value === 'object') {
 		const obj = value as Record<string, unknown>;
 		const keys = Object.keys(obj)
 			.filter((k) => obj[k] !== undefined)
 			.sort();
-		const members = keys.map((k) => `${JSON.stringify(k)}:${canonicalizeJson(obj[k])}`);
+		const members = keys.map(
+			(k) => `${JSON.stringify(k)}:${canonicalizeJson(obj[k], depth + 1)}`,
+		);
 		return `{${members.join(',')}}`;
 	}
 	throw new Error(`cannot canonicalize value of type ${typeof value}`);

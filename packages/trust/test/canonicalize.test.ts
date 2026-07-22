@@ -82,4 +82,14 @@ describe('RFC 8785 canonicalization', () => {
 		const b = await canonicalDigestHex({ y: { a: 3, b: 2 }, x: 1 });
 		expect(a).toBe(b);
 	});
+
+	it('throws a deterministic error on adversarially deep nesting (no engine stack overflow)', () => {
+		// Build nesting past the depth cap; it must be a plain domain error, caught by any verify path,
+		// not a RangeError from engine stack exhaustion deep inside recursion.
+		let deep: unknown = 0;
+		for (let i = 0; i < 500; i++) deep = [deep];
+		expect(() => canonicalizeJson(deep)).toThrow(/too deep/);
+		// A shallow document is unaffected.
+		expect(canonicalizeJson([[[[[1]]]]])).toBe('[[[[[1]]]]]');
+	});
 });

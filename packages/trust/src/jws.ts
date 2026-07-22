@@ -3,7 +3,7 @@
 // (payload) segment for transmission; verification re-attaches the caller-supplied payload. Uses
 // `jose` end-to-end so it runs in workerd.
 
-import { CompactSign, type JWK, base64url, compactVerify } from 'jose';
+import { CompactSign, type JWK, base64url, calculateJwkThumbprint, compactVerify } from 'jose';
 import { canonicalizeBytes } from './canonicalize.js';
 import { type SigningKey, importPublicJwk } from './keys.js';
 
@@ -72,6 +72,14 @@ export async function verifyDetachedProof(
 			return {
 				ok: false,
 				reason: 'protected-header kid does not match proof kid',
+			};
+		}
+		// Bind kid to the key: it must be the RFC 7638 thumbprint of publicJwk, else an attacker could
+		// keep a self-consistent kid while swapping in their own key. Makes kid a real key commitment.
+		if (proof.kid !== (await calculateJwkThumbprint(proof.publicJwk))) {
+			return {
+				ok: false,
+				reason: 'kid is not the RFC 7638 thumbprint of publicJwk',
 			};
 		}
 		// The declared proof.alg must equal the SIGNED protected-header alg, else it is unauthenticated.
