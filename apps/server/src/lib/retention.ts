@@ -1,5 +1,5 @@
-// Retention cleanup: delete raw events, sessions, and salts older than the rolling window.
-// `event_rollups` are durable history and are never deleted. Invoked from the cron handler.
+// Retention cleanup: delete raw events, sessions, salts, and identity mappings older than the rolling
+// window. `event_rollups` are durable history and are never deleted. Invoked from the cron handler.
 
 import { lt } from 'drizzle-orm';
 import { db } from '../db/queries.js';
@@ -20,4 +20,11 @@ export async function enforceRetention(env: Env, now: number): Promise<void> {
 	await db(env).delete(schema.events).where(lt(schema.events.createdAt, cutoff));
 	await db(env).delete(schema.sessions).where(lt(schema.sessions.firstSeen, cutoff));
 	await db(env).delete(schema.salts).where(lt(schema.salts.createdAt, cutoff));
+	// Windowed identity salts purge on window END, not creation: the salt outlives every event whose
+	// timestamp could fall in its window, then is destroyed — irreversibly severing the hash→input
+	// mapping exactly like the daily salt, at the chosen granularity. Linkage is bounded by retention.
+	await db(env).delete(schema.identitySalts).where(lt(schema.identitySalts.window_end, cutoff));
+	// Consent records aged past the window: the events they governed are gone, so drop the mapping and
+	// the at-rest raw uid. (Elevation already stops the instant a record expires or is revoked.)
+	await db(env).delete(schema.consentRecords).where(lt(schema.consentRecords.granted_at, cutoff));
 }

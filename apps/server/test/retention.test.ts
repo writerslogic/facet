@@ -68,4 +68,51 @@ describe('enforceRetention', () => {
 		);
 		expect(await count('SELECT COUNT(*) AS n FROM event_rollups')).toBe(1);
 	});
+
+	it('purges identity salts by window END (not creation) and aged consent records', async () => {
+		// A salt CREATED long ago but whose window has NOT yet closed must survive — proving the purge
+		// keys on window_end, so a live event can never reference a purged salt.
+		await env.DB.prepare(
+			'INSERT INTO identity_salts (scope, salt, window, window_end, created_at) VALUES (?,?,?,?,?)',
+		)
+			.bind(`${S}:week:closed`, 'aa', 'week', OLD, OLD)
+			.run();
+		await env.DB.prepare(
+			'INSERT INTO identity_salts (scope, salt, window, window_end, created_at) VALUES (?,?,?,?,?)',
+		)
+			.bind(`${S}:month:open`, 'bb', 'month', FRESH, OLD)
+			.run();
+		await env.DB.prepare(
+			"INSERT INTO consent_records (id, site_id, visitor_hash, tier, salt_window, window_key, gpc_at_grant, granted_at, statement) VALUES (?,?,?,?,?,?,?,?,'{}')",
+		)
+			.bind('c-old', S, 'v', 'pseudonymous', 'week', 'w', 0, OLD)
+			.run();
+		await env.DB.prepare(
+			"INSERT INTO consent_records (id, site_id, visitor_hash, tier, salt_window, window_key, gpc_at_grant, granted_at, statement) VALUES (?,?,?,?,?,?,?,?,'{}')",
+		)
+			.bind('c-fresh', S, 'v', 'pseudonymous', 'week', 'w', 0, FRESH)
+			.run();
+
+		await enforceRetention(env, NOW);
+
+		expect(
+			await count(
+				'SELECT COUNT(*) AS n FROM identity_salts WHERE scope = ?',
+				`${S}:week:closed`,
+			),
+		).toBe(0);
+		// Created 100 days ago, but its window closes only 10 days ago -> still live -> survives.
+		expect(
+			await count(
+				'SELECT COUNT(*) AS n FROM identity_salts WHERE scope = ?',
+				`${S}:month:open`,
+			),
+		).toBe(1);
+		expect(await count('SELECT COUNT(*) AS n FROM consent_records WHERE id = ?', 'c-old')).toBe(
+			0,
+		);
+		expect(
+			await count('SELECT COUNT(*) AS n FROM consent_records WHERE id = ?', 'c-fresh'),
+		).toBe(1);
+	});
 });
