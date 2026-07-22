@@ -8,6 +8,7 @@ import { attestationRoutes } from './attestation.js';
 import { collectRoute } from './collect.js';
 import { eventRoute } from './event.js';
 import { experimentsRoutes } from './experiments.js';
+import { flagsRoutes } from './flags.js';
 import { funnelsRoutes } from './funnels.js';
 import { goalsRoutes } from './goals.js';
 import { scittRoutes } from './scitt.js';
@@ -34,6 +35,7 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/api/goals', router: goalsRoutes },
 	{ path: '/api/funnels', router: funnelsRoutes },
 	{ path: '/api/experiments', router: experimentsRoutes },
+	{ path: '/api/flags', router: flagsRoutes },
 	{ path: '/api/attestation', router: attestationRoutes },
 	{ path: '/api/transparency', router: transparencyRoutes },
 	{ path: '/api/scitt', router: scittRoutes },

@@ -47,6 +47,21 @@ export interface FlagConfig {
 	rules: FlagRule[];
 }
 
+/** The non-sensitive subset shipped by the public `/active` endpoint: everything a client needs to
+ * bucket base rollout offline, and nothing more. Targeting `rules` (which can encode business logic
+ * and audience attributes) are withheld — targeted evaluation goes through the authenticated `/eval`
+ * path where rules stay server-side. */
+export type PublicFlag = Omit<FlagConfig, 'rules'>;
+
+/** A stored flag as returned by the admin API: the full eval config plus its identity/metadata. */
+export interface FlagRecord extends FlagConfig {
+	id: string;
+	site_id: string;
+	name: string;
+	created_at: number;
+	updated_at: number;
+}
+
 /** Targeting context. All attributes are cookieless; `custom.*` is visitor-asserted (never trust it for
  * entitlement — a caller can set it freely). */
 export interface FlagContext {

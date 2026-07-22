@@ -1,7 +1,14 @@
 // Drizzle schema for D1 — the typed single source of truth for tables and columns. Query
 // helpers infer their types from here; `drizzle-kit generate` emits the SQL migrations from it.
 
-import { index, integer, primaryKey, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import {
+	index,
+	integer,
+	primaryKey,
+	sqliteTable,
+	text,
+	uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
 export const sites = sqliteTable('sites', {
 	id: text('id').primaryKey(),
@@ -145,6 +152,36 @@ export const experiments = sqliteTable(
 		created_at: integer('created_at').notNull(),
 	},
 	(t) => [index('idx_experiments_site').on(t.site_id)],
+);
+
+// Feature flags. `variants` and `rules` are JSON TEXT columns (same convention as funnels.steps /
+// experiments.variants): bounded arrays stringified on write, parsed on read — no separate rules
+// table, since rules are always read and written together with their flag. `salt` is server-minted
+// once at creation and NEVER changed (rotating it would rebucket every visitor); `version` bumps on
+// every mutation so the public `/active` ETag invalidates on a kill-switch. `(site_id, flag_key)` is
+// unique so a client can address a flag by its stable key within a site.
+export const flags = sqliteTable(
+	'flags',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		flag_key: text('flag_key').notNull(),
+		name: text('name').notNull(),
+		type: text('type').notNull(),
+		enabled: integer('enabled').notNull().default(1),
+		default_variant: text('default_variant').notNull(),
+		variants: text('variants').notNull(),
+		rules: text('rules').notNull().default('[]'),
+		salt: text('salt').notNull(),
+		rollout_seed: integer('rollout_seed').notNull().default(0),
+		version: integer('version').notNull().default(1),
+		created_at: integer('created_at').notNull(),
+		updated_at: integer('updated_at').notNull(),
+	},
+	(t) => [
+		index('idx_flags_site').on(t.site_id),
+		uniqueIndex('idx_flags_site_key').on(t.site_id, t.flag_key),
+	],
 );
 
 // Append-only Merkle Mountain Range over finalized event_rollups (transparency log). `mmr_nodes`
