@@ -11,6 +11,7 @@ import { ExperimentsPanel } from './settings/ExperimentsPanel.js';
 import { FlagsPanel } from './settings/FlagsPanel.js';
 import { FunnelsPanel } from './settings/FunnelsPanel.js';
 import { GoalsPanel } from './settings/GoalsPanel.js';
+import { IdentityPanel } from './settings/IdentityPanel.js';
 import { KeysPanel } from './settings/KeysPanel.js';
 import { SitesPanel } from './settings/SitesPanel.js';
 
@@ -51,6 +52,7 @@ export function Settings(): ReactElement {
 					<FunnelsPanel token={token} siteId={siteId} />
 					<ExperimentsPanel token={token} siteId={siteId} />
 					<FlagsPanel token={token} siteId={siteId} />
+					<IdentityPanel token={token} siteId={siteId} />
 				</div>
 			) : (
 				<p className="rounded-xl border border-neutral-200 bg-white p-5 text-center text-sm text-neutral-500 shadow-sm">

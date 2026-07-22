@@ -21,6 +21,7 @@ import { KeyGate } from './components/KeyGate.js';
 import { KpiCards } from './components/KpiCards.js';
 import { Layout } from './components/Layout.js';
 import { Realtime } from './components/Realtime.js';
+import { Retention } from './components/Retention.js';
 import { Settings } from './components/Settings.js';
 import {
 	AuthErrorBanner,
@@ -39,7 +40,7 @@ import { type CubeFilter, cubeSeries, isFilterActive, sliceCube } from './lib/cu
 import { isAuthError } from './lib/status.js';
 import { useDashboard } from './state.js';
 
-type View = 'overview' | 'realtime' | 'funnels' | 'experiments' | 'anomalies' | 'ask';
+type View = 'overview' | 'realtime' | 'funnels' | 'retention' | 'experiments' | 'anomalies' | 'ask';
 
 /** True when a react-query key references the given site id, as a direct element or a nested site_id. */
 function queryKeyReferencesSite(key: readonly unknown[], siteId: string): boolean {
@@ -57,6 +58,7 @@ const TABS: { id: View; label: string }[] = [
 	{ id: 'overview', label: 'Overview' },
 	{ id: 'realtime', label: 'Realtime' },
 	{ id: 'funnels', label: 'Funnels' },
+	{ id: 'retention', label: 'Retention' },
 	{ id: 'experiments', label: 'Experiments' },
 	{ id: 'anomalies', label: 'Anomalies' },
 	{ id: 'ask', label: 'Ask' },
@@ -217,14 +219,20 @@ function Dashboard(): ReactElement {
 				<Settings />
 			) : (
 				<>
-					<div className="mb-6 flex gap-1 border-b border-neutral-200">
+					<div
+						role="tablist"
+						aria-label="Analytics views"
+						className="mb-6 flex gap-1 overflow-x-auto border-b border-neutral-200"
+					>
 						{TABS.map((tab) => (
 							<button
 								key={tab.id}
 								type="button"
+								role="tab"
+								aria-selected={view === tab.id}
 								onClick={() => setView(tab.id)}
 								className={cn(
-									'-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors',
+									'-mb-px shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
 									view === tab.id
 										? 'border-accent-500 text-neutral-900'
 										: 'border-transparent text-neutral-500 hover:text-neutral-800',
@@ -245,6 +253,8 @@ function Dashboard(): ReactElement {
 							range={range}
 							onOpenSettings={() => setShowSettings(true)}
 						/>
+					) : view === 'retention' ? (
+						<Retention apiKey={apiKey} siteId={siteId} range={range} />
 					) : view === 'experiments' ? (
 						<Experiments
 							apiKey={apiKey}

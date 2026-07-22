@@ -10,10 +10,13 @@ import type {
 	FunnelInput,
 	Goal,
 	GoalInput,
+	IdentityTier,
+	SaltWindow,
+	SetIdentityInput,
 	Site,
 } from '@facet/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { adminFetch, adminPost } from '../admin.js';
+import { adminFetch, adminPatch, adminPost } from '../admin.js';
 
 export function useSites(token: string) {
 	return useQuery({
@@ -147,5 +150,19 @@ export function useDeleteExperiment(token: string, siteId: string) {
 			qc.invalidateQueries({
 				queryKey: ['admin', 'experiments', siteId],
 			}),
+	});
+}
+
+/** Set a site's identity tier + salt window via PATCH /api/sites/:id/identity (admin token). */
+export function useSetIdentity(token: string, siteId: string) {
+	return useMutation({
+		mutationFn: (body: SetIdentityInput) =>
+			adminPatch<{
+				identity: {
+					site_id: string;
+					tier: IdentityTier;
+					salt_window: SaltWindow;
+				};
+			}>(`/api/sites/${siteId}/identity`, token, body),
 	});
 }
