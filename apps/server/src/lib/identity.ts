@@ -12,11 +12,15 @@
 // and provably a superset of the day path (`windowKey('day', t) === dayKey(t)`).
 
 import type { IdentityTier, SaltWindow } from '@facet/shared';
-import { HASH_DELIMITER } from './constants.js';
-import { sha256Hex } from './crypto.js';
+import type { Env } from '../env.js';
+import { HASH_DELIMITER, SALT_BYTES } from './constants.js';
+import { randomHex, sha256Hex } from './crypto.js';
 import { dayKey } from './salt.js';
+import { getSigningKey } from './signing.js';
 
 const DAY_MS = 86_400_000;
+const TIERS = new Set<IdentityTier>(['anonymous', 'pseudonymous', 'identified']);
+const WINDOWS = new Set<SaltWindow>(['day', 'week', 'month']);
 
 /** ISO-8601 week key `GGGG-Www` using the ISO week-NUMBERING year (not the calendar year), so the
  * days around a year boundary that belong to the same ISO week share one key. Computed via the
@@ -55,6 +59,27 @@ export function windowKey(window: SaltWindow, nowMs: number): string {
 	}
 }
 
+/** The exclusive end (ms) of the window containing `nowMs` — the instant the window rolls over. Used
+ * by retention: a scoped salt is purged only once `window_end < cutoff`, so it always outlives every
+ * event whose timestamp falls inside the window. */
+export function windowEndMs(window: SaltWindow, nowMs: number): number {
+	const d = new Date(nowMs);
+	const y = d.getUTCFullYear();
+	const m = d.getUTCMonth();
+	const day = d.getUTCDate();
+	switch (window) {
+		case 'day':
+			return Date.UTC(y, m, day) + DAY_MS;
+		case 'week': {
+			const midnight = Date.UTC(y, m, day);
+			const dayNum = (new Date(midnight).getUTCDay() + 6) % 7; // Mon=0
+			return midnight - dayNum * DAY_MS + 7 * DAY_MS; // start of this ISO week + 7 days
+		}
+		case 'month':
+			return Date.UTC(y, m + 1, 1); // first instant of next month
+	}
+}
+
 /** Transient, never-stored inputs to a visitor-hash derivation. `uid` is honored only at Tier 2. */
 export interface DeriveInputs {
 	ip: string;
@@ -86,4 +111,58 @@ export function deriveVisitorHash(
 	siteId: string,
 ): Promise<string> {
 	return sha256Hex(buildPreimage(tier, inputs, salt, siteId));
+}
+
+/** A resolved per-site identity policy. `anonymous` always forces the `day` window (Tier 0). */
+export interface IdentityPolicy {
+	tier: IdentityTier;
+	window: SaltWindow;
+}
+
+const ANONYMOUS: IdentityPolicy = { tier: 'anonymous', window: 'day' };
+
+/** The SINGLE source of truth for a site's tier — every ingest/consent decision routes through here,
+ * so no caller can bypass the clamps. A site with no config row (the default) is Tier 0. Any tier
+ * above `anonymous` requires a configured deployment signing key (consent records must be signable);
+ * absent one, the site is clamped to Tier 0 — a safe-by-default failure that keeps every current
+ * deployment (and its tests) on the legacy anonymous path. Unknown/invalid stored values clamp too. */
+export async function resolvePolicy(env: Env, siteId: string): Promise<IdentityPolicy> {
+	const row = await env.DB.prepare('SELECT tier, salt_window FROM site_config WHERE site_id = ?')
+		.bind(siteId)
+		.first<{ tier: string; salt_window: string }>();
+	if (!row) return ANONYMOUS;
+	const tier = row.tier as IdentityTier;
+	const window = row.salt_window as SaltWindow;
+	if (!TIERS.has(tier) || !WINDOWS.has(window)) return ANONYMOUS;
+	if (tier === 'anonymous') return ANONYMOUS;
+	// Elevation needs a signing key to mint verifiable consent; without one, fail safe to Tier 0.
+	if (getSigningKey(env) === null) return ANONYMOUS;
+	return { tier, window };
+}
+
+/** Fetch (or lazily create, race-safely) the secret salt for a window scope. Generalizes
+ * `getDailySalt` to any window, storing `window_end` so retention can purge on window close. Only
+ * ever called on the elevated branch AFTER consent is confirmed, so a downgraded event never creates
+ * a salt row. */
+export async function getScopedSalt(
+	env: Env,
+	scope: string,
+	window: SaltWindow,
+	windowEnd: number,
+	now: number,
+): Promise<string> {
+	const existing = await env.DB.prepare('SELECT salt FROM identity_salts WHERE scope = ?')
+		.bind(scope)
+		.first<{ salt: string }>();
+	if (existing?.salt) return existing.salt;
+	const salt = randomHex(SALT_BYTES);
+	await env.DB.prepare(
+		'INSERT OR IGNORE INTO identity_salts (scope, salt, window, window_end, created_at) VALUES (?, ?, ?, ?, ?)',
+	)
+		.bind(scope, salt, window, windowEnd, now)
+		.run();
+	const row = await env.DB.prepare('SELECT salt FROM identity_salts WHERE scope = ?')
+		.bind(scope)
+		.first<{ salt: string }>();
+	return row?.salt ?? salt;
 }

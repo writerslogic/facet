@@ -218,3 +218,55 @@ export const scittLog = sqliteTable('scitt_log', {
 	statementHash: text('statement_hash').notNull(),
 	registeredAt: integer('registered_at').notNull(),
 });
+
+// Identity spectrum (U2). All three tables are additive; nothing existing changes, so a site with no
+// `site_config` row behaves byte-for-byte as today (Tier 0, daily-rotating anonymous hash via the
+// legacy `salts` table). Absence of a row is the default everywhere.
+export const siteConfig = sqliteTable('site_config', {
+	site_id: text('site_id').primaryKey(),
+	tier: text('tier').notNull().default('anonymous'), // anonymous | pseudonymous | identified
+	salt_window: text('salt_window').notNull().default('day'), // day | week | month
+	updated_at: integer('updated_at').notNull(),
+});
+
+// Per-scope secret salts for windows wider than a day. Tier 0/day keeps using the legacy `salts`
+// table untouched. `window_end` is the ms timestamp at which this window closes; retention purges a
+// salt only once its ENTIRE window has aged out (`window_end < cutoff`), so a salt always outlives
+// every event that could reference it (no live event ever points at a purged salt).
+export const identitySalts = sqliteTable(
+	'identity_salts',
+	{
+		scope: text('scope').primaryKey(), // `${siteId}:${window}:${windowKey}`
+		salt: text('salt').notNull(),
+		window: text('window').notNull(),
+		window_end: integer('window_end').notNull(),
+		created_at: integer('created_at').notNull(),
+	},
+	(t) => [index('idx_identity_salts_window_end').on(t.window_end)],
+);
+
+// Signed consent records — the authorization token for Tier 1/2 elevation. The `statement` column
+// holds the full PII-free SignedStatement JSON (claims are the derived hash + tier + window, never
+// ip/ua/raw uid). `external_user_id` stores the raw site-supplied uid at rest ONLY to support
+// uid-scoped revocation; it is retention/erasure-bound and log-scrubbed like ip/uid.
+export const consentRecords = sqliteTable(
+	'consent_records',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		visitor_hash: text('visitor_hash').notNull(),
+		tier: text('tier').notNull(),
+		external_user_id: text('external_user_id'),
+		salt_window: text('salt_window').notNull(),
+		window_key: text('window_key').notNull(),
+		gpc_at_grant: integer('gpc_at_grant').notNull().default(0),
+		granted_at: integer('granted_at').notNull(),
+		expires_at: integer('expires_at'),
+		revoked_at: integer('revoked_at'),
+		statement: text('statement').notNull(),
+	},
+	(t) => [
+		index('idx_consent_site_visitor').on(t.site_id, t.visitor_hash, t.tier),
+		index('idx_consent_site_extuser').on(t.site_id, t.external_user_id),
+	],
+);
