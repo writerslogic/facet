@@ -124,6 +124,78 @@ export const ExperimentSchema = v.object({
 	active: v.optional(v.boolean()),
 });
 
+// Feature flags. Weights are integer basis points (0..10000) for byte-exact cross-runtime bucketing;
+// the handler additionally enforces sum == 10000 and serve-keys ⊆ variants (not expressible in valibot).
+export const FlagVariantSchema = v.object({
+	key: v.pipe(v.string(), v.minLength(1), v.maxLength(60)),
+	weight: v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(10000)),
+});
+
+const FlagClauseSchema = v.object({
+	attr: v.pipe(v.string(), v.minLength(1), v.maxLength(60)),
+	op: v.picklist(['eq', 'neq', 'in', 'nin', 'contains', 'prefix', 'gte', 'lte', 'pct']),
+	value: v.union([
+		v.pipe(v.string(), v.maxLength(500)),
+		v.number(),
+		v.pipe(v.array(v.pipe(v.string(), v.maxLength(200))), v.maxLength(100)),
+	]),
+});
+
+const FlagServeSchema = v.union([
+	v.object({ variant: v.pipe(v.string(), v.minLength(1), v.maxLength(60)) }),
+	v.object({
+		rollout: v.pipe(v.array(FlagVariantSchema), v.minLength(1), v.maxLength(8)),
+	}),
+]);
+
+export const FlagRuleSchema = v.object({
+	priority: v.pipe(v.number(), v.integer(), v.minValue(0)),
+	clauses: v.pipe(v.array(FlagClauseSchema), v.maxLength(10)),
+	serve: FlagServeSchema,
+});
+
+export const FlagSchema = v.object({
+	site_id: v.pipe(v.string(), v.uuid()),
+	flag_key: v.pipe(v.string(), v.minLength(1), v.maxLength(60)),
+	name: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
+	type: v.picklist(['boolean', 'multivariate']),
+	enabled: v.optional(v.boolean()),
+	default_variant: v.pipe(v.string(), v.minLength(1), v.maxLength(60)),
+	variants: v.pipe(v.array(FlagVariantSchema), v.minLength(1), v.maxLength(8)),
+	rules: v.optional(v.pipe(v.array(FlagRuleSchema), v.maxLength(20))),
+});
+
+// Public eval body (site API key path). `custom` is bounded (reusing the props limits) because it is
+// visitor-asserted and unauthenticated; `gpc` lets a server-tier caller forward the visitor's opt-out.
+export const FlagEvalSchema = v.object({
+	site_id: v.pipe(v.string(), v.uuid()),
+	id: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
+	keys: v.optional(v.pipe(v.array(v.pipe(v.string(), v.maxLength(60))), v.maxLength(100))),
+	gpc: v.optional(v.boolean()),
+	ctx: v.optional(
+		v.object({
+			country: v.optional(v.pipe(v.string(), v.maxLength(8))),
+			device: v.optional(v.pipe(v.string(), v.maxLength(20))),
+			path: v.optional(v.pipe(v.string(), v.maxLength(2048))),
+			host: v.optional(v.pipe(v.string(), v.maxLength(253))),
+			channel: v.optional(v.pipe(v.string(), v.maxLength(40))),
+			lang: v.optional(v.pipe(v.string(), v.maxLength(35))),
+			custom: v.optional(
+				v.pipe(
+					v.record(
+						v.pipe(v.string(), v.minLength(1), v.maxLength(PROPS_KEY_MAX_LEN)),
+						v.union([v.pipe(v.string(), v.maxLength(PROPS_STR_MAX_LEN)), v.number()]),
+					),
+					v.check(
+						(o) => Object.keys(o).length <= PROPS_MAX_KEYS,
+						'too_many_custom_attrs',
+					),
+				),
+			),
+		}),
+	),
+});
+
 export type QueryIntent = v.InferOutput<typeof QueryIntentSchema>;
 export type CollectInput = v.InferOutput<typeof CollectPayloadSchema>;
 export type ServerEventInput = v.InferOutput<typeof ServerEventSchema>;
@@ -135,3 +207,7 @@ export type FunnelStepInput = v.InferOutput<typeof FunnelStepSchema>;
 export type FunnelInput = v.InferOutput<typeof FunnelSchema>;
 export type ExperimentVariantInput = v.InferOutput<typeof ExperimentVariantSchema>;
 export type ExperimentInput = v.InferOutput<typeof ExperimentSchema>;
+export type FlagVariantInput = v.InferOutput<typeof FlagVariantSchema>;
+export type FlagRuleInput = v.InferOutput<typeof FlagRuleSchema>;
+export type FlagInput = v.InferOutput<typeof FlagSchema>;
+export type FlagEvalInput = v.InferOutput<typeof FlagEvalSchema>;
