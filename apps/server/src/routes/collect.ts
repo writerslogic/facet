@@ -16,7 +16,7 @@ export const collectRoute = new Hono<AppEnv>();
 
 collectRoute.post(
 	'/',
-	rateLimit((c) => clientIp(c.req.raw)),
+	rateLimit((c) => `collect:${clientIp(c.req.raw)}`),
 	vValidator('json', CollectPayloadSchema, validationErrorHook),
 	async (c) => {
 		// GPC opt-out: drop silently (202) before any hashing or write, like a client opt-out.

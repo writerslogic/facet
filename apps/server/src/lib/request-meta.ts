@@ -8,12 +8,13 @@ export function clientIp(req: Request): string {
 
 /** ISO country code (uppercased), or `null` for unknown/anonymized (`XX`) and Tor (`T1`). */
 export function country(req: Request): string | null {
-	const raw = (req.cf?.country as string | undefined) ?? req.headers.get('CF-IPCountry');
+	const cf = req.cf?.country;
+	const raw = (typeof cf === 'string' ? cf : undefined) ?? req.headers.get('CF-IPCountry');
 	if (!raw) {
 		return null;
 	}
 	const code = raw.toUpperCase();
-	if (code === '' || code === 'XX' || code === 'T1') {
+	if (code === 'XX' || code === 'T1') {
 		return null;
 	}
 	return code;

@@ -61,14 +61,17 @@ export const requireApiKey: MiddlewareHandler<AppEnv> = async (c, next) => {
 
 /** Middleware: require the admin bearer token, compared to ADMIN_TOKEN in constant time. */
 export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {
+	// Fail closed when the secret is unset: sha256Hex(undefined) would coerce to sha256Hex("undefined"),
+	// letting `Bearer undefined` authenticate on a misconfigured deploy.
+	const expectedToken = c.env.ADMIN_TOKEN;
+	if (!expectedToken) {
+		throw new ApiError('invalid_admin_token', 401);
+	}
 	const token = parseBearer(c.req.header('Authorization') ?? null);
 	if (!token) {
 		throw new ApiError('invalid_admin_token', 401);
 	}
-	const [provided, expected] = await Promise.all([
-		sha256Hex(token),
-		sha256Hex(c.env.ADMIN_TOKEN),
-	]);
+	const [provided, expected] = await Promise.all([sha256Hex(token), sha256Hex(expectedToken)]);
 	if (!constantTimeEqualHex(provided, expected)) {
 		throw new ApiError('invalid_admin_token', 401);
 	}

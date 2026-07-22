@@ -83,4 +83,19 @@ describe('requireAdmin', () => {
 		const missing = await appWith(requireAdmin).request('/p', {}, env);
 		expect(missing.status).toBe(401);
 	});
+
+	it('fails closed when ADMIN_TOKEN is unset — no `Bearer undefined` bypass', async () => {
+		// With an unset secret, sha256Hex(undefined) would coerce to sha256Hex("undefined"); a request
+		// sending literally `Bearer undefined` must NOT authenticate.
+		const noTokenEnv = {
+			...env,
+			ADMIN_TOKEN: undefined,
+		} as unknown as typeof env;
+		const res = await appWith(requireAdmin).request(
+			'/p',
+			{ headers: { Authorization: 'Bearer undefined' } },
+			noTokenEnv,
+		);
+		expect(res.status).toBe(401);
+	});
 });
