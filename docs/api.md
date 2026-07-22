@@ -8,7 +8,9 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
 
 - `POST /api/collect` — **public**, no auth (CORS-open, rate-limited).
 - `POST /api/event` — **API key**: first-party server-to-server ingest (`Authorization: Bearer <clk_...>`).
-- `GET /api/experiments/active` — **public**: client-facing feature-flag config.
+- `GET /api/experiments/active` — **public**: client-facing experiment config.
+- `GET /api/flags/active` — **public**: cacheable feature-flag bucketing config (no targeting rules).
+- `POST /api/flags/eval` — **public**, rate-limited: server-side flag evaluation (GPC-aware).
 - `GET /api/stats/anomalies`, `GET /api/stats/experiments`, `GET /api/stats/experiment`,
   `POST /api/stats/query` — **API key**.
 - `GET /api/stats`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
@@ -17,8 +19,9 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   `GET /api/funnels/:id/report` — **API key**: `Authorization: Bearer <clk_...>`
   (site-scoped; a key that does not own the requested `site_id` gets `403 site_mismatch`).
 - `POST /api/sites`, `GET /api/sites`, `POST /api/keys`, `GET /api/keys`,
-  `DELETE /api/keys/:id`, and goal/funnel CRUD (`POST`/`GET`/`DELETE /api/goals`,
-  `POST`/`GET`/`DELETE /api/funnels`) — **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
+  `DELETE /api/keys/:id`, goal/funnel CRUD (`POST`/`GET`/`DELETE /api/goals`,
+  `POST`/`GET`/`DELETE /api/funnels`), and flag CRUD (`POST`/`GET /api/flags`,
+  `PATCH`/`DELETE /api/flags/:id`) — **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
 
 ## Error envelope
 
@@ -646,7 +649,7 @@ curl "https://your-deployment.example.com/api/funnels/44444444-4444-4444-8444-44
 
 ---
 
-## Experiments & feature flags
+## Experiments
 
 Privacy-first A/B testing. Variant assignment is computed **client-side** from a random
 `localStorage['facet.exp']` id (never sent as identity); the server only stores aggregate
@@ -685,6 +688,52 @@ z-test `p_value` vs the control with a `significant` flag (α = 0.05; control's 
   ]
 }
 ```
+
+## Feature flags
+
+Feature flags are richer than experiments: they add targeting **rules** (first-match by priority,
+clauses AND-ed) on top of a base percentage rollout, and evaluate through **one shared evaluator**
+used identically by the server, the browser SDK, and the dashboard preview — so an assignment can
+never diverge between them. Bucketing is a SHA-256 draw in the integer domain (`u64 % 10000`) keyed
+on the caller's stable `facet.exp` id (never the rotating visitor hash), so assignments are sticky
+across the daily salt rotation. Variant `weight`s are integer **basis points** and must sum to
+`10000`. No visitor identity is stored; the id is an opaque bucketing key.
+
+### `POST /api/flags` (admin) · `PATCH /api/flags/:id` (admin)
+
+Body `{ site_id, flag_key, name, type: "boolean"|"multivariate", enabled?, default_variant,
+variants: [{ key, weight }], rules?: [{ priority, clauses: [{ attr, op, value }], serve }] }`.
+`op` ∈ `eq|neq|in|nin|contains|prefix|gte|lte|pct`; `serve` is `{ variant }` or
+`{ rollout: [{ key, weight }] }`. Beyond schema validation the server enforces: variant weights sum
+to `10000`, `default_variant` is a declared variant, and every rule serves only declared variants
+(else `400` with an `error` code such as `variant_weights_must_sum_to_10000`). A duplicate
+`(site_id, flag_key)` returns `409 flag_key_already_exists`. `salt` is minted once at create and
+never changes (rotating it would rebucket everyone); each write bumps `version`. `PATCH` is scoped
+by `(id, site_id)`.
+
+### `GET /api/flags?site_id=<uuid>` (admin) · `DELETE /api/flags/:id?site_id=<uuid>` (admin)
+
+List the full records (rules + metadata) and delete, scoped by `(id, site_id)`.
+
+### `GET /api/flags/active?site_id=<uuid>` (public)
+
+Cacheable bucketing config for **enabled** flags only — **no auth**. It ships exactly what a client
+needs to bucket base rollout offline and **nothing more**: `{ "flags": [{ "flag_key", "type",
+"enabled", "default_variant", "variants", "salt", "rollout_seed", "version" }] }`. Targeting `rules`
+are deliberately **withheld** (they stay server-side; use `/eval` for targeted evaluation). Sends a
+weak `ETag` over the flags' versions with `Cache-Control: public, max-age=60`; a matching
+`If-None-Match` returns `304`, and any flag change (including a kill-switch toggle) turns the ETag
+over.
+
+### `POST /api/flags/eval` (public, rate-limited)
+
+Server-side evaluation applying the full ruleset. Body `{ site_id, id?, keys?, gpc?, ctx? }` where
+`ctx` is `{ country?, device?, path?, host?, channel?, lang?, custom? }` (`custom` is bounded — it is
+visitor-asserted and untrusted). The server overlays **authoritative** `country`/`device` derived
+from the request onto `ctx` (a browser can't know geo and could spoof it). Returns
+`{ "flags": { "<flag_key>": { "variant", "participating", "reason" } } }` where `reason` is
+`disabled|rollout|rule:<priority>|gpc`. A `Sec-GPC: 1` header (or `gpc: true`) serves every flag its
+default with `participating: false`, `reason: "gpc"` — no bucketing occurs.
 
 ---
 

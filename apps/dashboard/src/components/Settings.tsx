@@ -8,6 +8,7 @@ import { useAdmin } from '../admin.js';
 import { useDashboard } from '../state.js';
 import { AdminTokenGate } from './settings/AdminTokenGate.js';
 import { ExperimentsPanel } from './settings/ExperimentsPanel.js';
+import { FlagsPanel } from './settings/FlagsPanel.js';
 import { FunnelsPanel } from './settings/FunnelsPanel.js';
 import { GoalsPanel } from './settings/GoalsPanel.js';
 import { KeysPanel } from './settings/KeysPanel.js';
@@ -49,11 +50,12 @@ export function Settings(): ReactElement {
 					<GoalsPanel token={token} siteId={siteId} />
 					<FunnelsPanel token={token} siteId={siteId} />
 					<ExperimentsPanel token={token} siteId={siteId} />
+					<FlagsPanel token={token} siteId={siteId} />
 				</div>
 			) : (
 				<p className="rounded-xl border border-neutral-200 bg-white p-5 text-center text-sm text-neutral-500 shadow-sm">
-					Create or select a site above to manage its keys, goals, funnels, and
-					experiments.
+					Create or select a site above to manage its keys, goals, funnels, experiments,
+					and flags.
 				</p>
 			)}
 		</div>

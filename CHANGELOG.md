@@ -4,6 +4,27 @@ All notable changes to Facet are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Feature flags.** Server-evaluated flags on top of the existing client-side experiments, sharing
+  one evaluator across the server, browser SDK, and dashboard so assignments never diverge. Targeting
+  **rules** (first-match by priority; clauses AND-ed over `country`/`device`/`path`/`host`/`channel`/
+  `lang`/`custom`, plus a sticky `pct` gate) sit on top of a base percentage rollout. Bucketing is a
+  SHA-256 integer draw (`u64 % 10000`) keyed on the stable `facet.exp` id, so assignments are sticky
+  across the daily salt rotation; variant weights are integer basis points summing to 10000.
+  - Admin CRUD `POST`/`GET /api/flags`, `PATCH`/`DELETE /api/flags/:id` (scoped by `(id, site_id)`;
+    cross-validates weight sums, default, and rule targets; server-minted immutable per-flag salt).
+  - Public `GET /api/flags/active` — cacheable (ETag over versions) bucketing config that **omits
+    targeting rules** (they never reach an unauthenticated client).
+  - Public, rate-limited `POST /api/flags/eval` — applies the full ruleset with server-authoritative
+    `country`/`device`; honors GPC (`Sec-GPC: 1` → default, non-participating).
+  - Browser SDK: `flag()`, `flagBool()`, `flagAssignment()`, `allFlags()`, `whenFlagsReady()`; opt-out
+    and GPC always win, and flags default **off** while pending or opted out.
+  - Dashboard: a Feature Flags admin panel (create/edit/toggle/delete, weighted variants with a
+    basis-point-sum guard, rule display).
+
 ## [0.5.2] - 2026-07-20
 
 ### Fixed

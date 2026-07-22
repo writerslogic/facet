@@ -1,6 +1,6 @@
 // Admin-token store: the ADMIN_TOKEN grants deployment-wide admin access, so it is kept OUT of the
 // site-credential profile store and out of localStorage. It lives in memory + sessionStorage only,
-// is never placed in a URL/log, and is only ever attached to /api/{sites,keys,goals,funnels,experiments}
+// is never placed in a URL/log, and is only ever attached to /api/{sites,keys,goals,funnels,experiments,flags}
 // via adminFetch. "Forget admin token" clears both memory and sessionStorage.
 
 import {
@@ -16,10 +16,18 @@ import {
 const ADMIN_TOKEN_STORAGE = 'facet.adminToken';
 
 /** Endpoints the admin token may be sent to. Nothing else is permitted. */
-const ADMIN_PATHS = ['/api/sites', '/api/keys', '/api/goals', '/api/funnels', '/api/experiments'];
+const ADMIN_PATHS = [
+	'/api/sites',
+	'/api/keys',
+	'/api/goals',
+	'/api/funnels',
+	'/api/experiments',
+	'/api/flags',
+];
 
 function isAdminPath(path: string): boolean {
-	return ADMIN_PATHS.some((base) => path === base || path.startsWith(`${base}/`));
+	const base = path.split('?')[0] ?? path;
+	return ADMIN_PATHS.some((p) => base === p || base.startsWith(`${p}/`));
 }
 
 /** Read the admin token from sessionStorage (survives reload within a tab, cleared on tab close). */
@@ -106,6 +114,26 @@ export async function adminPost<T>(path: string, token: string, body: unknown): 
 	if (!isAdminPath(path)) throw new Error('non_admin_path');
 	const res = await fetch(path, {
 		method: 'POST',
+		headers: {
+			Authorization: `Bearer ${token}`,
+			'content-type': 'application/json',
+		},
+		body: JSON.stringify(body),
+	});
+	if (!res.ok) {
+		const errorBody = (await res.json().catch(() => ({}))) as {
+			error?: string;
+		};
+		throw new Error(errorBody.error ?? 'request_failed');
+	}
+	return (await res.json()) as T;
+}
+
+/** PATCH helper for admin endpoints only. Refuses non-admin paths so the token can't leak. */
+export async function adminPatch<T>(path: string, token: string, body: unknown): Promise<T> {
+	if (!isAdminPath(path)) throw new Error('non_admin_path');
+	const res = await fetch(path, {
+		method: 'PATCH',
 		headers: {
 			Authorization: `Bearer ${token}`,
 			'content-type': 'application/json',

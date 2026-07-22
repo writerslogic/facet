@@ -89,6 +89,7 @@ function mockFetch() {
 			return { ok: true, json: async () => ({ funnels: [] }) };
 		if (url.startsWith('/api/experiments'))
 			return { ok: true, json: async () => ({ experiments: [] }) };
+		if (url.startsWith('/api/flags')) return { ok: true, json: async () => ({ flags: [] }) };
 		return { ok: true, json: async () => emptyStats };
 	});
 }
@@ -141,7 +142,7 @@ describe('Settings admin area', () => {
 		await openSettingsWithToken();
 		await waitFor(() => expect(calls.some((c) => c.url.startsWith('/api/sites'))).toBe(true));
 		for (const call of calls) {
-			const isAdmin = /^\/api\/(sites|keys|goals|funnels|experiments)/.test(call.url);
+			const isAdmin = /^\/api\/(sites|keys|goals|funnels|experiments|flags)/.test(call.url);
 			if (!isAdmin) {
 				expect(call.auth).not.toContain(ADMIN_TOKEN);
 			}

@@ -205,3 +205,27 @@ state is never misreported as a real control.
 
 Repeated `whenReady()` calls return the same promise; calling it (or `variant()`/`assignment()`)
 before `init()` is safe.
+
+## Feature flags: flag(), flagBool() and allFlags()
+
+Feature flags differ from experiments: they support server-side **targeting rules** (by country,
+device, path, custom attributes, or a sticky percentage), so they evaluate on the server rather than
+in the browser. The SDK sends only the stable `facet.exp` id plus non-identifying context and caches
+the assignment map for the page; the server applies the full ruleset with the same shared evaluator
+used everywhere else.
+
+```js
+import { whenFlagsReady, flag, flagBool, flagAssignment } from '@writerslogic/facet';
+
+await whenFlagsReady(); // one POST /api/flags/eval; resolves on success OR failure
+if (flagBool('new-checkout')) render(newCheckout()); // true only when the assigned variant is `on`
+const theme = flag('theme'); // '' until ready / when opted-out / unknown flag
+```
+
+Like `variant()`, the readers are **synchronous**. Before `whenFlagsReady()` resolves — and whenever
+the visitor is opted out — every flag reads as a safe default (variant `''`, `flagBool` → `false`, so
+features default **off**). Use `flagAssignment(key)` to distinguish the states via its `reason`
+(`pending | opted-out | unknown | disabled | rollout | rule:<n> | gpc`); `participating` is `true`
+only for a genuine assignment. `allFlags()` returns the whole loaded map. Country and device targeting
+are resolved authoritatively by the server from the request, so the browser never needs to (and
+cannot) supply them.
