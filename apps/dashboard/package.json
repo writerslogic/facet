@@ -2,6 +2,7 @@
 	"name": "@facet/dashboard",
 	"version": "0.0.0",
 	"private": true,
+	"license": "AGPL-3.0-only",
 	"description": "Facet analytics dashboard: React 19 + Vite, served as static assets by the Worker.",
 	"type": "module",
 	"scripts": {

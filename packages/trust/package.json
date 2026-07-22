@@ -2,6 +2,7 @@
 	"name": "@facet/trust",
 	"version": "0.0.0",
 	"private": true,
+	"license": "Apache-2.0",
 	"description": "Workers-compatible trust & provenance primitives for Facet (keys/JWKS, JWS, HTTP Message Signatures, VC, MMR).",
 	"type": "module",
 	"main": "./src/index.ts",

@@ -20,7 +20,7 @@ and no cross-session identity to leak.
   <a href="https://slsa.dev"><img alt="SLSA Build Level 2" src="https://img.shields.io/badge/SLSA-Build%20L2-2ea44f.svg?logo=slsa&logoColor=white"></a>
   <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.7-blue.svg"></a>
   <a href="https://workers.cloudflare.com"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg"></a>
-  <a href="https://github.com/writerslogic/facet/blob/main/LICENSE"><img alt="License: Apache-2.0" src="https://img.shields.io/badge/License-Apache--2.0-blue.svg"></a>
+  <a href="https://github.com/writerslogic/facet/blob/main/LICENSING.md"><img alt="License: AGPL-3.0 + commercial" src="https://img.shields.io/badge/License-AGPL--3.0%20%2B%20commercial-blue.svg"></a>
   <a href="https://orcid.org/0009-0003-1849-2963"><img alt="ORCID" src="https://img.shields.io/badge/ORCID-0009--0003--1849--2963-green.svg"></a>
 </p>
 
@@ -171,4 +171,8 @@ reporting: [SECURITY.md](./SECURITY.md).
 
 ## License
 
-[Apache-2.0](./LICENSE) © 2026 WritersLogic, Inc.
+Open source with a commercial option, © 2026 WritersLogic, Inc. The server and dashboard are
+**[AGPL-3.0](./LICENSE)** (self-host free; offering a modified hosted service requires sharing changes).
+The browser SDK, CLI, and shared types are **MIT**, and the trust/provenance library is **Apache-2.0**,
+so you can embed and build on them freely. A commercial license is available for hosted/OEM use without
+AGPL obligations — see **[LICENSING.md](./LICENSING.md)** (licensing@writerslogic.com).

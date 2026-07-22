@@ -2,6 +2,7 @@
 	"name": "@facet/server",
 	"version": "0.0.0",
 	"private": true,
+	"license": "AGPL-3.0-only",
 	"description": "Facet Cloudflare Worker: ingest, stats API, cron rollups, and D1 schema.",
 	"type": "module",
 	"main": "src/index.ts",
