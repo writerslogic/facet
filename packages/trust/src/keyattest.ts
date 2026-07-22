@@ -92,6 +92,10 @@ export interface VerifyKeyAttestationOptions {
 	 * {@link FRESHNESS_SKEW_SECONDS} after `now`) is rejected — an attestor cannot vouch for a key before
 	 * it exists. Omit to skip the freshness check. */
 	now?: number;
+	/** Max attestation age in seconds. When supplied with `now`, an attestation whose `iat` is older than
+	 * this ⇒ `hardware: false` — a captured attestation cannot be replayed to vouch for a key forever.
+	 * Omit to leave staleness to the caller. */
+	maxAgeSeconds?: number;
 	/** The subject-key thumbprint the caller expects this attestation to be about. When supplied it MUST
 	 * match the attested subject thumbprint, else `hardware: false`. */
 	expectedThumbprint?: string;
@@ -151,6 +155,21 @@ export async function verifyKeyAttestation(
 			hardware: false,
 			subjectThumbprint: claims.subjectThumbprint,
 			reason: 'attestation is dated in the future',
+		};
+	}
+
+	// Staleness: an attestation older than maxAgeSeconds is no longer trustworthy for "currently hardware".
+	if (
+		opts.now !== undefined &&
+		opts.maxAgeSeconds !== undefined &&
+		typeof claims.iat === 'number' &&
+		claims.iat < Math.floor(opts.now / 1000) - opts.maxAgeSeconds
+	) {
+		return {
+			valid: true,
+			hardware: false,
+			subjectThumbprint: claims.subjectThumbprint,
+			reason: 'attestation is stale',
 		};
 	}
 

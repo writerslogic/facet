@@ -179,6 +179,12 @@ describe('did:web', () => {
 		expect(didWebToUrl('did:web:facet.example:tenant:a')).toBe(
 			'https://facet.example/tenant/a/did.json',
 		);
+		// A port (encoded %3A) is allowed; path-traversal / host-confusion via percent-encoding is not.
+		expect(didWebToUrl('did:web:facet.example%3A8443')).toBe(
+			'https://facet.example:8443/.well-known/did.json',
+		);
+		expect(() => didWebToUrl('did:web:facet.example:%2e%2e')).toThrow();
+		expect(() => didWebToUrl('did:web:evil.example%2fpath')).toThrow();
 	});
 
 	it('verifies a full domain linkage against the DID document', async () => {

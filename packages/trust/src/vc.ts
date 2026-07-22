@@ -106,6 +106,9 @@ export interface VerifyOptions {
 	 * are inside the signed document, so an authentic-but-expired credential is rejected here rather
 	 * than silently accepted. Omit to leave temporal validity to the caller (the default). */
 	now?: number;
+	/** When set, the proof's `proofPurpose` must equal this (e.g. `assertionMethod`) — a credential
+	 * signed for one purpose must not be accepted for another. Omit to skip the purpose check. */
+	expectedProofPurpose?: string;
 }
 
 export interface CredentialVerification {
@@ -159,6 +162,9 @@ export async function verifyCredential(
 		const { key } = await importVerifyKey(jwk);
 		const ok = await crypto.subtle.verify(subtleSignParams('EdDSA'), key, signature, data);
 		if (!ok) return fail('signature did not verify');
+		if (opts.expectedProofPurpose && proof.proofPurpose !== opts.expectedProofPurpose) {
+			return fail('unexpected proof purpose');
+		}
 		if (opts.now !== undefined) {
 			// A present-but-unparseable bound fails closed (treated as out-of-window), not skipped.
 			if (credential.validFrom) {

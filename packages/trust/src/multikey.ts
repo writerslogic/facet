@@ -15,7 +15,12 @@ export function ed25519RawFromJwk(jwk: JWK): Uint8Array {
 	if (jwk.kty !== 'OKP' || jwk.crv !== 'Ed25519' || !jwk.x) {
 		throw new Error('not an Ed25519 (OKP) public JWK');
 	}
-	const raw = base64urlToBytes(jwk.x);
+	let raw: Uint8Array;
+	try {
+		raw = base64urlToBytes(jwk.x);
+	} catch {
+		throw new Error('Ed25519 JWK x is not valid base64url');
+	}
 	if (raw.length !== 32) throw new Error('Ed25519 public key must be 32 bytes');
 	return raw;
 }

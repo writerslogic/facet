@@ -27,13 +27,20 @@ export function didWebFromHost(host: string): string {
 	return `did:web:${host.replace(/:/g, '%3A')}`;
 }
 
-/** Resolve a did:web identifier to its DID-document URL (`.../.well-known/did.json` or `.../did.json`). */
+/** Resolve a did:web identifier to its DID-document URL (`.../.well-known/did.json` or `.../did.json`).
+ * Only `:`→`%3A` (the port separator) is decoded in the host, and path segments may not contain a
+ * slash or be `.`/`..`, so a crafted DID cannot inject path traversal or host confusion into the URL. */
 export function didWebToUrl(did: string): string {
 	if (!did.startsWith('did:web:')) throw new Error('not a did:web identifier');
 	const parts = did.slice('did:web:'.length).split(':');
-	const host = decodeURIComponent(parts[0] as string);
+	const host = (parts[0] as string).replace(/%3A/gi, ':');
+	if (!/^[a-zA-Z0-9.-]+(:\d+)?$/.test(host)) throw new Error('invalid did:web host');
 	if (parts.length === 1) return `https://${host}/.well-known/did.json`;
-	return `https://${host}/${parts.slice(1).map(decodeURIComponent).join('/')}/did.json`;
+	const segments = parts.slice(1).map(decodeURIComponent);
+	if (segments.some((s) => s === '' || s === '.' || s === '..' || s.includes('/'))) {
+		throw new Error('invalid did:web path segment');
+	}
+	return `https://${host}/${segments.join('/')}/did.json`;
 }
 
 /** The verification-method id for the deployment key under a DID (`<did>#<kid>`). */
@@ -190,6 +197,7 @@ export async function verifyDidConfiguration(
 	}
 	const result = await verifyCredential(credential, {
 		publicKeyMultibase: vm.publicKeyMultibase,
+		expectedProofPurpose: 'assertionMethod',
 	});
 	if (!result.valid)
 		return {

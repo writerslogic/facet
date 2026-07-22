@@ -67,11 +67,13 @@ export async function signCoseSign1(payload: Uint8Array, key: SigningKey): Promi
 	return tagged;
 }
 
-/** cborg decode options: integer-keyed maps → JS Map, and tag 18 (COSE_Sign1) passes its array through. */
+/** cborg decode options: integer-keyed maps → JS Map, tag 18 (COSE_Sign1) passes its array through, and
+ * duplicate map keys are rejected (RFC 8949 §4.2.1 forbids them; a first/last-wins split between decoders
+ * would otherwise be a header-substitution surface). */
 const DECODE_OPTS = (() => {
 	const tags: ((inner: unknown) => unknown)[] = [];
 	tags[COSE_SIGN1_TAG] = (inner) => inner;
-	return { useMaps: true, tags };
+	return { useMaps: true, tags, rejectDuplicateMapKeys: true };
 })();
 
 /** Decode a COSE_Sign1 message to its four elements, tolerating the tag being present or stripped. */
