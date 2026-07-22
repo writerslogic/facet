@@ -11,8 +11,10 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
 - `GET /api/experiments/active` — **public**: client-facing experiment config.
 - `GET /api/flags/active` — **public**: cacheable feature-flag bucketing config (no targeting rules).
 - `POST /api/flags/eval` — **public**, rate-limited: server-side flag evaluation (GPC-aware).
+- `POST`/`DELETE /api/consent` — **API key**, rate-limited: record/revoke a visitor's consent to raise
+  their identity tier (GPC-aware; `site_id` is taken from the key, never the body).
 - `GET /api/stats/anomalies`, `GET /api/stats/experiments`, `GET /api/stats/experiment`,
-  `POST /api/stats/query` — **API key**.
+  `GET /api/stats/retention`, `POST /api/stats/query` — **API key**.
 - `GET /api/stats`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
   `GET /api/stats/interactions`, `GET /api/stats/realtime`, `GET /api/stats/export`,
   `GET /api/stats/conversions`, `GET /api/stats/goals`, `GET /api/stats/funnels`,
@@ -20,7 +22,8 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   (site-scoped; a key that does not own the requested `site_id` gets `403 site_mismatch`).
 - `POST /api/sites`, `GET /api/sites`, `POST /api/keys`, `GET /api/keys`,
   `DELETE /api/keys/:id`, goal/funnel CRUD (`POST`/`GET`/`DELETE /api/goals`,
-  `POST`/`GET`/`DELETE /api/funnels`), and flag CRUD (`POST`/`GET /api/flags`,
+  `POST`/`GET`/`DELETE /api/funnels`), identity config (`PATCH /api/sites/:id/identity`),
+  and flag CRUD (`POST`/`GET /api/flags`,
   `PATCH`/`DELETE /api/flags/:id`) — **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
 
 ## Error envelope
@@ -807,6 +810,45 @@ curl -X POST https://your-deployment.example.com/api/stats/query \
   }
 }
 ```
+
+---
+
+## Identity spectrum & consent
+
+Opt-in, consent-gated linkage on top of the default daily-rotating anonymous hash. See
+[privacy.md](./privacy.md#identity-spectrum-opt-in-consent-gated) for the model and threat analysis.
+Every tier above `anonymous` requires a configured deployment signing key (`FACET_SIGNING_JWK`); with
+none, these endpoints `501` and every site stays at Tier 0.
+
+### `PATCH /api/sites/:id/identity` (admin)
+
+Body `{ tier: "anonymous"|"pseudonymous"|"identified", salt_window: "day"|"week"|"month" }`. Sets the
+site's tier. The site must exist (`404` otherwise); elevating without a signing key returns
+`501 identity_signing_unconfigured`; `anonymous` forces the `day` window. Returns
+`{ "identity": { site_id, tier, salt_window } }`.
+
+### `POST /api/consent` (API key, rate-limited)
+
+Records a visitor's consent so ingest may elevate them. Body `{ tier, salt_window, user_id?, ip?,
+user_agent?, expires_at? }` (`user_id` required for `identified`). `site_id` comes from the API key,
+never the body. GPC is checked first — a `Sec-GPC: 1` request returns `202` and writes nothing. Derives
+the current-window hash, signs a PII-free `facet-consent/1` statement (the derived hash + tier + window
+only — never ip/ua/raw uid), stores it, and returns `{ "consent": <SignedStatement> }` (`201`) for the
+caller's audit trail. `400 site_not_elevated` if the site is Tier 0; `501` without a signing key.
+
+### `DELETE /api/consent` (API key, rate-limited)
+
+Body `{ tier, salt_window, user_id? | ip?, user_agent? }`. Revokes by raw `user_id` (Tier 2) or by the
+derived current-window hash (Tier 1), setting `revoked_at` on **every** matching active row so a
+captured statement can't re-elevate. Returns `{ "revoked": <n> }`.
+
+### `GET /api/stats/retention?site_id&start&end&period=day|week` (API key)
+
+Cohort-retention triangle: visitors grouped by the period of their first activity, each cell the
+fraction returning `n` periods later. Returns `{ period, cohorts: [{ cohort, size, retention: [...] }],
+note }`. **Retention depth is bounded by the salt window** (see `note`): at the default daily window a
+returning visitor gets a new hash each day, so multi-period retention is legitimately ~0 — a wider
+window via the identity spectrum is required for longer retention.
 
 ---
 

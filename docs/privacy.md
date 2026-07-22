@@ -45,6 +45,49 @@ counts as `N` unique visitors over a multi-day range. Distinct-visitor counts ar
 per day, not deduplicated across days. This is the intended, privacy-preserving trade-off:
 the system cannot link the same person across days even in principle.
 
+## Identity spectrum (opt-in, consent-gated)
+
+The daily-rotating anonymous hash above is the **default and requires no configuration** — a site
+with no identity config behaves exactly as described, byte for byte. A site that needs
+returning-visitor or retention analysis can opt into a wider linkage window, one tier at a time.
+Linkability is the single axis:
+
+| Tier | Pre-image | Salt window | Gate |
+| --- | --- | --- | --- |
+| **anonymous** (default) | `ip \| ua \| salt \| siteId` | day (rotates daily) | none |
+| **pseudonymous** | `ip \| ua \| salt \| siteId` | day / week / month | signed consent |
+| **identified** | `uid:<uid> \| salt \| siteId` | day / week / month | signed consent + per-event `consent:true` |
+
+The mechanism is a generalization of the daily salt: one secret 32-byte salt **per window** (e.g. one
+per ISO week). A visitor is **stable within a window** (same salt → same hash) and **unlinkable across
+windows** (a new window mints a fresh random salt), exactly like the daily rotation, just at the chosen
+granularity. There is deliberately **no "never" window** — every salt is destroyed by retention once
+its window closes, so cross-window linkage is always bounded by `RAW_RETENTION_DAYS`. `siteId` is in
+every pre-image, so the same visitor on two sites yields **unrelated** hashes (no cross-site
+super-cookie), and the `uid:` prefix means an identified pre-image can never collide with an anonymous
+one.
+
+**Elevation is gated by a signed consent record**, never a config flag alone. The site collects the
+visitor's real consent (via its own CMP) and calls `POST /api/consent`; the deployment signs a
+PII-free statement (`facet-consent/1`) over the derived hash, tier, and window — **never** ip, ua, or
+raw uid. At ingest, an event is elevated only if an active consent record exists whose signature
+verifies **against the deployment key** and whose signed claims are **bound to the exact ingest
+context** (site, hash, tier, window); otherwise the event silently **downgrades to the anonymous
+Tier-0 hash** (never dropped). Any tier above anonymous requires a configured deployment signing key;
+without one, every site stays at Tier 0.
+
+**GPC always wins.** The opt-out is checked before any pre-image is built, in ingest and at
+`POST /api/consent` alike, so a GPC visitor is never elevated and never counted — regardless of tier,
+window, or any stored consent. Consent (opt-in, widens linkage) and GPC (opt-out, forbids it) never
+conflict: GPC is evaluated first and unconditionally.
+
+**Threat model for the identified tier.** A Tier-2 `uid:` hash is re-identifiable **by the site that
+supplied the uid** (that is the point — CRM join); the guarantees are per-site isolation and
+Facet-side non-reversibility, not anonymity. The raw uid is stored at rest only to support
+uid-scoped revocation and is purged by retention/erasure. Per-event `consent:true` is a caller
+attestation (as trustworthy as the site's backend, exactly like the caller-supplied IP on
+`/api/event`), not an end-user cryptographic guarantee.
+
 ## Sessions & UTM
 
 Sessions are **derived from raw events**, never sent by the client. On the cron, a day's

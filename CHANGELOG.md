@@ -8,6 +8,25 @@ All notable changes to Facet are documented here. The format follows
 
 ### Added
 
+- **Identity spectrum (opt-in, consent-gated).** On top of the default daily-rotating anonymous hash
+  (unchanged, and a proven no-op for existing sites), a site can opt into a wider linkage window one
+  tier at a time: `anonymous` → `pseudonymous` (ip/ua, day/week/month window) → `identified`
+  (site-supplied `uid:`, day/week/month). One secret salt per window makes a visitor stable within a
+  window and unlinkable across windows; there is deliberately no unbounded window, so cross-window
+  linkage is always bounded by retention. `siteId` is in every pre-image (no cross-site super-cookie)
+  and the `uid:` namespace can't collide with an anonymous pre-image.
+  - Elevation is gated by a **signed** consent record (`facet-consent/1`, PII-free — derived hash +
+    tier + window only), verified at ingest against the **deployment key** and **bound to the exact
+    ingest context** (site/hash/tier/window), so a forged or replayed record can't elevate.
+  - GPC always wins: checked before any pre-image is built, in ingest and at `POST /api/consent`, so a
+    GPC visitor is never elevated or counted regardless of tier or stored consent.
+  - Salts and consent records are purged by retention on window close, severing the hash→input mapping.
+  - Endpoints: `PATCH /api/sites/:id/identity` (admin), `POST`/`DELETE /api/consent` (API key). Any
+    tier above anonymous requires a deployment signing key; without one every site stays at Tier 0.
+- **Cohort retention.** `GET /api/stats/retention` returns a retention triangle (visitors grouped by
+  first-activity period, fraction returning n periods later; day/week). Retention depth is bounded by
+  the site's salt window, so it deepens as a site elevates its identity tier.
+
 - **Feature flags.** Server-evaluated flags on top of the existing client-side experiments, sharing
   one evaluator across the server, browser SDK, and dashboard so assignments never diverge. Targeting
   **rules** (first-match by priority; clauses AND-ed over `country`/`device`/`path`/`host`/`channel`/
