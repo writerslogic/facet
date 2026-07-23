@@ -9,7 +9,7 @@ import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Anomalies } from './components/Anomalies.js';
 import { AskPanel } from './components/AskPanel.js';
-import { BentoTile, KpiTile } from './components/BentoTile.js';
+import { BentoBoard } from './components/BentoBoard.js';
 import { CubeFilterBar } from './components/CubeFilterBar.js';
 import { Experiments } from './components/Experiments.js';
 import { ExportButton } from './components/ExportButton.js';
@@ -18,7 +18,6 @@ import { KeyGate } from './components/KeyGate.js';
 import { Layout } from './components/Layout.js';
 import { Realtime } from './components/Realtime.js';
 import { Retention } from './components/Retention.js';
-import { Sankey } from './components/Sankey.js';
 import { Settings } from './components/Settings.js';
 import {
 	AuthErrorBanner,
@@ -27,8 +26,6 @@ import {
 	ErrorState,
 	Skeleton,
 } from './components/StatusStates.js';
-import { TopList } from './components/TopList.js';
-import { TrafficChart } from './components/TrafficChart.js';
 import { useAnomalies } from './hooks/anomaly.js';
 import { useCube } from './hooks/cube.js';
 import { useCompareStats, useStats } from './hooks/stats.js';
@@ -44,6 +41,7 @@ import {
 	sliceCube,
 } from './lib/cube.js';
 import { isAuthError } from './lib/status.js';
+import type { TileContext } from './lib/tiles.js';
 import { useDashboard } from './state.js';
 
 type View = 'overview' | 'realtime' | 'funnels' | 'retention' | 'experiments' | 'anomalies' | 'ask';
@@ -220,104 +218,39 @@ function Overview({
 		);
 	}
 
+	const ctx: TileContext = {
+		summary: displaySummary,
+		series: displaySeries,
+		annotations: chartAnnotations,
+		deltas: { pv: dPv, vis: dVis, ev: dEv },
+		sparks: { pv: sparkPv, vis: sparkVis },
+		sense,
+		flow,
+		data,
+		engagement: data.engagement,
+		anyFilter,
+		cubeFilter,
+		serverFilter,
+		toggleServer,
+		dimRows,
+		dimSelect,
+	};
+
 	return (
-		<div className="flex min-h-0 flex-col gap-3 lg:h-[calc(100dvh-10rem)]">
+		<div className="flex min-h-0 flex-col gap-3">
 			{filterBar}
-			<div className="grid min-h-0 flex-1 grid-cols-2 gap-3 lg:grid-cols-6 lg:grid-rows-6">
-				<BentoTile
-					label="Traffic over time"
-					className="col-span-2 row-span-2 lg:col-span-4 lg:row-span-3"
-					action={
-						chartAnnotations.length > 0 ? (
-							<span className="inline-flex items-center gap-1 text-[11px] text-neutral-400">
-								<span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" />
-								Anomaly
-							</span>
-						) : null
-					}
-				>
-					<TrafficChart
-						bare
-						series={displaySeries}
-						annotations={chartAnnotations}
-						loading={false}
-						error={null}
-					/>
-				</BentoTile>
-
-				<BentoTile className="col-span-1 lg:col-span-2 lg:row-span-2">
-					<KpiTile
-						label="Pageviews"
-						value={displaySummary.pageviews}
-						deltaPct={dPv}
-						deltaSense={sense(dPv)}
-						spark={sparkPv}
-						stroke="#0f172a"
-					/>
-				</BentoTile>
-				<BentoTile className="col-span-1 lg:col-span-1 lg:row-span-2">
-					<KpiTile
-						label="Visitors"
-						value={displaySummary.visitors}
-						deltaPct={dVis}
-						deltaSense={sense(dVis)}
-						spark={sparkVis}
-						stroke="#6366f1"
-					/>
-				</BentoTile>
-				<BentoTile className="col-span-2 lg:col-span-1 lg:row-span-2">
-					<KpiTile
-						label="Events"
-						value={displaySummary.events}
-						deltaPct={dEv}
-						deltaSense={sense(dEv)}
-						stroke="#8b5cf6"
-					/>
-				</BentoTile>
-
-				<BentoTile label="Traffic flow" className="col-span-2 lg:col-span-3 lg:row-span-3">
-					{flow.links.length > 0 ? (
-						<Sankey nodes={flow.nodes} links={flow.links} />
-					) : (
-						<div className="flex h-full items-center justify-center text-sm text-neutral-400">
-							No flow data yet
-						</div>
-					)}
-				</BentoTile>
-				<BentoTile
-					label="Top pages"
-					className="col-span-2 lg:col-span-3 lg:row-span-2"
-					bodyClassName="overflow-y-auto"
-				>
-					<TopList
-						bare
-						limit={6}
-						title="Top pages"
-						rows={data.top_paths}
-						onSelect={toggleServer('path')}
-						activeKey={serverFilter.path}
-					/>
-				</BentoTile>
-				<BentoTile
-					label="Countries"
-					className="col-span-2 lg:col-span-3 lg:row-span-1"
-					bodyClassName="overflow-y-auto"
-				>
-					<TopList
-						bare
-						limit={4}
-						title="Countries"
-						rows={dimRows('country', data.top_countries)}
-						onSelect={dimSelect('country')}
-						activeKey={cubeFilter.country}
-					/>
-				</BentoTile>
-			</div>
-			{slice?.visitorsApproximate ? (
-				<p className="shrink-0 text-xs text-neutral-400">
-					Visitors is an upper bound under this slice; pageviews and events are exact.
-				</p>
-			) : null}
+			<BentoBoard
+				ctx={ctx}
+				siteId={siteId}
+				footer={
+					slice?.visitorsApproximate ? (
+						<p className="shrink-0 text-xs text-neutral-400">
+							Visitors is an upper bound under this slice; pageviews and events are
+							exact.
+						</p>
+					) : null
+				}
+			/>
 		</div>
 	);
 }
