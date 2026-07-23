@@ -17,5 +17,10 @@ export function useCube(apiKey: string, siteId: string, range: Range, interval: 
 			),
 		enabled: Boolean(apiKey && siteId),
 		staleTime: 60_000,
+		// Hold the previous range's cube during a range change so client-side slices keep rendering
+		// instead of falling back to EMPTY_CELLS mid-swap. Scoped to the same site so a site switch
+		// resets rather than slicing the old site's cube.
+		placeholderData: (prev, prevQuery) =>
+			prevQuery?.queryKey[1] === siteId ? prev : undefined,
 	});
 }

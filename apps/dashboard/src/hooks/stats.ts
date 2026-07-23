@@ -11,6 +11,14 @@ export function useStats(apiKey: string, query: StatsQuery) {
 		queryKey: ['stats', query],
 		queryFn: () => apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, apiKey),
 		enabled: Boolean(apiKey),
+		// Keep the prior data on screen while the next query loads so a range/filter change never drops
+		// back to the BentoSkeleton (isLoading stays false; isPlaceholderData flags the swap). Scoped to
+		// the same site: switching sites must NOT flash the previous site's numbers under the new label,
+		// so a cross-site swap falls through to undefined → skeleton.
+		placeholderData: (prev, prevQuery) =>
+			(prevQuery?.queryKey[1] as StatsQuery | undefined)?.site_id === query.site_id
+				? prev
+				: undefined,
 	});
 }
 
