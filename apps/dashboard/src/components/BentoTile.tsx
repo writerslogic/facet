@@ -2,7 +2,7 @@
 // ring, gradient-lit face, top highlight) that lifts on hover and can expand to a focused drill-down;
 // a count-up hook so metrics animate in "alive"; and a compact KPI readout for a tile.
 
-import { Maximize2 } from 'lucide-react';
+import { Maximize2, X } from 'lucide-react';
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/cn.js';
 import { formatNumber } from '../lib/format.js';
@@ -50,11 +50,15 @@ const EMPHASIS: Record<TileEmphasis, string> = {
 	default: 'bg-gradient-to-b from-white to-neutral-50/60 ring-neutral-900/5',
 };
 
-/** A single bento tile. `onExpand` reveals a hover control to drill into the tile's detail. */
+/** A single bento tile. `onExpand` reveals a hover control that focuses the tile in place (the elastic
+ * grid inflates it); while focused it shows `onClose` instead. The expand/close buttons carry data hooks
+ * so the board can move keyboard focus onto them across the transition. */
 export function BentoTile({
 	label,
 	action,
 	onExpand,
+	onClose,
+	focused = false,
 	emphasis = 'default',
 	className,
 	bodyClassName,
@@ -63,6 +67,8 @@ export function BentoTile({
 	label?: string;
 	action?: ReactNode;
 	onExpand?: () => void;
+	onClose?: () => void;
+	focused?: boolean;
 	emphasis?: TileEmphasis;
 	className?: string;
 	bodyClassName?: string;
@@ -73,14 +79,16 @@ export function BentoTile({
 			className={cn(
 				'group relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-200/70 p-4',
 				'shadow-card ring-1 transition-all duration-300 ease-out',
-				'hover:-translate-y-0.5 hover:shadow-float',
+				focused
+					? 'z-20 shadow-float ring-2 ring-accent-500/30'
+					: 'hover:-translate-y-0.5 hover:shadow-float',
 				// gradient-lit face + a faint top highlight for depth
 				'before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/80 before:to-transparent',
 				EMPHASIS[emphasis],
 				className,
 			)}
 		>
-			{label || action || onExpand ? (
+			{label || action || onExpand || onClose ? (
 				<header className="relative z-10 mb-2 flex shrink-0 items-center justify-between gap-2">
 					{label ? (
 						<h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
@@ -91,9 +99,20 @@ export function BentoTile({
 					)}
 					<div className="flex items-center gap-1.5">
 						{action}
-						{onExpand ? (
+						{onClose ? (
 							<button
 								type="button"
+								data-tile-close
+								onClick={onClose}
+								aria-label={`Close ${label ?? 'tile'} detail`}
+								className="rounded-md p-1 text-neutral-400 transition hover:bg-neutral-100 hover:text-neutral-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+							>
+								<X className="h-3.5 w-3.5" aria-hidden="true" />
+							</button>
+						) : onExpand ? (
+							<button
+								type="button"
+								data-tile-expand
 								onClick={onExpand}
 								aria-label={`Expand ${label ?? 'tile'}`}
 								className="rounded-md p-1 text-neutral-300 opacity-0 transition hover:bg-neutral-100 hover:text-neutral-600 focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 group-hover:opacity-100"

@@ -1,7 +1,8 @@
-// The bento board: renders the persisted slot layout as a responsive grid and hosts the three ways a
-// user reshapes it — drag to reorder, Customize mode to resize/replace/remove/add tiles, and expand to
-// drill into a tile. Layout state comes from useBoardLayout (persisted per site); everything a tile
-// draws comes from the shared TileContext computed by the caller.
+// The bento board: renders the persisted slot layout as an elastic grid and hosts the three ways a user
+// reshapes it — drag to reorder, Customize mode to resize/replace/remove/add tiles, and expand to focus a
+// tile in place. Focusing inflates the grid tracks the tile spans and collapses the rest (see elasticGrid),
+// so drill-down happens on one plane with no modal. Layout state comes from useBoardLayout (persisted per
+// site); everything a tile draws comes from the shared TileContext computed by the caller.
 
 import {
 	Check,
@@ -13,13 +14,19 @@ import {
 	Settings2,
 	Trash2,
 } from 'lucide-react';
-import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
+import { type ReactElement, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { readBoardLayout, useBoardLayout } from '../lib/boardLayout.js';
 import { cn } from '../lib/cn.js';
 import {
+	BASE_ROWS,
+	packSlots,
+	trackTemplate,
+	useColumns,
+	useElasticTracks,
+} from '../lib/elasticGrid.js';
+import {
 	CHART_CYCLE,
 	KPI_CYCLE,
-	SIZES,
 	SIZE_LABEL,
 	type SizeKey,
 	type Slot,
@@ -28,7 +35,6 @@ import {
 	newSlotUid,
 } from '../lib/tiles.js';
 import { BentoTile } from './BentoTile.js';
-import { TileOverlay } from './TileOverlay.js';
 
 /** Step a slot to the next size in its kind's cycle (KPIs vs charts/lists have different cycles so a
  * tile only offers sizes that suit it). An off-cycle size snaps to the nearest cycle entry, so every
@@ -51,23 +57,74 @@ export function BentoBoard({
 }): ReactElement {
 	const { slots, setSlots, reset } = useBoardLayout(siteId);
 	const [editing, setEditing] = useState(false);
-	const [overlay, setOverlay] = useState<string | null>(null);
+	const [focused, setFocused] = useState<string | null>(null);
 	const [dragIndex, setDragIndex] = useState<number | null>(null);
 	const [overIndex, setOverIndex] = useState<number | null>(null);
 	const [adding, setAdding] = useState(false);
 	// Announced to assistive tech after a keyboard move; the moved tile is re-focused by its uid.
 	const [announce, setAnnounce] = useState('');
 	const focusUid = useRef<string | null>(null);
+	const restoreUid = useRef<string | null>(null);
 	const tileRefs = useRef(new Map<string, HTMLDivElement>());
+	const gridRef = useRef<HTMLDivElement>(null);
 	const addWrapRef = useRef<HTMLDivElement>(null);
 	const addToggleRef = useRef<HTMLButtonElement>(null);
 	usePopoverDismiss(adding, () => setAdding(false), addWrapRef, addToggleRef);
+
+	const cols = useColumns(gridRef);
+	const { placements, rowCount } = useMemo(() => packSlots(slots, cols), [slots, cols]);
+	// A stale focus (its tile was removed) resolves to no focus; the grid rests.
+	const focusedIdx = focused ? slots.findIndex((s) => s.uid === focused) : -1;
+	const activeFocus = focusedIdx >= 0 ? focused : null;
+	const { colFr, rowFr } = useElasticTracks(
+		cols,
+		rowCount,
+		focusedIdx >= 0 ? (placements[focusedIdx] ?? null) : null,
+	);
+	// At or below the shipped row count the tracks divide the viewport exactly (no scroll); above it the
+	// board falls back to a per-row minimum and scrolls internally — the page itself never scrolls.
+	const fits = rowCount <= BASE_ROWS;
 
 	useEffect(() => {
 		if (!focusUid.current) return;
 		tileRefs.current.get(focusUid.current)?.focus();
 		focusUid.current = null;
 	});
+
+	// Move keyboard focus with the expansion: onto the tile's Close on open, back to its Expand on close.
+	useEffect(() => {
+		if (activeFocus) {
+			tileRefs.current
+				.get(activeFocus)
+				?.querySelector<HTMLElement>('[data-tile-close]')
+				?.focus();
+		} else if (restoreUid.current) {
+			tileRefs.current
+				.get(restoreUid.current)
+				?.querySelector<HTMLElement>('[data-tile-expand]')
+				?.focus();
+			restoreUid.current = null;
+		}
+	}, [activeFocus]);
+
+	// Escape collapses a focused tile (focus returns to its expand control via the effect above).
+	useEffect(() => {
+		if (!activeFocus) return;
+		const onKey = (e: KeyboardEvent): void => {
+			if (e.key === 'Escape') setFocused(null);
+		};
+		document.addEventListener('keydown', onKey);
+		return () => document.removeEventListener('keydown', onKey);
+	}, [activeFocus]);
+
+	const openFocus = (uid: string): void => {
+		restoreUid.current = uid;
+		setFocused(uid);
+	};
+	const startEditing = (): void => {
+		setFocused(null);
+		setEditing(true);
+	};
 
 	const move = (from: number, to: number): void => {
 		if (to < 0 || to >= slots.length || from === to) return;
@@ -98,7 +155,6 @@ export function BentoBoard({
 		setAdding(false);
 	};
 
-	const overlayDef = overlay ? TILE_REGISTRY[overlay] : null;
 	const present = new Set(slots.map((s) => s.tileId));
 
 	return (
@@ -159,7 +215,7 @@ export function BentoBoard({
 				) : (
 					<button
 						type="button"
-						onClick={() => setEditing(true)}
+						onClick={startEditing}
 						className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-500 text-xs shadow-card transition hover:text-neutral-900"
 					>
 						<Settings2 className="h-3.5 w-3.5" aria-hidden="true" /> Customize
@@ -168,13 +224,25 @@ export function BentoBoard({
 			</div>
 
 			<div
-				className="grid min-h-0 flex-1 auto-rows-[minmax(7rem,1fr)] grid-cols-2 gap-3 overflow-y-auto lg:auto-rows-[minmax(5rem,1fr)] lg:grid-cols-6 lg:grid-rows-6"
+				ref={gridRef}
+				className={cn(
+					'grid min-h-0 flex-1 gap-3',
+					fits ? 'overflow-hidden' : 'overflow-y-auto',
+				)}
+				style={{
+					gridTemplateColumns: trackTemplate(colFr),
+					gridTemplateRows: trackTemplate(rowFr),
+					...(fits ? null : { minHeight: `${rowCount * 5}rem` }),
+				}}
 				role={editing ? 'list' : undefined}
 				aria-label={editing ? 'Board tiles — use arrow keys to reorder' : undefined}
 			>
 				{slots.map((slot, i) => {
 					const def = TILE_REGISTRY[slot.tileId];
-					if (!def) return null;
+					const p = placements[i];
+					if (!def || !p) return null;
+					const isFocused = slot.uid === activeFocus;
+					const dim = activeFocus !== null && !isFocused;
 					const isOver =
 						editing && overIndex === i && dragIndex !== null && dragIndex !== i;
 					return (
@@ -191,14 +259,18 @@ export function BentoBoard({
 									: undefined
 							}
 							tabIndex={editing ? 0 : undefined}
+							style={{
+								gridColumn: `${p.colStart} / span ${p.colSpan}`,
+								gridRow: `${p.rowStart} / span ${p.rowSpan}`,
+							}}
 							className={cn(
-								SIZES[slot.size],
-								'min-h-0',
+								'min-h-0 rounded-2xl transition-[opacity,filter] duration-300',
+								isFocused && 'relative z-20',
 								editing &&
 									'cursor-grab focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
 								dragIndex === i && 'opacity-40',
 								isOver && 'ring-2 ring-accent-400 ring-offset-2',
-								'rounded-2xl transition',
+								dim && 'pointer-events-none opacity-40',
 							)}
 							draggable={editing}
 							onDragStart={() => setDragIndex(i)}
@@ -231,6 +303,7 @@ export function BentoBoard({
 							<BentoTile
 								label={def.selfLabeled ? undefined : def.title}
 								emphasis={def.emphasis}
+								focused={isFocused}
 								action={
 									editing ? (
 										<TileControls
@@ -248,12 +321,15 @@ export function BentoBoard({
 									)
 								}
 								onExpand={
-									!editing && def.expandable
-										? () => setOverlay(def.id)
+									!editing && def.expandable && activeFocus === null
+										? () => openFocus(slot.uid)
 										: undefined
 								}
+								onClose={isFocused ? () => setFocused(null) : undefined}
 								className="h-full"
-								bodyClassName={def.expandable ? 'overflow-y-auto' : undefined}
+								bodyClassName={
+									def.expandable || isFocused ? 'overflow-y-auto' : undefined
+								}
 							>
 								{editing ? (
 									<div className="pointer-events-none flex h-full items-center justify-center gap-2 text-neutral-400">
@@ -263,7 +339,7 @@ export function BentoBoard({
 										</span>
 									</div>
 								) : (
-									def.render(ctx)
+									def.render(ctx, isFocused)
 								)}
 							</BentoTile>
 						</div>
@@ -276,10 +352,6 @@ export function BentoBoard({
 			<output className="sr-only" aria-live="polite">
 				{announce}
 			</output>
-
-			{overlayDef ? (
-				<TileOverlay tile={overlayDef} ctx={ctx} onClose={() => setOverlay(null)} />
-			) : null}
 		</div>
 	);
 }
@@ -386,21 +458,37 @@ function TileControls({
 	);
 }
 
-/** The loading state for the board: the exact same grid geometry (per-site persisted layout) filled
- * with shimmer placeholders, so the skeleton and the real board share one silhouette — no re-layout
- * flash when data lands. */
+/** The loading state for the board: the exact same elastic-grid geometry (per-site persisted layout)
+ * filled with shimmer placeholders, so the skeleton and the real board share one silhouette — no
+ * re-layout flash when data lands. */
 export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
 	const slots = readBoardLayout(siteId);
+	const gridRef = useRef<HTMLDivElement>(null);
+	const cols = useColumns(gridRef);
+	const { placements, rowCount } = packSlots(slots, cols);
+	const fits = rowCount <= BASE_ROWS;
 	return (
-		<div className="grid min-h-0 flex-1 auto-rows-[minmax(7rem,1fr)] grid-cols-2 gap-3 overflow-hidden lg:auto-rows-[minmax(5rem,1fr)] lg:grid-cols-6 lg:grid-rows-6">
-			{slots.map((slot, i) => (
+		<div
+			ref={gridRef}
+			className={cn(
+				'grid min-h-0 flex-1 gap-3',
+				fits ? 'overflow-hidden' : 'overflow-y-auto',
+			)}
+			style={{
+				gridTemplateColumns: trackTemplate(new Array(cols).fill(1)),
+				gridTemplateRows: trackTemplate(new Array(rowCount).fill(1)),
+				...(fits ? null : { minHeight: `${rowCount * 5}rem` }),
+			}}
+		>
+			{placements.map((p, i) => (
 				<div
 					// biome-ignore lint/suspicious/noArrayIndexKey: fixed placeholder list with no identity
 					key={i}
-					className={cn(
-						SIZES[slot.size],
-						'animate-pulse rounded-2xl border border-neutral-200/70 bg-gradient-to-b from-white to-neutral-50/60 shadow-card ring-1 ring-neutral-900/5',
-					)}
+					style={{
+						gridColumn: `${p.colStart} / span ${p.colSpan}`,
+						gridRow: `${p.rowStart} / span ${p.rowSpan}`,
+					}}
+					className="animate-pulse rounded-2xl border border-neutral-200/70 bg-gradient-to-b from-white to-neutral-50/60 shadow-card ring-1 ring-neutral-900/5"
 					aria-hidden="true"
 				/>
 			))}
