@@ -123,7 +123,9 @@ export function BentoTile({
 					</div>
 				</header>
 			) : null}
-			<div className={cn('relative z-10 min-h-0 flex-1', bodyClassName)}>{children}</div>
+			<div className={cn('@container/tile relative z-10 min-h-0 flex-1', bodyClassName)}>
+				{children}
+			</div>
 		</section>
 	);
 }
@@ -167,7 +169,7 @@ export function KpiTile({
 					{label}
 				</div>
 				<div className="mt-0.5 flex items-baseline gap-1.5">
-					<span className="tabular text-[2rem] font-semibold leading-none tracking-[-0.02em] text-neutral-900">
+					<span className="tabular text-[2rem] font-semibold leading-none tracking-[-0.02em] text-neutral-900 @max-[13rem]/tile:text-3xl @max-[9rem]/tile:text-2xl">
 						{formatNumber(Math.round(shown))}
 					</span>
 					{deltaPct != null ? (
@@ -184,7 +186,7 @@ export function KpiTile({
 				</div>
 			</div>
 			{hasSpark ? (
-				<div className="ml-auto h-full min-h-0 w-1/2 min-w-0 max-w-[10rem] self-stretch py-1">
+				<div className="ml-auto h-full min-h-0 w-1/2 min-w-0 max-w-[10rem] self-stretch py-1 @max-[11rem]/tile:hidden">
 					<Sparkline
 						values={spark as number[]}
 						stroke={stroke}
