@@ -3,24 +3,28 @@
 // ids (from an older saved layout) are dropped on load so a renamed/removed tile can't break the board.
 
 import { useCallback, useEffect, useState } from 'react';
-import { DEFAULT_LAYOUT, type Slot, TILE_REGISTRY } from './tiles.js';
+import { DEFAULT_LAYOUT, SIZES, type Slot, TILE_REGISTRY } from './tiles.js';
 
 const KEY = (siteId: string): string => `facet.board.${siteId}`;
 
 function sanitize(slots: unknown): Slot[] | null {
 	if (!Array.isArray(slots)) return null;
+	// Drop slots whose tile id or size is not a value the current build knows about, so an older or
+	// hand-edited layout can never render an unknown tile or an undefined grid span (a collapsed cell).
 	const clean = slots.filter(
 		(s): s is Slot =>
 			typeof s === 'object' &&
 			s !== null &&
 			typeof (s as Slot).tileId === 'string' &&
 			(s as Slot).tileId in TILE_REGISTRY &&
-			typeof (s as Slot).size === 'string',
+			typeof (s as Slot).size === 'string' &&
+			(s as Slot).size in SIZES,
 	);
 	return clean.length > 0 ? clean : null;
 }
 
-function load(siteId: string): Slot[] {
+/** The persisted (or default) layout for a site, without the hook — for the loading skeleton. */
+export function readBoardLayout(siteId: string): Slot[] {
 	try {
 		const raw = localStorage.getItem(KEY(siteId));
 		if (!raw) return DEFAULT_LAYOUT;
@@ -37,10 +41,10 @@ export function useBoardLayout(siteId: string): {
 	setSlots: (next: Slot[]) => void;
 	reset: () => void;
 } {
-	const [slots, setSlotsState] = useState<Slot[]>(() => load(siteId));
+	const [slots, setSlotsState] = useState<Slot[]>(() => readBoardLayout(siteId));
 
 	useEffect(() => {
-		setSlotsState(load(siteId));
+		setSlotsState(readBoardLayout(siteId));
 	}, [siteId]);
 
 	const setSlots = useCallback(

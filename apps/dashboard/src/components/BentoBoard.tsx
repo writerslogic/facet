@@ -4,12 +4,14 @@
 // draws comes from the shared TileContext computed by the caller.
 
 import { GripVertical, Plus, RotateCcw, Settings2, Trash2 } from 'lucide-react';
-import { type ReactElement, useState } from 'react';
-import { useBoardLayout } from '../lib/boardLayout.js';
+import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
+import { readBoardLayout, useBoardLayout } from '../lib/boardLayout.js';
 import { cn } from '../lib/cn.js';
 import {
+	CHART_CYCLE,
+	KPI_CYCLE,
 	SIZES,
-	SIZE_CYCLE,
+	SIZE_LABEL,
 	type SizeKey,
 	type Slot,
 	TILE_REGISTRY,
@@ -18,11 +20,14 @@ import {
 import { BentoTile } from './BentoTile.js';
 import { TileOverlay } from './TileOverlay.js';
 
-/** Advance a slot's size to the next step in the cycle (wraps). Sizes outside the cycle restart at its
- * head, so a default `short`/`wide` tile still resizes predictably. */
-function nextSize(size: SizeKey): SizeKey {
-	const i = SIZE_CYCLE.indexOf(size);
-	return SIZE_CYCLE[(i + 1) % SIZE_CYCLE.length] as SizeKey;
+/** Step a slot to the next size in its kind's cycle (KPIs vs charts/lists have different cycles so a
+ * tile only offers sizes that suit it). An off-cycle size snaps to the nearest cycle entry, so every
+ * shipped default remains reversible rather than collapsing to the head. */
+function nextSize(tileId: string, size: SizeKey): SizeKey {
+	const cycle = TILE_REGISTRY[tileId]?.selfLabeled ? KPI_CYCLE : CHART_CYCLE;
+	const i = cycle.indexOf(size);
+	const from = i === -1 ? 0 : i;
+	return cycle[(from + 1) % cycle.length] as SizeKey;
 }
 
 export function BentoBoard({
@@ -49,7 +54,7 @@ export function BentoBoard({
 		setSlots(next);
 	};
 	const resize = (i: number): void =>
-		setSlots(slots.map((s, j) => (j === i ? { ...s, size: nextSize(s.size) } : s)));
+		setSlots(slots.map((s, j) => (j === i ? { ...s, size: nextSize(s.tileId, s.size) } : s)));
 	const replace = (i: number, tileId: string): void =>
 		setSlots(slots.map((s, j) => (j === i ? { ...s, tileId } : s)));
 	const remove = (i: number): void => setSlots(slots.filter((_, j) => j !== i));
@@ -61,7 +66,7 @@ export function BentoBoard({
 	const overlayDef = overlay ? TILE_REGISTRY[overlay] : null;
 
 	return (
-		<div className="flex min-h-0 flex-col gap-3 lg:h-[calc(100dvh-13rem)]">
+		<div className="flex min-h-0 flex-1 flex-col gap-3">
 			<div className="flex shrink-0 items-center justify-end gap-2">
 				{editing ? (
 					<>
@@ -117,7 +122,7 @@ export function BentoBoard({
 				)}
 			</div>
 
-			<div className="grid min-h-0 flex-1 auto-rows-[minmax(0,1fr)] grid-cols-2 gap-3 lg:grid-cols-6 lg:grid-rows-6">
+			<div className="grid min-h-0 flex-1 auto-rows-[minmax(7rem,1fr)] grid-cols-2 gap-3 overflow-y-auto lg:auto-rows-[minmax(5rem,1fr)] lg:grid-cols-6 lg:grid-rows-6">
 				{slots.map((slot, i) => {
 					const def = TILE_REGISTRY[slot.tileId];
 					if (!def) return null;
@@ -158,6 +163,7 @@ export function BentoBoard({
 									editing ? (
 										<TileControls
 											slot={slot}
+											title={def.title}
 											onResize={() => resize(i)}
 											onReplace={(id) => replace(i, id)}
 											onRemove={() => remove(i)}
@@ -199,35 +205,44 @@ export function BentoBoard({
 	);
 }
 
-/** The per-tile edit controls shown in a tile's header while customizing: resize, replace, remove. */
+/** The per-tile edit controls shown in a tile's header while customizing: resize, replace, remove. All
+ * controls carry accessible names naming the tile they act on; the replace popover is a managed menu. */
 function TileControls({
 	slot,
+	title,
 	onResize,
 	onReplace,
 	onRemove,
 }: {
 	slot: Slot;
+	title: string;
 	onResize: () => void;
 	onReplace: (tileId: string) => void;
 	onRemove: () => void;
 }): ReactElement {
 	const [open, setOpen] = useState(false);
+	const wrapRef = useRef<HTMLDivElement>(null);
+	const toggleRef = useRef<HTMLButtonElement>(null);
+	usePopoverDismiss(open, () => setOpen(false), wrapRef, toggleRef);
 	return (
 		<div className="pointer-events-auto flex items-center gap-1">
 			<button
 				type="button"
 				onClick={onResize}
-				title="Resize"
+				aria-label={`Resize ${title}, currently ${SIZE_LABEL[slot.size]}`}
 				className="rounded px-1.5 py-0.5 font-semibold text-[10px] text-neutral-500 uppercase ring-1 ring-neutral-200 transition hover:text-neutral-900"
 			>
-				{slot.size}
+				{SIZE_LABEL[slot.size]}
 			</button>
-			<div className="relative">
+			<div className="relative" ref={wrapRef}>
 				<button
+					ref={toggleRef}
 					type="button"
 					onClick={() => setOpen((v) => !v)}
-					title="Replace tile"
-					className="rounded p-0.5 text-neutral-400 transition hover:text-neutral-900"
+					aria-label={`Replace ${title}`}
+					aria-haspopup="true"
+					aria-expanded={open}
+					className="rounded p-0.5 text-neutral-500 transition hover:text-neutral-900"
 				>
 					<Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
 				</button>
@@ -237,9 +252,11 @@ function TileControls({
 							<button
 								key={def.id}
 								type="button"
+								aria-current={def.id === slot.tileId}
 								onClick={() => {
 									onReplace(def.id);
 									setOpen(false);
+									toggleRef.current?.focus();
 								}}
 								className={cn(
 									'block w-full rounded-md px-2.5 py-1.5 text-left text-sm transition hover:bg-neutral-100',
@@ -257,11 +274,60 @@ function TileControls({
 			<button
 				type="button"
 				onClick={onRemove}
-				title="Remove tile"
-				className="rounded p-0.5 text-neutral-400 transition hover:text-rose-600"
+				aria-label={`Remove ${title}`}
+				className="rounded p-0.5 text-neutral-500 transition hover:text-rose-600"
 			>
 				<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
 			</button>
 		</div>
 	);
+}
+
+/** The loading state for the board: the exact same grid geometry (per-site persisted layout) filled
+ * with shimmer placeholders, so the skeleton and the real board share one silhouette — no re-layout
+ * flash when data lands. */
+export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
+	const slots = readBoardLayout(siteId);
+	return (
+		<div className="grid min-h-0 flex-1 auto-rows-[minmax(7rem,1fr)] grid-cols-2 gap-3 overflow-hidden lg:auto-rows-[minmax(5rem,1fr)] lg:grid-cols-6 lg:grid-rows-6">
+			{slots.map((slot, i) => (
+				<div
+					// biome-ignore lint/suspicious/noArrayIndexKey: fixed placeholder list with no identity
+					key={i}
+					className={cn(
+						SIZES[slot.size],
+						'animate-pulse rounded-2xl border border-neutral-200/70 bg-gradient-to-b from-white to-neutral-50/60 shadow-card ring-1 ring-neutral-900/5',
+					)}
+					aria-hidden="true"
+				/>
+			))}
+		</div>
+	);
+}
+
+/** Close a popover on Escape (returning focus to its toggle) or a pointer-down outside it. */
+function usePopoverDismiss(
+	open: boolean,
+	close: () => void,
+	wrapRef: RefObject<HTMLElement | null>,
+	toggleRef: RefObject<HTMLElement | null>,
+): void {
+	useEffect(() => {
+		if (!open) return;
+		const onKey = (e: KeyboardEvent): void => {
+			if (e.key === 'Escape') {
+				close();
+				toggleRef.current?.focus();
+			}
+		};
+		const onDown = (e: PointerEvent): void => {
+			if (!wrapRef.current?.contains(e.target as Node)) close();
+		};
+		document.addEventListener('keydown', onKey);
+		document.addEventListener('pointerdown', onDown);
+		return () => {
+			document.removeEventListener('keydown', onKey);
+			document.removeEventListener('pointerdown', onDown);
+		};
+	}, [open, close, wrapRef, toggleRef]);
 }

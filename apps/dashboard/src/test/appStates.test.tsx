@@ -140,7 +140,7 @@ describe("read state model", () => {
 	it("shows skeletons while loading", () => {
 		vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise(() => {})));
 		const { container } = renderApp();
-		expect(container.querySelector(".shimmer")).not.toBeNull();
+		expect(container.querySelector(".animate-pulse")).not.toBeNull();
 	});
 
 	it("recovers to real data after the key is fixed via the switcher", async () => {

@@ -9,7 +9,7 @@ import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Anomalies } from './components/Anomalies.js';
 import { AskPanel } from './components/AskPanel.js';
-import { BentoBoard } from './components/BentoBoard.js';
+import { BentoBoard, BentoSkeleton } from './components/BentoBoard.js';
 import { CubeFilterBar } from './components/CubeFilterBar.js';
 import { Experiments } from './components/Experiments.js';
 import { ExportButton } from './components/ExportButton.js';
@@ -19,13 +19,7 @@ import { Layout } from './components/Layout.js';
 import { Realtime } from './components/Realtime.js';
 import { Retention } from './components/Retention.js';
 import { Settings } from './components/Settings.js';
-import {
-	AuthErrorBanner,
-	CardSkeletons,
-	EmptyState,
-	ErrorState,
-	Skeleton,
-} from './components/StatusStates.js';
+import { AuthErrorBanner, ErrorState } from './components/StatusStates.js';
 import { useAnomalies } from './hooks/anomaly.js';
 import { useCube } from './hooks/cube.js';
 import { useCompareStats, useStats } from './hooks/stats.js';
@@ -123,10 +117,8 @@ function Overview({
 
 	if (isLoading || !data) {
 		return (
-			<div className="space-y-6">
-				<CardSkeletons count={3} />
-				<CardSkeletons count={4} />
-				<Skeleton className="h-[280px] w-full" />
+			<div className="flex min-h-0 flex-1 flex-col">
+				<BentoSkeleton siteId={siteId} />
 			</div>
 		);
 	}
@@ -197,26 +189,9 @@ function Overview({
 		/>
 	);
 
-	if (isEmpty && data.series.length === 0) {
-		return (
-			<div className="flex min-h-0 flex-1 flex-col gap-3">
-				{filterBar}
-				<EmptyState title="No data yet">
-					<span>
-						Once your site sends events they will appear here.{' '}
-						<button
-							type="button"
-							onClick={onOpenSettings}
-							className="font-medium text-accent-600 underline hover:text-accent-800"
-						>
-							Set up a site in Settings
-						</button>
-						.
-					</span>
-				</EmptyState>
-			</div>
-		);
-	}
+	// No data yet: still render the real bento (all tiles are zero/empty-safe) so the layout never
+	// collapses to a different shape — a slim, non-blocking banner carries the setup CTA over the board.
+	const boardEmpty = isEmpty && data.series.length === 0;
 
 	const ctx: TileContext = {
 		summary: displaySummary,
@@ -237,8 +212,21 @@ function Overview({
 	};
 
 	return (
-		<div className="flex min-h-0 flex-col gap-3">
-			{filterBar}
+		<div className="flex min-h-0 flex-1 flex-col gap-3">
+			{boardEmpty ? (
+				<div className="flex shrink-0 items-center justify-between gap-3 rounded-xl border border-accent-200 bg-accent-50/70 px-4 py-2.5 text-sm text-accent-800">
+					<span>No data yet — once your site sends events they will appear here.</span>
+					<button
+						type="button"
+						onClick={onOpenSettings}
+						className="shrink-0 rounded-lg bg-accent-600 px-3 py-1.5 font-medium text-white text-xs transition hover:bg-accent-700"
+					>
+						Set up a site
+					</button>
+				</div>
+			) : (
+				filterBar
+			)}
 			<BentoBoard
 				ctx={ctx}
 				siteId={siteId}
@@ -284,8 +272,12 @@ function Dashboard(): ReactElement {
 		});
 	}, [siteId, queryClient]);
 
+	// The Overview bento fills the viewport exactly (no page scroll); every other tab scrolls normally.
+	const fill = !showSettings && view === 'overview';
+
 	return (
 		<Layout
+			fill={fill}
 			settingsActive={showSettings}
 			onToggleSettings={() => setShowSettings((prev) => !prev)}
 			headerExtra={
@@ -306,7 +298,7 @@ function Dashboard(): ReactElement {
 					<div
 						role="tablist"
 						aria-label="Analytics views"
-						className="mb-6 flex gap-1 overflow-x-auto border-b border-neutral-200"
+						className="mb-4 flex shrink-0 gap-1 overflow-x-auto border-b border-neutral-200"
 					>
 						{TABS.map((tab) => (
 							<button
@@ -327,13 +319,15 @@ function Dashboard(): ReactElement {
 						))}
 					</div>
 					{view === 'overview' ? (
-						<Overview
-							onOpenSettings={() => setShowSettings(true)}
-							filter={cubeFilter}
-							onFilterChange={setCubeFilter}
-							serverFilter={serverFilter}
-							onServerFilterChange={setServerFilter}
-						/>
+						<div className="flex min-h-0 flex-1 flex-col">
+							<Overview
+								onOpenSettings={() => setShowSettings(true)}
+								filter={cubeFilter}
+								onFilterChange={setCubeFilter}
+								serverFilter={serverFilter}
+								onServerFilterChange={setServerFilter}
+							/>
+						</div>
 					) : view === 'realtime' ? (
 						<Realtime apiKey={apiKey} siteId={siteId} />
 					) : view === 'funnels' ? (

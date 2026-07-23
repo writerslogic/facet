@@ -48,10 +48,12 @@ export interface TileDef {
 	selfLabeled?: boolean;
 }
 
-/** Named grid spans so a slot persists a compact size token rather than raw Tailwind. `sm`/`md` suit
- * KPIs; `wide`/`tall`/`xl` suit charts and flows. SIZE_CYCLE is the order the resize control steps. */
-export type SizeKey = 'sm' | 'md' | 'lg' | 'wide' | 'tall' | 'xl' | 'short';
+/** Named grid spans so a slot persists a compact size token rather than raw Tailwind. `kpi` is a short
+ * wide band for metric readouts; `sm`/`md` are taller compact tiles; `lg`/`short`/`wide`/`tall`/`xl`
+ * suit charts, flows, and lists. The default layout packs exactly into the 6×6 grid with no holes. */
+export type SizeKey = 'kpi' | 'sm' | 'md' | 'lg' | 'wide' | 'tall' | 'xl' | 'short';
 export const SIZES: Record<SizeKey, string> = {
+	kpi: 'col-span-1 lg:col-span-2 lg:row-span-1',
 	sm: 'col-span-1 lg:col-span-1 lg:row-span-2',
 	md: 'col-span-1 lg:col-span-2 lg:row-span-2',
 	lg: 'col-span-2 lg:col-span-3 lg:row-span-2',
@@ -60,7 +62,23 @@ export const SIZES: Record<SizeKey, string> = {
 	wide: 'col-span-2 lg:col-span-6 lg:row-span-2',
 	xl: 'col-span-2 row-span-2 lg:col-span-4 lg:row-span-3',
 };
-export const SIZE_CYCLE: SizeKey[] = ['sm', 'md', 'lg', 'tall', 'xl'];
+
+/** Human labels for the resize control (never surface the raw token). */
+export const SIZE_LABEL: Record<SizeKey, string> = {
+	kpi: 'Metric',
+	sm: 'Small',
+	md: 'Medium',
+	lg: 'Large',
+	short: 'Short',
+	wide: 'Wide',
+	tall: 'Tall',
+	xl: 'Hero',
+};
+
+/** Resize cycles are kind-aware so a tile only steps through sizes that suit it — and every shipped
+ * default size stays reachable (KPIs keep their short band; charts keep short/wide/tall). */
+export const KPI_CYCLE: SizeKey[] = ['kpi', 'sm', 'md', 'lg'];
+export const CHART_CYCLE: SizeKey[] = ['md', 'lg', 'short', 'wide', 'tall', 'xl'];
 
 function ListBody({
 	title,
@@ -124,7 +142,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 	pageviews: {
 		id: 'pageviews',
 		title: 'Pageviews',
-		size: 'md',
+		size: 'kpi',
 		selfLabeled: true,
 		render: (ctx) => (
 			<KpiTile
@@ -140,7 +158,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 	visitors: {
 		id: 'visitors',
 		title: 'Visitors',
-		size: 'sm',
+		size: 'kpi',
 		selfLabeled: true,
 		render: (ctx) => (
 			<KpiTile
@@ -156,7 +174,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 	events: {
 		id: 'events',
 		title: 'Events',
-		size: 'sm',
+		size: 'kpi',
 		selfLabeled: true,
 		render: (ctx) => (
 			<KpiTile
@@ -288,9 +306,9 @@ export interface Slot {
 }
 export const DEFAULT_LAYOUT: Slot[] = [
 	{ tileId: 'traffic', size: 'xl' },
-	{ tileId: 'pageviews', size: 'md' },
-	{ tileId: 'visitors', size: 'sm' },
-	{ tileId: 'events', size: 'sm' },
+	{ tileId: 'pageviews', size: 'kpi' },
+	{ tileId: 'visitors', size: 'kpi' },
+	{ tileId: 'events', size: 'kpi' },
 	{ tileId: 'flow', size: 'tall' },
 	{ tileId: 'pages', size: 'lg' },
 	{ tileId: 'countries', size: 'short' },

@@ -32,15 +32,29 @@ export function Layout({
 	onToggleSettings,
 	settingsActive,
 	headerExtra,
+	fill = false,
 }: {
 	children: ReactNode;
 	onToggleSettings: () => void;
 	settingsActive: boolean;
 	headerExtra?: ReactNode;
+	/** Fill the viewport exactly with no page scroll (the bento board owns its own internal scroll).
+	 * Off for scrolling tabs (Settings, Retention, …), which keep normal page flow. */
+	fill?: boolean;
 }): ReactElement {
 	return (
-		<div className="min-h-screen text-neutral-900">
-			<header className="sticky top-0 z-10 border-b border-neutral-200/70 bg-white/70 backdrop-blur-xl">
+		<div
+			className={cn(
+				'text-neutral-900',
+				fill ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-screen',
+			)}
+		>
+			<header
+				className={cn(
+					'z-10 border-b border-neutral-200/70 bg-white/70 backdrop-blur-xl',
+					fill ? 'shrink-0' : 'sticky top-0',
+				)}
+			>
 				<div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-6 py-3">
 					<div className="flex items-center gap-3">
 						<span className="flex items-center gap-2">
@@ -69,7 +83,14 @@ export function Layout({
 					</div>
 				</div>
 			</header>
-			<main className="mx-auto max-w-[1600px] px-6 py-6">{children}</main>
+			<main
+				className={cn(
+					'mx-auto w-full max-w-[1600px] px-6',
+					fill ? 'flex min-h-0 flex-1 flex-col overflow-hidden py-4' : 'py-6',
+				)}
+			>
+				{children}
+			</main>
 		</div>
 	);
 }
