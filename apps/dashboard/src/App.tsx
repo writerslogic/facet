@@ -174,7 +174,12 @@ function Overview({
 					<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
 						<InteractionsPanel apiKey={apiKey} siteId={siteId} range={range} />
 					</div>
-					<Breakdowns stats={data} />
+					<Breakdowns
+						stats={data}
+						cells={cubeCells}
+						filter={cubeFilter}
+						onFilterChange={setCubeFilter}
+					/>
 				</>
 			)}
 		</div>

@@ -4,13 +4,16 @@
 // they are EXACT under any filter; visitors is COUNT(DISTINCT) per cell and cannot be summed exactly
 // across cells, so a multi-cell slice reports an upper bound flagged as approximate.
 
-import type { CubeCell } from '@facet/shared';
+import type { CountRow, CubeCell } from '@facet/shared';
 
 export interface CubeFilter {
 	device?: string;
 	country?: string;
 	channel?: string;
 }
+
+/** The cube axes that can be cross-filtered. */
+export type CubeAxis = 'device' | 'country' | 'channel';
 
 export interface CubeSlice {
 	pageviews: number;
@@ -53,6 +56,23 @@ export function cubeDimensions(cells: CubeCell[]): {
 		country: tally((c) => c.country),
 		channel: tally((c) => c.channel),
 	};
+}
+
+/** A single-axis breakdown (by pageviews, descending) computed from the cube under the CURRENT filter,
+ * but ignoring the listed axis's own constraint — so the list keeps showing every value of that axis
+ * (with the selected one still present to toggle off) while re-ranking to reflect the other axes. This
+ * is the cross-filter contract: pick `mobile` and Top Countries re-ranks to mobile's countries, while
+ * Devices still lists all devices with `mobile` highlighted. */
+export function cubeBreakdown(cells: CubeCell[], filter: CubeFilter, axis: CubeAxis): CountRow[] {
+	const others: CubeFilter = { ...filter, [axis]: undefined };
+	const totals = new Map<string, number>();
+	for (const c of cells) {
+		if (!matches(c, others)) continue;
+		totals.set(c[axis], (totals.get(c[axis]) ?? 0) + c.pageviews);
+	}
+	return [...totals.entries()]
+		.sort((a, b) => b[1] - a[1])
+		.map(([key, count]) => ({ key, count }));
 }
 
 /** Filter + aggregate to a summary slice. */

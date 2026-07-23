@@ -4,7 +4,13 @@
 
 import type { CubeCell } from '@facet/shared';
 import { describe, expect, it } from 'vitest';
-import { cubeDimensions, cubeSeries, isFilterActive, sliceCube } from '../lib/cube.js';
+import {
+	cubeBreakdown,
+	cubeDimensions,
+	cubeSeries,
+	isFilterActive,
+	sliceCube,
+} from '../lib/cube.js';
 
 const T0 = 0;
 const T1 = 3_600_000;
@@ -83,5 +89,28 @@ describe('cube client indexer', () => {
 	it('isFilterActive reflects whether any axis is constrained', () => {
 		expect(isFilterActive({})).toBe(false);
 		expect(isFilterActive({ country: 'US' })).toBe(true);
+	});
+
+	it('cubeBreakdown: re-ranks under the OTHER axes but ignores its own (stays switchable)', () => {
+		// Unfiltered: US = 5+10+4, GB = 2.
+		expect(cubeBreakdown(CELLS, {}, 'country')).toEqual([
+			{ key: 'US', count: 19 },
+			{ key: 'GB', count: 2 },
+		]);
+		// device=mobile re-ranks countries to mobile's cells (1,3,4): US = 5+4, GB = 2.
+		expect(cubeBreakdown(CELLS, { device: 'mobile' }, 'country')).toEqual([
+			{ key: 'US', count: 9 },
+			{ key: 'GB', count: 2 },
+		]);
+		// Selecting a country does NOT collapse the country list — its own axis is ignored.
+		expect(cubeBreakdown(CELLS, { country: 'US' }, 'country')).toEqual([
+			{ key: 'US', count: 19 },
+			{ key: 'GB', count: 2 },
+		]);
+		// The device list likewise shows all devices even when a device is selected.
+		expect(cubeBreakdown(CELLS, { device: 'mobile' }, 'device')).toEqual([
+			{ key: 'mobile', count: 11 },
+			{ key: 'desktop', count: 10 },
+		]);
 	});
 });
