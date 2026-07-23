@@ -203,9 +203,9 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		id: 'flow',
 		title: 'Traffic flow',
 		size: 'tall',
-		emphasis: 'hero',
+		emphasis: 'flow',
 		expandable: true,
-		render: (ctx) => <FlowTile cells={ctx.flowCells} />,
+		render: (ctx) => <FlowTile cells={ctx.flowCells} dark />,
 	},
 	pages: {
 		id: 'pages',

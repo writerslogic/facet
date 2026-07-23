@@ -40,12 +40,14 @@ export function useCountUp(value: number, ms = 650): number {
 	return n;
 }
 
-/** Surface emphasis: `hero` gets an accent-tinted face + ring so the eye lands on it first; `kpi` a
- * lighter lift; default is the plain lit face. */
-export type TileEmphasis = 'hero' | 'kpi' | 'default';
+/** Surface emphasis: `hero` gets an accent-tinted face + ring so the eye lands on it first; `flow` is the
+ * dark feature surface (inked, so the flow's light ribbons pop); `kpi` a lighter lift; default is the
+ * plain lit face. */
+export type TileEmphasis = 'hero' | 'flow' | 'kpi' | 'default';
 
 const EMPHASIS: Record<TileEmphasis, string> = {
 	hero: 'bg-gradient-to-br from-accent-50/50 via-white to-white ring-accent-500/10',
+	flow: 'border-white/10 bg-gradient-to-br from-neutral-900 via-neutral-900 to-neutral-800 text-neutral-100 ring-white/10',
 	kpi: 'bg-gradient-to-b from-white to-neutral-50/70 ring-neutral-900/5',
 	default: 'bg-gradient-to-b from-white to-neutral-50/60 ring-neutral-900/5',
 };
@@ -91,7 +93,12 @@ export function BentoTile({
 			{label || action || onExpand || onClose ? (
 				<header className="relative z-10 mb-2 flex shrink-0 items-center justify-between gap-2">
 					{label ? (
-						<h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+						<h3
+							className={cn(
+								'text-[11px] font-semibold uppercase tracking-[0.08em]',
+								emphasis === 'flow' ? 'text-neutral-400' : 'text-neutral-500',
+							)}
+						>
 							{label}
 						</h3>
 					) : (

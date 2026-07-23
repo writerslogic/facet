@@ -8,7 +8,13 @@ import { type ReactElement, useMemo, useState } from 'react';
 import { FLOW_DEVICE_PREFIX, cubeFlow } from '../lib/cube.js';
 import { Sankey } from './Sankey.js';
 
-export function FlowTile({ cells }: { cells: CubeCell[] }): ReactElement {
+export function FlowTile({
+	cells,
+	dark,
+}: {
+	cells: CubeCell[];
+	dark?: boolean;
+}): ReactElement {
 	const [expandedDevices, setExpandedDevices] = useState<ReadonlySet<string>>(() => new Set());
 	const [isolated, setIsolated] = useState<string | null>(null);
 	const flow = useMemo(() => cubeFlow(cells, expandedDevices), [cells, expandedDevices]);
@@ -42,6 +48,7 @@ export function FlowTile({ cells }: { cells: CubeCell[] }): ReactElement {
 			links={flow.links}
 			onNodeClick={onNodeClick}
 			isolatedId={isolated}
+			dark={dark}
 		/>
 	);
 }

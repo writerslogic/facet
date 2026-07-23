@@ -196,12 +196,15 @@ export function Sankey({
 	links,
 	onNodeClick,
 	isolatedId,
+	dark,
 	className,
 }: {
 	nodes: SankeyNode[];
 	links: SankeyLink[];
 	onNodeClick?: (id: string) => void;
 	isolatedId?: string | null;
+	/** Draw on a dark surface: end-column labels lighten so they read over the inked tile. */
+	dark?: boolean;
 	className?: string;
 }): ReactElement | null {
 	const gid = useId();
@@ -329,7 +332,10 @@ export function Sankey({
 								y={n.y + n.h / 2}
 								textAnchor={first ? 'end' : 'start'}
 								dominantBaseline="central"
-								className="fill-neutral-500 text-[11px] font-medium"
+								className={cn(
+									'text-[11px] font-medium',
+									dark ? 'fill-neutral-300' : 'fill-neutral-500',
+								)}
 							>
 								{n.label}
 							</text>

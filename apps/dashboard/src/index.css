@@ -113,6 +113,26 @@ body {
 	}
 }
 
+/* The hero traffic chart: a soft indigo glow under the plotted line + fills, and a left-to-right
+   draw-in reveal on mount so the chart feels drawn rather than pasted. Reduced-motion drops the reveal
+   via the global rule above. */
+.chart-hero canvas {
+	filter: drop-shadow(0 6px 14px rgb(99 102 241 / 0.22));
+}
+.chart-hero {
+	animation: chart-draw-in 720ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes chart-draw-in {
+	from {
+		clip-path: inset(0 100% 0 0);
+		opacity: 0.5;
+	}
+	to {
+		clip-path: inset(0 0 0 0);
+		opacity: 1;
+	}
+}
+
 /* uPlot: inherit the app font and soften the default legend chrome. */
 .uplot {
 	font-family: var(--font-sans);

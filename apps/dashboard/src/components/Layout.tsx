@@ -59,7 +59,9 @@ export function Layout({
 					<div className="flex items-center gap-3">
 						<span className="flex items-center gap-2">
 							<BrandMark />
-							<span className="text-lg font-semibold tracking-[-0.02em]">Facet</span>
+							<span className="text-brand-gradient text-lg font-semibold tracking-[-0.02em]">
+								Facet
+							</span>
 						</span>
 						<SiteSwitcher />
 					</div>
