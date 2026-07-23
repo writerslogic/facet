@@ -3,7 +3,7 @@
 // action scoped by a stable `${site}:${metric}:${bucket}` id so dismissing one never hides another.
 
 import type { Anomaly } from '@facet/shared';
-import { AlertOctagon, AlertTriangle, Info, X } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, Info, Search, X } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useAnomalies } from '../hooks/anomaly.js';
 import {
@@ -14,6 +14,7 @@ import {
 	severityFor,
 } from '../lib/anomaly.js';
 import { cn } from '../lib/cn.js';
+import type { CubeFilter } from '../lib/cube.js';
 import { isAuthError } from '../lib/status.js';
 import type { Range } from '../state.js';
 import { AuthErrorBanner, CardSkeletons, EmptyState, ErrorState } from './StatusStates.js';
@@ -52,10 +53,12 @@ function AnomalyCard({
 	anomaly,
 	id,
 	onDismiss,
+	onInvestigate,
 }: {
 	anomaly: Anomaly;
 	id: string;
 	onDismiss: (id: string) => void;
+	onInvestigate?: (filter: CubeFilter) => void;
 }): ReactElement {
 	const severity = severityFor(anomaly.z);
 	const meta = SEVERITY_META[severity];
@@ -108,6 +111,20 @@ function AnomalyCard({
 					z-score {anomaly.z.toFixed(1)}.
 				</p>
 			)}
+			{onInvestigate && anomaly.diagnosis ? (
+				<button
+					type="button"
+					onClick={() =>
+						onInvestigate({
+							[anomaly.diagnosis?.dimension as string]: anomaly.diagnosis?.value,
+						})
+					}
+					className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white/70 px-2.5 py-1 text-xs font-medium text-neutral-700 transition hover:border-accent-400 hover:text-accent-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+				>
+					<Search className="h-3.5 w-3.5" aria-hidden="true" />
+					Investigate {anomaly.diagnosis.dimension} = {anomaly.diagnosis.value}
+				</button>
+			) : null}
 		</article>
 	);
 }
@@ -116,10 +133,13 @@ export function Anomalies({
 	apiKey,
 	siteId,
 	range,
+	onInvestigate,
 }: {
 	apiKey: string;
 	siteId: string;
 	range: Range;
+	/** Focus the Overview on an anomaly's diagnosed segment (device/country/channel). */
+	onInvestigate?: (filter: CubeFilter) => void;
 }): ReactElement {
 	const { data, error, isLoading } = useAnomalies(apiKey, siteId, range);
 	// Dismissed ids are seeded from storage and updated locally so a dismiss re-filters without a refetch.
@@ -166,6 +186,7 @@ export function Anomalies({
 					id={entry.id}
 					anomaly={entry.anomaly}
 					onDismiss={onDismiss}
+					onInvestigate={onInvestigate}
 				/>
 			))}
 		</div>

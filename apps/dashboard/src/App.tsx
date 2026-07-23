@@ -33,10 +33,17 @@ import {
 } from './components/StatusStates.js';
 import { TrafficChart } from './components/TrafficChart.js';
 import { VerifiedMetric } from './components/VerifiedMetric.js';
+import { useAnomalies } from './hooks/anomaly.js';
 import { useCube } from './hooks/cube.js';
 import { useCompareStats, useStats } from './hooks/stats.js';
 import { cn } from './lib/cn.js';
-import { type CubeFilter, cubeSeries, isFilterActive, sliceCube } from './lib/cube.js';
+import {
+	type CubeFilter,
+	type ServerFilter,
+	cubeSeries,
+	isFilterActive,
+	sliceCube,
+} from './lib/cube.js';
 import { isAuthError } from './lib/status.js';
 import { useDashboard } from './state.js';
 
@@ -66,17 +73,30 @@ const TABS: { id: View; label: string }[] = [
 
 function Overview({
 	onOpenSettings,
+	filter: cubeFilter,
+	onFilterChange: setCubeFilter,
+	serverFilter,
+	onServerFilterChange: setServerFilter,
 }: {
 	onOpenSettings: () => void;
+	filter: CubeFilter;
+	onFilterChange: (f: CubeFilter) => void;
+	serverFilter: ServerFilter;
+	onServerFilterChange: (f: ServerFilter) => void;
 }): ReactElement {
 	const { apiKey, siteId, preset, range, compare, compareRange } = useDashboard();
 	const interval = preset === '24h' ? 'hour' : 'day';
 
+	// Server-filter mode: a high-cardinality path/referrer filter is active, so the whole Overview is
+	// re-fetched server-side (the cube can't slice these). Active cube dims (device/country/channel) are
+	// sent along so a segment + drill-down combine. Absent path/referrer, the instant client cube runs.
+	const serverMode = Boolean(serverFilter.path || serverFilter.referrer);
 	const query: StatsQuery = {
 		site_id: siteId,
 		start: range.start,
 		end: range.end,
 		interval,
+		...(serverMode ? { ...serverFilter, ...cubeFilter } : {}),
 	};
 
 	const { data, isLoading, error } = useStats(apiKey, query);
@@ -88,7 +108,8 @@ function Overview({
 	};
 	const compareStats = useCompareStats(apiKey, compareQuery, Boolean(compare && compareRange));
 	const cube = useCube(apiKey, siteId, range, interval);
-	const [cubeFilter, setCubeFilter] = useState<CubeFilter>({});
+	// Anomalies are layered onto the traffic chart as timeline markers (shared cache with the tab).
+	const anomalies = useAnomalies(apiKey, siteId, range);
 
 	if (error && isAuthError(error)) {
 		return <AuthErrorBanner />;
@@ -122,8 +143,11 @@ function Overview({
 	// upper bound flagged below. Engagement is session-derived (not in the cube), so it hides under a
 	// filter rather than showing unfiltered numbers next to filtered ones.
 	const cubeCells = cube.data?.cells ?? [];
-	const filtered = isFilterActive(cubeFilter);
-	const slice = filtered ? sliceCube(cubeCells, cubeFilter) : null;
+	// In serverMode the fetched `data` is already fully filtered server-side, so use it directly; else
+	// the cube slices client-side. `anyFilter` gates engagement + the compare column.
+	const cubeActive = isFilterActive(cubeFilter) && !serverMode;
+	const anyFilter = cubeActive || serverMode;
+	const slice = cubeActive ? sliceCube(cubeCells, cubeFilter) : null;
 	const displaySummary = slice
 		? {
 				pageviews: slice.pageviews,
@@ -131,16 +155,26 @@ function Overview({
 				events: slice.events,
 			}
 		: summary;
-	const displaySeries = filtered ? cubeSeries(cubeCells, cubeFilter) : data.series;
+	const displaySeries = cubeActive ? cubeSeries(cubeCells, cubeFilter) : data.series;
+	const chartAnnotations = (anomalies.data?.anomalies ?? []).map((a) => ({
+		t: a.bucket,
+		label: a.summary,
+	}));
 
 	return (
 		<div className="space-y-6">
 			{data.meta?.pending ? <PendingNotice /> : null}
-			<CubeFilterBar cells={cubeCells} filter={cubeFilter} onChange={setCubeFilter} />
+			<CubeFilterBar
+				cells={cubeCells}
+				filter={cubeFilter}
+				onChange={setCubeFilter}
+				serverFilter={serverFilter}
+				onServerChange={setServerFilter}
+			/>
 			<VerifiedMetric label="Overview metrics">
 				<KpiCards
 					summary={displaySummary}
-					compare={filtered ? undefined : cmp?.summary}
+					compare={anyFilter ? undefined : cmp?.summary}
 					series={displaySeries}
 				/>
 			</VerifiedMetric>
@@ -150,10 +184,15 @@ function Overview({
 					cell); pageviews and events are exact.
 				</p>
 			) : null}
-			{filtered ? null : (
+			{anyFilter ? null : (
 				<EngagementCards engagement={data.engagement} compare={cmp?.engagement} />
 			)}
-			<TrafficChart series={displaySeries} loading={false} error={null} />
+			<TrafficChart
+				series={displaySeries}
+				loading={false}
+				error={null}
+				annotations={chartAnnotations}
+			/>
 			{isEmpty && data.series.length === 0 ? (
 				<EmptyState title="No data yet">
 					<span>
@@ -179,6 +218,9 @@ function Overview({
 						cells={cubeCells}
 						filter={cubeFilter}
 						onFilterChange={setCubeFilter}
+						serverFilter={serverFilter}
+						onServerFilterChange={setServerFilter}
+						serverMode={serverMode}
 					/>
 				</>
 			)}
@@ -190,6 +232,16 @@ function Dashboard(): ReactElement {
 	const { apiKey, siteId, preset, range } = useDashboard();
 	const [view, setView] = useState<View>('overview');
 	const [showSettings, setShowSettings] = useState(false);
+	// The cube cross-filter lives here (not inside Overview) so it survives tab switches and can be set
+	// from another tab — e.g. "Investigate" on an anomaly focuses the Overview on the culprit segment.
+	const [cubeFilter, setCubeFilter] = useState<CubeFilter>({});
+	// High-cardinality path/referrer filters go through the server (the cube deliberately excludes them).
+	const [serverFilter, setServerFilter] = useState<ServerFilter>({});
+	const investigate = (f: CubeFilter): void => {
+		setCubeFilter(f);
+		setServerFilter({});
+		setView('overview');
+	};
 	const queryClient = useQueryClient();
 	const prevSiteRef = useRef(siteId);
 
@@ -248,7 +300,13 @@ function Dashboard(): ReactElement {
 						))}
 					</div>
 					{view === 'overview' ? (
-						<Overview onOpenSettings={() => setShowSettings(true)} />
+						<Overview
+							onOpenSettings={() => setShowSettings(true)}
+							filter={cubeFilter}
+							onFilterChange={setCubeFilter}
+							serverFilter={serverFilter}
+							onServerFilterChange={setServerFilter}
+						/>
 					) : view === 'realtime' ? (
 						<Realtime apiKey={apiKey} siteId={siteId} />
 					) : view === 'funnels' ? (
@@ -268,7 +326,12 @@ function Dashboard(): ReactElement {
 							onOpenSettings={() => setShowSettings(true)}
 						/>
 					) : view === 'anomalies' ? (
-						<Anomalies apiKey={apiKey} siteId={siteId} range={range} />
+						<Anomalies
+							apiKey={apiKey}
+							siteId={siteId}
+							range={range}
+							onInvestigate={investigate}
+						/>
 					) : (
 						<AskPanel apiKey={apiKey} siteId={siteId} range={range} />
 					)}

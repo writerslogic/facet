@@ -13,6 +13,11 @@ export function qs(query: StatsQuery): string {
 	});
 	if (query.hostname) params.set('hostname', query.hostname);
 	if (query.interval) params.set('interval', query.interval);
+	if (query.path) params.set('path', query.path);
+	if (query.referrer) params.set('referrer', query.referrer);
+	if (query.country) params.set('country', query.country);
+	if (query.device) params.set('device', query.device);
+	if (query.channel) params.set('channel', query.channel);
 	return params.toString();
 }
 

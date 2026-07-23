@@ -15,6 +15,12 @@ export interface CubeFilter {
 /** The cube axes that can be cross-filtered. */
 export type CubeAxis = 'device' | 'country' | 'channel';
 
+/** High-cardinality filters the cube deliberately excludes — applied server-side via a stats refetch. */
+export interface ServerFilter {
+	path?: string;
+	referrer?: string;
+}
+
 export interface CubeSlice {
 	pageviews: number;
 	events: number;
