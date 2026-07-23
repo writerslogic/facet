@@ -85,9 +85,9 @@ function fill(
 	ctx: CanvasRenderingContext2D,
 	from: string,
 	to: string,
-	height: number,
+	bottom: number,
 ): CanvasGradient {
-	const grad = ctx.createLinearGradient(0, 0, 0, height);
+	const grad = ctx.createLinearGradient(0, 0, 0, bottom);
 	grad.addColorStop(0, from);
 	grad.addColorStop(1, to);
 	return grad;
@@ -131,7 +131,13 @@ function ChartCanvas({
 					label: 'Pageviews',
 					stroke: INK,
 					width: 2,
-					fill: (u) => fill(u.ctx, 'rgba(15,23,42,0.10)', 'rgba(15,23,42,0.00)', height),
+					fill: (u) =>
+						fill(
+							u.ctx,
+							'rgba(15,23,42,0.10)',
+							'rgba(15,23,42,0.00)',
+							u.bbox.top + u.bbox.height,
+						),
 					points: { show: false },
 					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
 				},
@@ -140,7 +146,12 @@ function ChartCanvas({
 					stroke: ACCENT,
 					width: 2,
 					fill: (u) =>
-						fill(u.ctx, 'rgba(99,102,241,0.16)', 'rgba(99,102,241,0.00)', height),
+						fill(
+							u.ctx,
+							'rgba(99,102,241,0.16)',
+							'rgba(99,102,241,0.00)',
+							u.bbox.top + u.bbox.height,
+						),
 					points: { show: false },
 					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
 				},

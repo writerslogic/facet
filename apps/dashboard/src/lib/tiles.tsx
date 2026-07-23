@@ -5,7 +5,7 @@
 
 import type { CountRow, EngagementSummary, SeriesPoint, StatsResponse } from '@facet/shared';
 import type { ReactNode } from 'react';
-import { KpiTile } from '../components/BentoTile.js';
+import { KpiTile, type TileEmphasis } from '../components/BentoTile.js';
 import { Sankey } from '../components/Sankey.js';
 import { TopList } from '../components/TopList.js';
 import type { ChartAnnotation } from '../components/TrafficChart.js';
@@ -19,7 +19,7 @@ export interface TileContext {
 	series: SeriesPoint[];
 	annotations: ChartAnnotation[];
 	deltas: { pv: number | null; vis: number | null; ev: number | null };
-	sparks: { pv: number[]; vis: number[] };
+	sparks: { pv: number[]; vis: number[]; ev: number[] };
 	sense: (d: number | null) => 'improvement' | 'regression' | 'neutral';
 	flow: { nodes: FlowNode[]; links: FlowLink[] };
 	data: StatsResponse;
@@ -46,6 +46,8 @@ export interface TileDef {
 	expandable?: boolean;
 	/** The body renders its own title (KPI tiles), so the surrounding tile omits its header. */
 	selfLabeled?: boolean;
+	/** Surface emphasis — draws the eye to the hero chart/flow and the KPI band. */
+	emphasis?: TileEmphasis;
 }
 
 /** Named grid spans so a slot persists a compact size token rather than raw Tailwind. `kpi` is a short
@@ -121,6 +123,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		id: 'traffic',
 		title: 'Traffic over time',
 		size: 'xl',
+		emphasis: 'hero',
 		expandable: true,
 		action: (ctx) =>
 			ctx.annotations.length > 0 ? (
@@ -144,6 +147,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		title: 'Pageviews',
 		size: 'kpi',
 		selfLabeled: true,
+		emphasis: 'kpi',
 		render: (ctx) => (
 			<KpiTile
 				label="Pageviews"
@@ -160,6 +164,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		title: 'Visitors',
 		size: 'kpi',
 		selfLabeled: true,
+		emphasis: 'kpi',
 		render: (ctx) => (
 			<KpiTile
 				label="Visitors"
@@ -176,12 +181,14 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		title: 'Events',
 		size: 'kpi',
 		selfLabeled: true,
+		emphasis: 'kpi',
 		render: (ctx) => (
 			<KpiTile
 				label="Events"
 				value={ctx.summary.events}
 				deltaPct={ctx.deltas.ev}
 				deltaSense={ctx.sense(ctx.deltas.ev)}
+				spark={ctx.sparks.ev}
 				stroke="#8b5cf6"
 			/>
 		),
@@ -190,6 +197,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		id: 'flow',
 		title: 'Traffic flow',
 		size: 'tall',
+		emphasis: 'hero',
 		expandable: true,
 		render: (ctx) =>
 			ctx.flow.links.length > 0 ? (

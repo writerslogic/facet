@@ -152,16 +152,29 @@ export function Sankey({
 							>
 								{n.label}
 							</text>
-						) : (
-							<text
-								x={n.x + NODE_W / 2}
-								y={n.y - 3}
-								textAnchor="middle"
-								className="fill-neutral-400 text-[10px]"
-							>
-								{n.label}
-							</text>
-						)}
+						) : n.h >= 12 ? (
+							// Middle column: label to the right of the node on an opaque pill so it reads
+							// over the ribbons. Skip when the node is too short; its <title> carries it.
+							<>
+								<rect
+									x={n.x + NODE_W + 4}
+									y={n.y + n.h / 2 - 8}
+									width={n.label.length * 6 + 8}
+									height={16}
+									rx={4}
+									className="fill-white/85"
+								/>
+								<text
+									x={n.x + NODE_W + 8}
+									y={n.y + n.h / 2}
+									textAnchor="start"
+									dominantBaseline="central"
+									className="fill-neutral-600 text-[11px] font-medium"
+								>
+									{n.label}
+								</text>
+							</>
+						) : null}
 					</g>
 				);
 			})}

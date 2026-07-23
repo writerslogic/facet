@@ -158,6 +158,11 @@ function Overview({
 		d == null || d === 0 ? 'neutral' : d > 0 ? 'improvement' : 'regression';
 	const sparkPv = displaySeries.map((p) => p.pageviews);
 	const sparkVis = displaySeries.map((p) => p.visitors);
+	// Events isn't in the server series, so its sparkline re-buckets over the cube (respecting an active
+	// cube filter, matching how pv/vis reflect the current slice).
+	const sparkEv = cubeCells.length
+		? cubeSeries(cubeCells, cubeActive ? cubeFilter : {}).map((p) => p.events)
+		: [];
 	const dPv = pct(displaySummary.pageviews, cmpSum?.pageviews);
 	const dVis = pct(displaySummary.visitors, cmpSum?.visitors);
 	const dEv = pct(displaySummary.events, cmpSum?.events);
@@ -198,7 +203,7 @@ function Overview({
 		series: displaySeries,
 		annotations: chartAnnotations,
 		deltas: { pv: dPv, vis: dVis, ev: dEv },
-		sparks: { pv: sparkPv, vis: sparkVis },
+		sparks: { pv: sparkPv, vis: sparkVis, ev: sparkEv },
 		sense,
 		flow,
 		data,

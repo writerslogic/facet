@@ -159,6 +159,7 @@ export function BentoBoard({
 						>
 							<BentoTile
 								label={def.selfLabeled ? undefined : def.title}
+								emphasis={def.emphasis}
 								action={
 									editing ? (
 										<TileControls

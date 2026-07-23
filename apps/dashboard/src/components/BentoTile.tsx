@@ -8,7 +8,9 @@ import { cn } from '../lib/cn.js';
 import { formatNumber } from '../lib/format.js';
 import { Sparkline } from './Sparkline.js';
 
-/** Ease-out count-up to `value`. Respects prefers-reduced-motion (jumps straight to the value). */
+/** Ease-out count-up to `value`. Respects prefers-reduced-motion (jumps straight to the value). The
+ * origin ref tracks the live displayed value every frame, so an animation interrupted mid-flight (the
+ * common case under cross-filtering) resumes from where it visually is rather than rewinding. */
 export function useCountUp(value: number, ms = 650): number {
 	const [n, setN] = useState(value);
 	const fromRef = useRef(value);
@@ -17,6 +19,7 @@ export function useCountUp(value: number, ms = 650): number {
 			typeof matchMedia !== 'undefined' &&
 			matchMedia('(prefers-reduced-motion: reduce)').matches
 		) {
+			fromRef.current = value;
 			setN(value);
 			return;
 		}
@@ -26,9 +29,10 @@ export function useCountUp(value: number, ms = 650): number {
 		const tick = (t: number): void => {
 			const p = Math.min(1, (t - start) / ms);
 			const eased = 1 - (1 - p) ** 3;
-			setN(from + (value - from) * eased);
+			const cur = from + (value - from) * eased;
+			fromRef.current = cur;
+			setN(cur);
 			if (p < 1) raf = requestAnimationFrame(tick);
-			else fromRef.current = value;
 		};
 		raf = requestAnimationFrame(tick);
 		return () => cancelAnimationFrame(raf);
@@ -36,11 +40,22 @@ export function useCountUp(value: number, ms = 650): number {
 	return n;
 }
 
+/** Surface emphasis: `hero` gets an accent-tinted face + ring so the eye lands on it first; `kpi` a
+ * lighter lift; default is the plain lit face. */
+export type TileEmphasis = 'hero' | 'kpi' | 'default';
+
+const EMPHASIS: Record<TileEmphasis, string> = {
+	hero: 'bg-gradient-to-br from-accent-50/50 via-white to-white ring-accent-500/10',
+	kpi: 'bg-gradient-to-b from-white to-neutral-50/70 ring-neutral-900/5',
+	default: 'bg-gradient-to-b from-white to-neutral-50/60 ring-neutral-900/5',
+};
+
 /** A single bento tile. `onExpand` reveals a hover control to drill into the tile's detail. */
 export function BentoTile({
 	label,
 	action,
 	onExpand,
+	emphasis = 'default',
 	className,
 	bodyClassName,
 	children,
@@ -48,6 +63,7 @@ export function BentoTile({
 	label?: string;
 	action?: ReactNode;
 	onExpand?: () => void;
+	emphasis?: TileEmphasis;
 	className?: string;
 	bodyClassName?: string;
 	children: ReactNode;
@@ -55,11 +71,12 @@ export function BentoTile({
 	return (
 		<section
 			className={cn(
-				'group relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-200/70 bg-white p-4',
-				'shadow-card ring-1 ring-neutral-900/5 transition-all duration-300 ease-out',
+				'group relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-200/70 p-4',
+				'shadow-card ring-1 transition-all duration-300 ease-out',
 				'hover:-translate-y-0.5 hover:shadow-float',
 				// gradient-lit face + a faint top highlight for depth
 				'before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/80 before:to-transparent',
+				EMPHASIS[emphasis],
 				className,
 			)}
 		>
@@ -92,8 +109,10 @@ export function BentoTile({
 	);
 }
 
-/** Compact metric readout for a KPI tile: an animated count-up value, a delta chip, and a sparkline
- * that fills the tile's remaining height. Stroke tints the whole tile toward the metric's colour. */
+/** Compact metric readout for a KPI tile: label + animated count-up value + delta chip on the left, a
+ * gradient sparkline filling the right. The metric's stroke colour washes the tile via a soft radial
+ * tint (top-right), so each KPI reads as its own hue rather than a flat white card. Laid out to stay
+ * legible in the short wide default band and to breathe when resized taller. */
 export function KpiTile({
 	label,
 	value,
@@ -116,30 +135,43 @@ export function KpiTile({
 			: deltaSense === 'regression'
 				? 'bg-rose-50 text-rose-700 ring-rose-600/15'
 				: 'bg-neutral-100 text-neutral-500 ring-neutral-600/10';
+	const hasSpark = Boolean(spark && spark.length > 1);
 	return (
-		<div className="flex h-full flex-col justify-between">
-			<div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
-				{label}
-			</div>
-			<div className="mt-1 flex items-end justify-between gap-2">
-				<span className="tabular text-4xl font-semibold leading-none tracking-[-0.02em] text-neutral-900">
-					{formatNumber(Math.round(shown))}
-				</span>
-				{deltaPct != null ? (
-					<span
-						className={cn(
-							'tabular mb-1 inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold ring-1',
-							tone,
-						)}
-					>
-						{deltaPct >= 0 ? '+' : ''}
-						{deltaPct}%
+		<div
+			className="flex h-full items-center gap-3"
+			style={{
+				background: `radial-gradient(120% 80% at 100% 0%, ${stroke}14, transparent 60%)`,
+			}}
+		>
+			<div className="flex min-w-0 flex-col justify-center">
+				<div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+					{label}
+				</div>
+				<div className="mt-0.5 flex items-baseline gap-1.5">
+					<span className="tabular text-[2rem] font-semibold leading-none tracking-[-0.02em] text-neutral-900">
+						{formatNumber(Math.round(shown))}
 					</span>
-				) : null}
+					{deltaPct != null ? (
+						<span
+							className={cn(
+								'tabular inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1',
+								tone,
+							)}
+						>
+							{deltaPct >= 0 ? '+' : ''}
+							{deltaPct}%
+						</span>
+					) : null}
+				</div>
 			</div>
-			{spark && spark.length > 1 ? (
-				<div className="mt-2 min-h-0 flex-1">
-					<Sparkline values={spark} stroke={stroke} fill className="h-full w-full" />
+			{hasSpark ? (
+				<div className="ml-auto h-full min-h-0 w-1/2 min-w-0 max-w-[10rem] self-stretch py-1">
+					<Sparkline
+						values={spark as number[]}
+						stroke={stroke}
+						fill
+						className="h-full w-full"
+					/>
 				</div>
 			) : null}
 		</div>

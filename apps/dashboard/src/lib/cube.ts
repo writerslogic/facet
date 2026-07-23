@@ -35,6 +35,7 @@ export interface CubeSeriesPoint {
 	t: number;
 	pageviews: number;
 	visitors: number;
+	events: number;
 }
 
 /** Whether a cell satisfies the (partial) filter — an unset axis matches everything. */
@@ -123,9 +124,17 @@ export function cubeFlow(cells: CubeCell[], topN = 5): { nodes: FlowNode[]; link
 		bump(`dev:${c.device}`, `ct:${ctry}`, c.pageviews);
 	}
 	const nodes: FlowNode[] = [
-		...[...channels].map((ch) => ({ id: `ch:${ch}`, label: ch, column: 0 })),
+		...[...channels].map((ch) => ({
+			id: `ch:${ch}`,
+			label: ch,
+			column: 0,
+		})),
 		...[...devices].map((d) => ({ id: `dev:${d}`, label: d, column: 1 })),
-		...[...countries].map((ct) => ({ id: `ct:${ct}`, label: ct, column: 2 })),
+		...[...countries].map((ct) => ({
+			id: `ct:${ct}`,
+			label: ct,
+			column: 2,
+		})),
 	];
 	return { nodes, links: [...acc.values()] };
 }
@@ -148,19 +157,29 @@ export function sliceCube(cells: CubeCell[], filter: CubeFilter): CubeSlice {
 	return { pageviews, events, visitors, visitorsApproximate };
 }
 
-/** Filter + re-bucket to a time series (pageviews + visitors per bucket), sorted ascending by time. */
+/** Filter + re-bucket to a time series (pageviews + visitors + events per bucket), sorted by time. */
 export function cubeSeries(cells: CubeCell[], filter: CubeFilter): CubeSeriesPoint[] {
-	const byBucket = new Map<number, { pageviews: number; visitors: number }>();
+	const byBucket = new Map<number, { pageviews: number; visitors: number; events: number }>();
 	for (const c of cells) {
 		if (!matches(c, filter)) continue;
-		const acc = byBucket.get(c.t) ?? { pageviews: 0, visitors: 0 };
+		const acc = byBucket.get(c.t) ?? {
+			pageviews: 0,
+			visitors: 0,
+			events: 0,
+		};
 		acc.pageviews += c.pageviews;
 		acc.visitors += c.visitors;
+		acc.events += c.events;
 		byBucket.set(c.t, acc);
 	}
 	return [...byBucket.entries()]
 		.sort((a, b) => a[0] - b[0])
-		.map(([t, v]) => ({ t, pageviews: v.pageviews, visitors: v.visitors }));
+		.map(([t, v]) => ({
+			t,
+			pageviews: v.pageviews,
+			visitors: v.visitors,
+			events: v.events,
+		}));
 }
 
 /** True when any axis is constrained. */
