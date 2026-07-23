@@ -3,7 +3,16 @@
 // drill into a tile. Layout state comes from useBoardLayout (persisted per site); everything a tile
 // draws comes from the shared TileContext computed by the caller.
 
-import { GripVertical, Plus, RotateCcw, Settings2, Trash2 } from 'lucide-react';
+import {
+	Check,
+	ChevronLeft,
+	ChevronRight,
+	GripVertical,
+	Plus,
+	RotateCcw,
+	Settings2,
+	Trash2,
+} from 'lucide-react';
 import { type ReactElement, type RefObject, useEffect, useRef, useState } from 'react';
 import { readBoardLayout, useBoardLayout } from '../lib/boardLayout.js';
 import { cn } from '../lib/cn.js';
@@ -16,6 +25,7 @@ import {
 	type Slot,
 	TILE_REGISTRY,
 	type TileContext,
+	newSlotUid,
 } from '../lib/tiles.js';
 import { BentoTile } from './BentoTile.js';
 import { TileOverlay } from './TileOverlay.js';
@@ -45,12 +55,30 @@ export function BentoBoard({
 	const [dragIndex, setDragIndex] = useState<number | null>(null);
 	const [overIndex, setOverIndex] = useState<number | null>(null);
 	const [adding, setAdding] = useState(false);
+	// Announced to assistive tech after a keyboard move; the moved tile is re-focused by its uid.
+	const [announce, setAnnounce] = useState('');
+	const focusUid = useRef<string | null>(null);
+	const tileRefs = useRef(new Map<string, HTMLDivElement>());
+	const addWrapRef = useRef<HTMLDivElement>(null);
+	const addToggleRef = useRef<HTMLButtonElement>(null);
+	usePopoverDismiss(adding, () => setAdding(false), addWrapRef, addToggleRef);
+
+	useEffect(() => {
+		if (!focusUid.current) return;
+		tileRefs.current.get(focusUid.current)?.focus();
+		focusUid.current = null;
+	});
 
 	const move = (from: number, to: number): void => {
-		if (from === to) return;
+		if (to < 0 || to >= slots.length || from === to) return;
 		const next = [...slots];
 		const [moved] = next.splice(from, 1);
-		if (moved) next.splice(to, 0, moved);
+		if (!moved) return;
+		next.splice(to, 0, moved);
+		focusUid.current = moved.uid;
+		setAnnounce(
+			`Moved ${TILE_REGISTRY[moved.tileId]?.title ?? 'tile'} to position ${to + 1} of ${next.length}`,
+		);
 		setSlots(next);
 	};
 	const resize = (i: number): void =>
@@ -59,21 +87,32 @@ export function BentoBoard({
 		setSlots(slots.map((s, j) => (j === i ? { ...s, tileId } : s)));
 	const remove = (i: number): void => setSlots(slots.filter((_, j) => j !== i));
 	const add = (tileId: string): void => {
-		setSlots([...slots, { tileId, size: TILE_REGISTRY[tileId]?.size ?? 'md' }]);
+		setSlots([
+			...slots,
+			{
+				uid: newSlotUid(tileId),
+				tileId,
+				size: TILE_REGISTRY[tileId]?.size ?? 'md',
+			},
+		]);
 		setAdding(false);
 	};
 
 	const overlayDef = overlay ? TILE_REGISTRY[overlay] : null;
+	const present = new Set(slots.map((s) => s.tileId));
 
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-3">
 			<div className="flex shrink-0 items-center justify-end gap-2">
 				{editing ? (
 					<>
-						<div className="relative">
+						<div className="relative" ref={addWrapRef}>
 							<button
+								ref={addToggleRef}
 								type="button"
 								onClick={() => setAdding((v) => !v)}
+								aria-haspopup="true"
+								aria-expanded={adding}
 								className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-neutral-900"
 							>
 								<Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add tile
@@ -85,9 +124,15 @@ export function BentoBoard({
 											key={def.id}
 											type="button"
 											onClick={() => add(def.id)}
-											className="block w-full rounded-md px-2.5 py-1.5 text-left text-neutral-600 text-sm transition hover:bg-neutral-100 hover:text-neutral-900"
+											className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-neutral-600 text-sm transition hover:bg-neutral-100 hover:text-neutral-900"
 										>
 											{def.title}
+											{present.has(def.id) ? (
+												<Check
+													className="h-3.5 w-3.5 text-accent-500"
+													aria-label="on board"
+												/>
+											) : null}
 										</button>
 									))}
 								</div>
@@ -122,7 +167,11 @@ export function BentoBoard({
 				)}
 			</div>
 
-			<div className="grid min-h-0 flex-1 auto-rows-[minmax(7rem,1fr)] grid-cols-2 gap-3 overflow-y-auto lg:auto-rows-[minmax(5rem,1fr)] lg:grid-cols-6 lg:grid-rows-6">
+			<div
+				className="grid min-h-0 flex-1 auto-rows-[minmax(7rem,1fr)] grid-cols-2 gap-3 overflow-y-auto lg:auto-rows-[minmax(5rem,1fr)] lg:grid-cols-6 lg:grid-rows-6"
+				role={editing ? 'list' : undefined}
+				aria-label={editing ? 'Board tiles — use arrow keys to reorder' : undefined}
+			>
 				{slots.map((slot, i) => {
 					const def = TILE_REGISTRY[slot.tileId];
 					if (!def) return null;
@@ -130,11 +179,23 @@ export function BentoBoard({
 						editing && overIndex === i && dragIndex !== null && dragIndex !== i;
 					return (
 						<div
-							key={`${slot.tileId}-${i}`}
+							key={slot.uid}
+							ref={(el) => {
+								if (el) tileRefs.current.set(slot.uid, el);
+								else tileRefs.current.delete(slot.uid);
+							}}
+							role={editing ? 'listitem' : undefined}
+							aria-label={
+								editing
+									? `${def.title}, position ${i + 1} of ${slots.length}. Use arrow keys to move.`
+									: undefined
+							}
+							tabIndex={editing ? 0 : undefined}
 							className={cn(
 								SIZES[slot.size],
 								'min-h-0',
-								editing && 'cursor-grab',
+								editing &&
+									'cursor-grab focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
 								dragIndex === i && 'opacity-40',
 								isOver && 'ring-2 ring-accent-400 ring-offset-2',
 								'rounded-2xl transition',
@@ -156,6 +217,16 @@ export function BentoBoard({
 								setDragIndex(null);
 								setOverIndex(null);
 							}}
+							onKeyDown={(e) => {
+								if (!editing) return;
+								if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+									e.preventDefault();
+									move(i, i - 1);
+								} else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+									e.preventDefault();
+									move(i, i + 1);
+								}
+							}}
 						>
 							<BentoTile
 								label={def.selfLabeled ? undefined : def.title}
@@ -165,6 +236,9 @@ export function BentoBoard({
 										<TileControls
 											slot={slot}
 											title={def.title}
+											canEarlier={i > 0}
+											canLater={i < slots.length - 1}
+											onMove={(dir) => move(i, i + dir)}
 											onResize={() => resize(i)}
 											onReplace={(id) => replace(i, id)}
 											onRemove={() => remove(i)}
@@ -182,9 +256,9 @@ export function BentoBoard({
 								bodyClassName={def.expandable ? 'overflow-y-auto' : undefined}
 							>
 								{editing ? (
-									<div className="pointer-events-none flex h-full items-center justify-center gap-2 text-neutral-300">
+									<div className="pointer-events-none flex h-full items-center justify-center gap-2 text-neutral-400">
 										<GripVertical className="h-5 w-5" aria-hidden="true" />
-										<span className="font-medium text-neutral-400 text-xs uppercase tracking-wide">
+										<span className="font-medium text-neutral-500 text-xs uppercase tracking-wide">
 											{def.title}
 										</span>
 									</div>
@@ -199,6 +273,10 @@ export function BentoBoard({
 
 			{footer}
 
+			<output className="sr-only" aria-live="polite">
+				{announce}
+			</output>
+
 			{overlayDef ? (
 				<TileOverlay tile={overlayDef} ctx={ctx} onClose={() => setOverlay(null)} />
 			) : null}
@@ -211,12 +289,18 @@ export function BentoBoard({
 function TileControls({
 	slot,
 	title,
+	canEarlier,
+	canLater,
+	onMove,
 	onResize,
 	onReplace,
 	onRemove,
 }: {
 	slot: Slot;
 	title: string;
+	canEarlier: boolean;
+	canLater: boolean;
+	onMove: (dir: -1 | 1) => void;
 	onResize: () => void;
 	onReplace: (tileId: string) => void;
 	onRemove: () => void;
@@ -227,6 +311,24 @@ function TileControls({
 	usePopoverDismiss(open, () => setOpen(false), wrapRef, toggleRef);
 	return (
 		<div className="pointer-events-auto flex items-center gap-1">
+			<button
+				type="button"
+				onClick={() => onMove(-1)}
+				disabled={!canEarlier}
+				aria-label={`Move ${title} earlier`}
+				className="rounded p-0.5 text-neutral-500 transition hover:text-neutral-900 disabled:opacity-30"
+			>
+				<ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+			</button>
+			<button
+				type="button"
+				onClick={() => onMove(1)}
+				disabled={!canLater}
+				aria-label={`Move ${title} later`}
+				className="rounded p-0.5 text-neutral-500 transition hover:text-neutral-900 disabled:opacity-30"
+			>
+				<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
+			</button>
 			<button
 				type="button"
 				onClick={onResize}

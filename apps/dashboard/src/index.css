@@ -101,6 +101,16 @@ body {
 	.shimmer::after {
 		animation: none;
 	}
+	/* Neutralize CSS motion globally (hover lifts, bar-width transitions, pulses). JS-driven canvas
+	   renders (uPlot) are out of scope; the count-up hook already honors the preference itself. */
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+		scroll-behavior: auto !important;
+	}
 }
 
 /* uPlot: inherit the app font and soften the default legend chrome. */

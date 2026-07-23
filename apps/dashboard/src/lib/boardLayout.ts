@@ -3,7 +3,7 @@
 // ids (from an older saved layout) are dropped on load so a renamed/removed tile can't break the board.
 
 import { useCallback, useEffect, useState } from 'react';
-import { DEFAULT_LAYOUT, SIZES, type Slot, TILE_REGISTRY } from './tiles.js';
+import { DEFAULT_LAYOUT, SIZES, type Slot, TILE_REGISTRY, newSlotUid } from './tiles.js';
 
 const KEY = (siteId: string): string => `facet.board.${siteId}`;
 
@@ -20,7 +20,17 @@ function sanitize(slots: unknown): Slot[] | null {
 			typeof (s as Slot).size === 'string' &&
 			(s as Slot).size in SIZES,
 	);
-	return clean.length > 0 ? clean : null;
+	if (clean.length === 0) return null;
+	// Backfill/repair uids: layouts saved before slots had ids, or with a duplicated id, get a fresh one
+	// so React keys stay stable and unique (otherwise reorder would remount tiles).
+	const seen = new Set<string>();
+	return clean.map((s) => {
+		let uid =
+			typeof s.uid === 'string' && s.uid && !seen.has(s.uid) ? s.uid : newSlotUid(s.tileId);
+		while (seen.has(uid)) uid = newSlotUid(s.tileId);
+		seen.add(uid);
+		return { ...s, uid };
+	});
 }
 
 /** The persisted (or default) layout for a site, without the hook — for the loading skeleton. */

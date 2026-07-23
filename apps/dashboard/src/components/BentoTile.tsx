@@ -83,7 +83,7 @@ export function BentoTile({
 			{label || action || onExpand ? (
 				<header className="relative z-10 mb-2 flex shrink-0 items-center justify-between gap-2">
 					{label ? (
-						<h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+						<h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
 							{label}
 						</h3>
 					) : (

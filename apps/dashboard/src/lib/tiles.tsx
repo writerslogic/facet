@@ -298,7 +298,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 			const e = ctx.engagement;
 			return (
 				<div className="flex h-full flex-col justify-center">
-					<Stat label="Sessions" value={ctx.data.engagement.sessions.toLocaleString()} />
+					<Stat label="Sessions" value={e.sessions.toLocaleString()} />
 					<Stat label="Bounce rate" value={formatPercent(e.bounce_rate)} />
 					<Stat label="Avg. duration" value={formatDuration(e.avg_duration_ms)} />
 				</div>
@@ -307,17 +307,28 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 	},
 };
 
-/** The out-of-the-box board — reproduces the shipped layout. Users mutate a copy in localStorage. */
+/** A placed tile: a stable identity (`uid`, so reorder preserves per-tile state and never remounts the
+ * chart), which tile it shows, and its grid size. */
 export interface Slot {
+	uid: string;
 	tileId: string;
 	size: SizeKey;
 }
+
+/** A fresh unique slot id. Prefixed with the tile id purely to stay debuggable. */
+export function newSlotUid(tileId: string): string {
+	const rand = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
+	return `${tileId}-${rand}`;
+}
+
+/** The out-of-the-box board — reproduces the shipped layout. Users mutate a copy in localStorage.
+ * Default uids are the tile ids (each tile appears once), which keeps them stable across reloads. */
 export const DEFAULT_LAYOUT: Slot[] = [
-	{ tileId: 'traffic', size: 'xl' },
-	{ tileId: 'pageviews', size: 'kpi' },
-	{ tileId: 'visitors', size: 'kpi' },
-	{ tileId: 'events', size: 'kpi' },
-	{ tileId: 'flow', size: 'tall' },
-	{ tileId: 'pages', size: 'lg' },
-	{ tileId: 'countries', size: 'short' },
+	{ uid: 'traffic', tileId: 'traffic', size: 'xl' },
+	{ uid: 'pageviews', tileId: 'pageviews', size: 'kpi' },
+	{ uid: 'visitors', tileId: 'visitors', size: 'kpi' },
+	{ uid: 'events', tileId: 'events', size: 'kpi' },
+	{ uid: 'flow', tileId: 'flow', size: 'tall' },
+	{ uid: 'pages', tileId: 'pages', size: 'lg' },
+	{ uid: 'countries', tileId: 'countries', size: 'short' },
 ];
