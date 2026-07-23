@@ -3,9 +3,10 @@
 // action scoped by a stable `${site}:${metric}:${bucket}` id so dismissing one never hides another.
 
 import type { Anomaly } from '@facet/shared';
-import { AlertOctagon, AlertTriangle, Info, Search, X } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, Info, Search, ShieldCheck, X } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useAnomalies } from '../hooks/anomaly.js';
+import { useCheckpoint } from '../hooks/transparency.js';
 import {
 	type Severity,
 	anomalyId,
@@ -18,6 +19,7 @@ import type { CubeFilter } from '../lib/cube.js';
 import { isAuthError } from '../lib/status.js';
 import type { Range } from '../state.js';
 import { AuthErrorBanner, CardSkeletons, EmptyState, ErrorState } from './StatusStates.js';
+import { VerifiedMetric } from './VerifiedMetric.js';
 
 const SEVERITY_META: Record<
 	Severity,
@@ -47,6 +49,46 @@ function pctChange(a: Anomaly): number {
 	return a.direction === 'drop'
 		? Math.round((1 - a.value / a.baseline_mean) * 100)
 		: Math.round((a.value / a.baseline_mean - 1) * 100);
+}
+
+/** Human label for an anomaly, shown in its proof drawer header. */
+function anomalyLabel(a: Anomaly): string {
+	return `${a.metric} ${a.direction} · ${new Date(a.bucket).toUTCString()}`;
+}
+
+/** The Provenance switch: turns on the transparency-log attestation overlay for the anomaly list. */
+function ProvenanceToggle({
+	on,
+	onToggle,
+}: {
+	on: boolean;
+	onToggle: () => void;
+}): ReactElement {
+	return (
+		<button
+			type="button"
+			role="switch"
+			aria-checked={on}
+			onClick={onToggle}
+			className={cn(
+				'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition',
+				on
+					? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+					: 'border-neutral-200 bg-white text-neutral-500 hover:text-neutral-900',
+			)}
+		>
+			<ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+			Provenance
+			<span
+				className={cn(
+					'rounded px-1 text-[10px] font-semibold',
+					on ? 'bg-emerald-600 text-white' : 'bg-neutral-200 text-neutral-600',
+				)}
+			>
+				{on ? 'ON' : 'OFF'}
+			</span>
+		</button>
+	);
 }
 
 function AnomalyCard({
@@ -144,6 +186,13 @@ export function Anomalies({
 	const { data, error, isLoading } = useAnomalies(apiKey, siteId, range);
 	// Dismissed ids are seeded from storage and updated locally so a dismiss re-filters without a refetch.
 	const [dismissed, setDismissed] = useState<Set<string>>(() => new Set());
+	// Provenance mode overlays the transparency-log attestation on each anomaly. The checkpoint is fetched
+	// lazily — only while the mode is on — so the default view never pays for it. `isLoading` is tracked so
+	// the in-flight frame reads "checking…" rather than the false "no log" claim.
+	const [provenance, setProvenance] = useState(false);
+	const { data: checkpoint, isLoading: checkpointLoading } = useCheckpoint(
+		provenance ? apiKey : '',
+	);
 
 	const visible = useMemo(() => {
 		const all = data?.anomalies ?? [];
@@ -174,21 +223,57 @@ export function Anomalies({
 		return <CardSkeletons count={2} />;
 	}
 
-	if (visible.length === 0) {
-		return <EmptyState title="No anomalies detected" />;
-	}
-
 	return (
-		<div className="space-y-4" aria-live="polite">
-			{visible.map((entry) => (
-				<AnomalyCard
-					key={entry.id}
-					id={entry.id}
-					anomaly={entry.anomaly}
-					onDismiss={onDismiss}
-					onInvestigate={onInvestigate}
-				/>
-			))}
+		<div className="space-y-4">
+			<div className="flex justify-end">
+				<ProvenanceToggle on={provenance} onToggle={() => setProvenance((v) => !v)} />
+			</div>
+			{provenance ? (
+				checkpointLoading ? (
+					<p className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+						Checking for a transparency log…
+					</p>
+				) : checkpoint ? (
+					<p className="rounded-lg border border-emerald-200/70 bg-emerald-50/50 px-3 py-2 text-xs text-emerald-800">
+						This deployment commits its metrics to a signed transparency log — open a
+						Verified badge to inspect its current signed tree head.
+					</p>
+				) : (
+					<p className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+						This deployment doesn't publish a transparency log, so these anomalies can't
+						be cryptographically verified.
+					</p>
+				)
+			) : null}
+			{visible.length === 0 ? (
+				<EmptyState title="No anomalies detected" />
+			) : (
+				// Only the card list is a live region, so toggling Provenance doesn't announce a flood of
+				// card content. Under Provenance every card is wrapped in VerifiedMetric (stable identity;
+				// the badge appears when the shared checkpoint resolves) rather than swapping element types.
+				<div className="space-y-4" aria-live="polite">
+					{visible.map((entry) =>
+						provenance ? (
+							<VerifiedMetric key={entry.id} label={anomalyLabel(entry.anomaly)}>
+								<AnomalyCard
+									id={entry.id}
+									anomaly={entry.anomaly}
+									onDismiss={onDismiss}
+									onInvestigate={onInvestigate}
+								/>
+							</VerifiedMetric>
+						) : (
+							<AnomalyCard
+								key={entry.id}
+								id={entry.id}
+								anomaly={entry.anomaly}
+								onDismiss={onDismiss}
+								onInvestigate={onInvestigate}
+							/>
+						),
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

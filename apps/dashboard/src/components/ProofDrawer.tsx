@@ -5,7 +5,7 @@
 // given. Verification is the CLI's job (`facet verify`); this only *displays* the proof material.
 
 import { ShieldCheck, X } from 'lucide-react';
-import { type ReactElement, type ReactNode, useEffect } from 'react';
+import { type ReactElement, type ReactNode, useEffect, useRef } from 'react';
 import { type ProofRef, type SignedCheckpoint, useInclusionProof } from '../hooks/transparency.js';
 import { useDashboard } from '../state.js';
 
@@ -52,13 +52,39 @@ export function ProofDrawer({
 }): ReactElement {
 	const { apiKey, siteId } = useDashboard();
 	const { data: proof, isLoading, error } = useInclusionProof(apiKey, siteId, proofRef ?? null);
+	const panelRef = useRef<HTMLElement>(null);
+	const closeRef = useRef<HTMLButtonElement>(null);
 
 	useEffect(() => {
+		// Focus into the dialog on open and restore to the trigger on close; trap Tab within the panel so
+		// the aria-modal promise holds for keyboard/AT users (the background stays visually inert via the scrim).
+		const prev = document.activeElement as HTMLElement | null;
+		closeRef.current?.focus();
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === 'Escape') onClose();
+			if (e.key === 'Escape') {
+				onClose();
+				return;
+			}
+			if (e.key !== 'Tab') return;
+			const f = panelRef.current?.querySelectorAll<HTMLElement>(
+				'a[href],button:not([disabled]),input,select,textarea,[tabindex]:not([tabindex="-1"])',
+			);
+			if (!f || f.length === 0) return;
+			const first = f[0];
+			const last = f[f.length - 1];
+			if (e.shiftKey && document.activeElement === first) {
+				e.preventDefault();
+				last?.focus();
+			} else if (!e.shiftKey && document.activeElement === last) {
+				e.preventDefault();
+				first?.focus();
+			}
 		};
 		window.addEventListener('keydown', onKey);
-		return () => window.removeEventListener('keydown', onKey);
+		return () => {
+			window.removeEventListener('keydown', onKey);
+			prev?.focus?.();
+		};
 	}, [onClose]);
 
 	return (
@@ -71,11 +97,15 @@ export function ProofDrawer({
 		>
 			<button
 				type="button"
-				aria-label="Close proof drawer"
+				tabIndex={-1}
+				aria-hidden="true"
 				onClick={onClose}
 				className="absolute inset-0 h-full w-full cursor-default bg-neutral-900/30 backdrop-blur-sm"
 			/>
-			<aside className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-neutral-200 bg-white shadow-xl">
+			<aside
+				ref={panelRef}
+				className="relative flex h-full w-full max-w-md flex-col overflow-y-auto border-l border-neutral-200 bg-white shadow-xl"
+			>
 				<header className="flex items-center justify-between border-b border-neutral-100 px-5 py-4">
 					<div className="flex items-center gap-2">
 						<ShieldCheck className="h-5 w-5 text-emerald-600" aria-hidden="true" />
@@ -84,6 +114,7 @@ export function ProofDrawer({
 						</h2>
 					</div>
 					<button
+						ref={closeRef}
 						type="button"
 						onClick={onClose}
 						className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 focus:outline-none focus:ring-2 focus:ring-neutral-400"

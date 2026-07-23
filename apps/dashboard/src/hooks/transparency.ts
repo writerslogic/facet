@@ -64,7 +64,10 @@ async function fetchMaybe<T>(path: string, apiKey: string): Promise<T | null> {
  * dedupes so every VerifiedMetric on the page shares this single request. */
 export function useCheckpoint(apiKey: string) {
 	return useQuery({
-		queryKey: ['transparency-checkpoint'],
+		// Keyed by apiKey so a profile switch fetches the new deployment's checkpoint rather than serving
+		// the previous one from cache (the checkpoint is a per-deployment artifact). Every VerifiedMetric on
+		// a page uses the same apiKey, so the intended dedupe within a profile is preserved.
+		queryKey: ['transparency-checkpoint', apiKey],
 		queryFn: () => fetchMaybe<SignedCheckpoint>('/api/transparency/checkpoint', apiKey),
 		enabled: Boolean(apiKey),
 		staleTime: 5 * 60 * 1000,
