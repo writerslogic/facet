@@ -3,7 +3,7 @@
 // react-query cache is reset when the active profile changes so one site's data never flashes under
 // another site's label.
 
-import type { StatsQuery } from '@facet/shared';
+import type { CubeCell, StatsQuery } from '@facet/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -39,6 +39,10 @@ import type { TileContext } from './lib/tiles.js';
 import { useDashboard } from './state.js';
 
 type View = 'overview' | 'realtime' | 'funnels' | 'retention' | 'experiments' | 'anomalies' | 'ask';
+
+// Stable empty reference so `cube.data?.cells ?? EMPTY_CELLS` keeps the same identity across renders
+// (a fresh `[]` would defeat memoization of everything derived from the cube).
+const EMPTY_CELLS: CubeCell[] = [];
 
 /** True when a react-query key references the given site id, as a direct element or a nested site_id. */
 function queryKeyReferencesSite(key: readonly unknown[], siteId: string): boolean {
@@ -82,6 +86,10 @@ function Overview({
 	// re-fetched server-side (the cube can't slice these). Active cube dims (device/country/channel) are
 	// sent along so a segment + drill-down combine. Absent path/referrer, the instant client cube runs.
 	const serverMode = Boolean(serverFilter.path || serverFilter.referrer);
+	// A cube slice or server drill-down is active. The period-comparison column is meaningless under a
+	// filter (the compare query isn't sliced), so it's both hidden AND not fetched while filtering.
+	const cubeActive = isFilterActive(cubeFilter) && !serverMode;
+	const anyFilter = cubeActive || serverMode;
 	const query: StatsQuery = {
 		site_id: siteId,
 		start: range.start,
@@ -97,7 +105,11 @@ function Overview({
 		end: compareRange?.end ?? 0,
 		interval,
 	};
-	const compareStats = useCompareStats(apiKey, compareQuery, Boolean(compare && compareRange));
+	const compareStats = useCompareStats(
+		apiKey,
+		compareQuery,
+		Boolean(compare && compareRange) && !anyFilter,
+	);
 	const cube = useCube(apiKey, siteId, range, interval);
 	// Anomalies are layered onto the traffic chart as timeline markers (shared cache with the tab).
 	const anomalies = useAnomalies(apiKey, siteId, range);
@@ -131,11 +143,9 @@ function Overview({
 	// render from the sliced cube (no server round-trip); pageviews/events are exact, visitors is an
 	// upper bound flagged below. Engagement is session-derived (not in the cube), so it hides under a
 	// filter rather than showing unfiltered numbers next to filtered ones.
-	const cubeCells = cube.data?.cells ?? [];
+	const cubeCells = cube.data?.cells ?? EMPTY_CELLS;
 	// In serverMode the fetched `data` is already fully filtered server-side, so use it directly; else
-	// the cube slices client-side. `anyFilter` gates engagement + the compare column.
-	const cubeActive = isFilterActive(cubeFilter) && !serverMode;
-	const anyFilter = cubeActive || serverMode;
+	// the cube slices client-side. `cubeActive`/`anyFilter` are computed above (they gate the compare fetch).
 	const slice = cubeActive ? sliceCube(cubeCells, cubeFilter) : null;
 	const displaySummary = slice
 		? {

@@ -3,7 +3,7 @@
 // their value. Layout is deterministic (stable across renders) and fills its container via a viewBox.
 // Purely presentational — the caller supplies nodes (with a column index) and weighted links.
 
-import { type ReactElement, useId } from 'react';
+import { type ReactElement, useId, useMemo } from 'react';
 import { cn } from '../lib/cn.js';
 
 export interface SankeyNode {
@@ -106,8 +106,12 @@ export function Sankey({
 	className?: string;
 }): ReactElement | null {
 	const gid = useId();
-	if (nodes.length === 0 || links.length === 0) return null;
-	const { placed, ribbons } = layout(nodes, links);
+	const laid = useMemo(
+		() => (nodes.length === 0 || links.length === 0 ? null : layout(nodes, links)),
+		[nodes, links],
+	);
+	if (!laid) return null;
+	const { placed, ribbons } = laid;
 	const lastColumn = Math.max(...nodes.map((n) => n.column));
 
 	return (

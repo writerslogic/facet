@@ -94,7 +94,8 @@ export interface FlowLink {
 }
 
 /** Build a three-stage flow (channel → device → country) from the cube for a Sankey diagram. Countries
- * beyond the top `topN` fold into "Other" so the diagram stays legible. Link value is pageviews. */
+ * beyond the top `topN` fold into the canonical "other" bucket (same spelling the server/cube use, so a
+ * real "other" row merges into it rather than rendering as a second node). Link value is pageviews. */
 export function cubeFlow(cells: CubeCell[], topN = 5): { nodes: FlowNode[]; links: FlowLink[] } {
 	const countryTotals = new Map<string, number>();
 	for (const c of cells)
@@ -116,7 +117,7 @@ export function cubeFlow(cells: CubeCell[], topN = 5): { nodes: FlowNode[]; link
 		acc.set(k, e);
 	};
 	for (const c of cells) {
-		const ctry = top.has(c.country) ? c.country : 'Other';
+		const ctry = top.has(c.country) ? c.country : 'other';
 		channels.add(c.channel);
 		devices.add(c.device);
 		countries.add(ctry);

@@ -2,12 +2,12 @@
 // series with a hovering cursor, readable UTC date/number axes, and a subtle grid. Resizes with a
 // ResizeObserver. uPlot needs canvas; if the mount throws (e.g. under jsdom) it degrades gracefully.
 
-import type { SeriesPoint } from '@facet/shared';
-import { type ReactElement, useEffect, useMemo, useRef } from 'react';
-import uPlot from 'uplot';
-import 'uplot/dist/uPlot.min.css';
-import { formatCompact, formatNumber } from '../lib/format.js';
-import { Card } from './Card.js';
+import type { SeriesPoint } from "@facet/shared";
+import { type ReactElement, useEffect, useMemo, useRef } from "react";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
+import { formatCompact, formatNumber } from "../lib/format.js";
+import { Card } from "./Card.js";
 
 /** A vertical event marker on the time axis (e.g. a detected anomaly). */
 export interface ChartAnnotation {
@@ -28,26 +28,28 @@ interface TrafficChartProps {
 	bare?: boolean;
 }
 
-const ACCENT = '#6366f1';
-const INK = '#0f172a';
-const GRID = '#f1f0ee';
-const AXIS = '#a3a3a3';
-const MARK = '#e11d48';
+const ACCENT = "#6366f1";
+const INK = "#0f172a";
+const GRID = "#f1f0ee";
+const AXIS = "#a3a3a3";
+const MARK = "#e11d48";
 
 /** uPlot plugin: draw a dashed vertical line + top caret at each annotation's time position. Positions
- * come from `valToPos(..., true)` (canvas pixels), matching `u.bbox`, so it aligns at any zoom/size. */
-function annotationPlugin(annotations: ChartAnnotation[]): uPlot.Plugin {
+ * come from `valToPos(..., true)` (canvas pixels), matching `u.bbox`, so it aligns at any zoom/size.
+ * Reads annotations through a getter so the chart never has to be rebuilt when only they change. */
+function annotationPlugin(get: () => ChartAnnotation[]): uPlot.Plugin {
 	return {
 		hooks: {
 			draw: (u: uPlot) => {
+				const annotations = get();
 				if (annotations.length === 0) return;
 				const { ctx } = u;
 				const { left, top, width, height } = u.bbox;
 				ctx.save();
 				for (const a of annotations) {
-					const cx = Math.round(u.valToPos(a.t / 1000, 'x', true));
+					const cx = Math.round(u.valToPos(a.t / 1000, "x", true));
 					if (cx < left || cx > left + width) continue;
-					ctx.strokeStyle = 'rgba(225,29,72,0.45)';
+					ctx.strokeStyle = "rgba(225,29,72,0.45)";
 					ctx.lineWidth = 1;
 					ctx.setLineDash([4, 3]);
 					ctx.beginPath();
@@ -105,19 +107,31 @@ function ChartCanvas({
 	fillHeight?: boolean;
 }): ReactElement {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const chartRef = useRef<uPlot | null>(null);
+	const annotationsRef = useRef(annotations);
+	annotationsRef.current = annotations;
 	const data = useMemo(() => buildData(series), [series]);
+
+	// Annotations are read live via a ref, so changing them redraws in place rather than rebuilding the
+	// (canvas-allocating) chart — the mount effect below intentionally omits them from its deps.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: redraw must fire when the array changes; the body reads it through the ref
+	useEffect(() => {
+		chartRef.current?.redraw();
+	}, [annotations]);
 
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
 		const chartHeight = (): number =>
-			fillHeight && container.clientHeight > 0 ? container.clientHeight : height;
+			fillHeight && container.clientHeight > 0
+				? container.clientHeight
+				: height;
 
 		const opts: uPlot.Options = {
 			width: container.clientWidth || 640,
 			height: chartHeight(),
 			padding: [12, 8, 0, 8],
-			plugins: [annotationPlugin(annotations)],
+			plugins: [annotationPlugin(() => annotationsRef.current)],
 			cursor: {
 				y: false,
 				points: { size: 6 },
@@ -125,35 +139,36 @@ function ChartCanvas({
 			legend: { show: !fillHeight, live: true },
 			series: [
 				{
-					value: (_u, v) => (v == null ? '—' : new Date(v * 1000).toUTCString()),
+					value: (_u, v) =>
+						v == null ? "—" : new Date(v * 1000).toUTCString(),
 				},
 				{
-					label: 'Pageviews',
+					label: "Pageviews",
 					stroke: INK,
 					width: 2,
 					fill: (u) =>
 						fill(
 							u.ctx,
-							'rgba(15,23,42,0.10)',
-							'rgba(15,23,42,0.00)',
+							"rgba(15,23,42,0.10)",
+							"rgba(15,23,42,0.00)",
 							u.bbox.top + u.bbox.height,
 						),
 					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+					value: (_u, v) => (v == null ? "—" : formatNumber(v)),
 				},
 				{
-					label: 'Visitors',
+					label: "Visitors",
 					stroke: ACCENT,
 					width: 2,
 					fill: (u) =>
 						fill(
 							u.ctx,
-							'rgba(99,102,241,0.16)',
-							'rgba(99,102,241,0.00)',
+							"rgba(99,102,241,0.16)",
+							"rgba(99,102,241,0.00)",
 							u.bbox.top + u.bbox.height,
 						),
 					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+					value: (_u, v) => (v == null ? "—" : formatNumber(v)),
 				},
 			],
 			axes: [
@@ -161,14 +176,14 @@ function ChartCanvas({
 					stroke: AXIS,
 					grid: { show: false },
 					ticks: { stroke: GRID, size: 4 },
-					font: '11px Inter, sans-serif',
+					font: "11px Inter, sans-serif",
 					space: 64,
 				},
 				{
 					stroke: AXIS,
 					grid: { stroke: GRID, width: 1 },
 					ticks: { show: false },
-					font: '11px Inter, sans-serif',
+					font: "11px Inter, sans-serif",
 					size: 44,
 					values: (_u, splits) => splits.map((v) => formatCompact(v)),
 				},
@@ -182,6 +197,7 @@ function ChartCanvas({
 		} catch {
 			return;
 		}
+		chartRef.current = chart;
 
 		const observer = new ResizeObserver((entries) => {
 			const entry = entries[0];
@@ -196,13 +212,18 @@ function ChartCanvas({
 		return () => {
 			observer.disconnect();
 			chart?.destroy();
+			chartRef.current = null;
 		};
-	}, [data, height, annotations, fillHeight]);
+	}, [data, height, fillHeight]);
 
 	return (
 		<div
 			ref={containerRef}
-			className={fillHeight ? 'uplot-container h-full w-full' : 'uplot-container w-full'}
+			className={
+				fillHeight
+					? "uplot-container h-full w-full"
+					: "uplot-container w-full"
+			}
 		/>
 	);
 }
@@ -211,7 +232,7 @@ export function TrafficChart({
 	series,
 	loading,
 	error,
-	title = 'Traffic over time',
+	title = "Traffic over time",
 	height = 280,
 	annotations = [],
 	bare = false,
@@ -222,7 +243,12 @@ export function TrafficChart({
 				No data yet
 			</div>
 		) : (
-			<ChartCanvas series={series} height={height} annotations={annotations} fillHeight />
+			<ChartCanvas
+				series={series}
+				height={height}
+				annotations={annotations}
+				fillHeight
+			/>
 		);
 	}
 	return (
@@ -263,7 +289,11 @@ export function TrafficChart({
 					No data yet
 				</div>
 			) : (
-				<ChartCanvas series={series} height={height} annotations={annotations} />
+				<ChartCanvas
+					series={series}
+					height={height}
+					annotations={annotations}
+				/>
 			)}
 		</Card>
 	);
