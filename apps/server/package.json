@@ -8,6 +8,8 @@
 	"main": "src/index.ts",
 	"scripts": {
 		"dev": "wrangler dev",
+		"bundle:assets": "pnpm --filter @facet/dashboard build && pnpm --filter @writerslogic/facet build && cp ../../packages/client/dist/script.js ../dashboard/dist/facet.js",
+		"predeploy": "pnpm run bundle:assets",
 		"deploy": "wrangler deploy --minify",
 		"lint": "biome check .",
 		"format": "biome format --write .",

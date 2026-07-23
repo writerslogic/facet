@@ -1,6 +1,6 @@
 {
 	"name": "@writerslogic/facet",
-	"version": "0.5.2",
+	"version": "0.6.0",
 	"description": "Facet browser tracking snippet: zero-dependency, umami-compatible.",
 	"license": "MIT",
 	"repository": {
