@@ -5,6 +5,8 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
+  // Public custom domain (provisions the DNS record + cert on deploy). Zone must be on the account.
+  "routes": [{ "pattern": "facet.writerslogic.com", "custom_domain": true }],
   "observability": {
     "enabled": true
   },
@@ -21,7 +23,7 @@
     {
       "binding": "DB",
       "database_name": "facet",
-      "database_id": "PLACEHOLDER_D1_DATABASE_ID",
+      "database_id": "612c7eea-5d42-4ae9-816a-e7102b091ee2",
       "migrations_dir": "migrations"
     }
   ],
