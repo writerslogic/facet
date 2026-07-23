@@ -15,6 +15,12 @@ export interface StatsQuery {
 	/** Exclusive end of range, unix epoch milliseconds. */
 	end: number;
 	interval?: Interval;
+	/** Optional exact-match dimension filters (server-side; high-cardinality path/referrer live here). */
+	path?: string;
+	referrer?: string;
+	country?: string;
+	device?: string;
+	channel?: string;
 }
 
 /** Internal filter for stats query helpers (camelCase, post-validation). */
@@ -25,6 +31,12 @@ export interface StatsFilter {
 	start: number;
 	/** Exclusive end, unix epoch milliseconds. */
 	end: number;
+	/** Optional exact-match dimension filters (undefined = unconstrained). */
+	path?: string;
+	referrer?: string;
+	country?: string;
+	device?: string;
+	channel?: string;
 }
 
 /** Aggregate totals for a site over a range. */

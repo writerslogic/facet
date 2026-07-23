@@ -31,6 +31,31 @@ import * as schema from './schema.js';
 const isCustomEvent = sql`${schema.events.name} IS NOT NULL AND ${schema.events.name} NOT LIKE '$%' AND ${schema.events.name} <> 'form_submit'`;
 const isInteraction = sql`${schema.events.name} IS NOT NULL AND (${schema.events.name} LIKE '$%' OR ${schema.events.name} = 'form_submit')`;
 
+/** Compose the base site/hostname/range predicate with the optional exact-match dimension filters
+ * (path/referrer/country/device/channel). Each, when defined, appends `AND <col> = value`, so
+ * summary/series/breakdown reads all narrow to the same filtered rows. Country/device/channel may be
+ * NULL in `events`; an exact-match on a provided value simply won't match those, which is correct.
+ * Note: `cube` deliberately uses `buildEventWhere` directly (it excludes path/referrer by design). */
+function buildFilteredEventWhere(f: StatsFilter): SQL {
+	const conditions: SQL[] = [buildEventWhere(f)];
+	if (f.path !== undefined) {
+		conditions.push(eq(schema.events.path, f.path));
+	}
+	if (f.referrer !== undefined) {
+		conditions.push(eq(schema.events.referrer, f.referrer));
+	}
+	if (f.country !== undefined) {
+		conditions.push(eq(schema.events.country, f.country));
+	}
+	if (f.device !== undefined) {
+		conditions.push(eq(schema.events.device, f.device));
+	}
+	if (f.channel !== undefined) {
+		conditions.push(eq(schema.events.channel, f.channel));
+	}
+	return and(...conditions) as SQL;
+}
+
 const pageviewCount = sql<number>`SUM(CASE WHEN ${schema.events.name} IS NULL THEN 1 ELSE 0 END)`;
 const eventCount = sql<number>`SUM(CASE WHEN ${isCustomEvent} THEN 1 ELSE 0 END)`;
 const visitorCount = sql<number>`COUNT(DISTINCT ${schema.events.visitorHash})`;
@@ -44,7 +69,7 @@ export async function summary(env: Env, f: StatsFilter): Promise<StatsSummary> {
 			visitors: visitorCount,
 		})
 		.from(schema.events)
-		.where(buildEventWhere(f))
+		.where(buildFilteredEventWhere(f))
 		.get();
 	return {
 		pageviews: Number(row?.pageviews ?? 0),
@@ -60,7 +85,7 @@ export async function series(env: Env, f: StatsFilter, interval: Interval): Prom
 	const rows = await db(env)
 		.select({ t: bucket, pageviews: pageviewCount, visitors: visitorCount })
 		.from(schema.events)
-		.where(buildEventWhere(f))
+		.where(buildFilteredEventWhere(f))
 		.groupBy(bucket)
 		.orderBy(bucket);
 	const byBucket = new Map<number, { pageviews: number; visitors: number }>();
@@ -147,7 +172,7 @@ async function topByColumn(
 		extra?: SQL;
 	} = {},
 ): Promise<CountRow[]> {
-	const conditions: SQL[] = [buildEventWhere(f)];
+	const conditions: SQL[] = [buildFilteredEventWhere(f)];
 	if (opts.excludeNull) {
 		conditions.push(isNotNull(column));
 	}

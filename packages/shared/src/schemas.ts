@@ -119,6 +119,13 @@ export const StatsQuerySchema = v.object({
 	start: v.pipe(v.string(), v.transform(Number), v.number(), v.integer(), v.minValue(0)),
 	end: v.pipe(v.string(), v.transform(Number), v.number(), v.integer(), v.minValue(0)),
 	interval: v.optional(v.picklist(['hour', 'day'])),
+	// Optional exact-match dimension filters: narrow every Overview number to rows matching the
+	// given path/referrer/country/device/channel (see toStatsFilter → buildFilteredEventWhere).
+	path: v.optional(v.pipe(v.string(), v.maxLength(2048))),
+	referrer: v.optional(v.pipe(v.string(), v.maxLength(2048))),
+	country: v.optional(v.pipe(v.string(), v.maxLength(8))),
+	device: v.optional(v.pipe(v.string(), v.maxLength(20))),
+	channel: v.optional(v.pipe(v.string(), v.maxLength(40))),
 });
 
 // Constrained natural-language query intent: the LLM only emits a value matching this schema, which

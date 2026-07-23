@@ -85,6 +85,11 @@ function toStatsFilter(query: StatsQueryInput, siteId: string): StatsFilter {
 		hostname: query.hostname,
 		start: query.start,
 		end: query.end,
+		path: query.path,
+		referrer: query.referrer,
+		country: query.country,
+		device: query.device,
+		channel: query.channel,
 	};
 }
 
