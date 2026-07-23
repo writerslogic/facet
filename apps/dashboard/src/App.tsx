@@ -9,16 +9,12 @@ import type { ReactElement } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { Anomalies } from './components/Anomalies.js';
 import { AskPanel } from './components/AskPanel.js';
-import { Breakdowns } from './components/Breakdowns.js';
-import { ChannelsPanel } from './components/ChannelsPanel.js';
+import { BentoTile, KpiTile } from './components/BentoTile.js';
 import { CubeFilterBar } from './components/CubeFilterBar.js';
-import { EngagementCards } from './components/EngagementCards.js';
 import { Experiments } from './components/Experiments.js';
 import { ExportButton } from './components/ExportButton.js';
 import { FunnelsView } from './components/FunnelsView.js';
-import { InteractionsPanel } from './components/InteractionsPanel.js';
 import { KeyGate } from './components/KeyGate.js';
-import { KpiCards } from './components/KpiCards.js';
 import { Layout } from './components/Layout.js';
 import { Realtime } from './components/Realtime.js';
 import { Retention } from './components/Retention.js';
@@ -28,18 +24,19 @@ import {
 	CardSkeletons,
 	EmptyState,
 	ErrorState,
-	PendingNotice,
 	Skeleton,
 } from './components/StatusStates.js';
+import { TopList } from './components/TopList.js';
 import { TrafficChart } from './components/TrafficChart.js';
-import { VerifiedMetric } from './components/VerifiedMetric.js';
 import { useAnomalies } from './hooks/anomaly.js';
 import { useCube } from './hooks/cube.js';
 import { useCompareStats, useStats } from './hooks/stats.js';
 import { cn } from './lib/cn.js';
 import {
+	type CubeAxis,
 	type CubeFilter,
 	type ServerFilter,
+	cubeBreakdown,
 	cubeSeries,
 	isFilterActive,
 	sliceCube,
@@ -161,39 +158,48 @@ function Overview({
 		label: a.summary,
 	}));
 
-	return (
-		<div className="space-y-6">
-			{data.meta?.pending ? <PendingNotice /> : null}
-			<CubeFilterBar
-				cells={cubeCells}
-				filter={cubeFilter}
-				onChange={setCubeFilter}
-				serverFilter={serverFilter}
-				onServerChange={setServerFilter}
-			/>
-			<VerifiedMetric label="Overview metrics">
-				<KpiCards
-					summary={displaySummary}
-					compare={anyFilter ? undefined : cmp?.summary}
-					series={displaySeries}
-				/>
-			</VerifiedMetric>
-			{slice?.visitorsApproximate ? (
-				<p className="-mt-3 text-xs text-neutral-400">
-					Visitors is an upper bound under this slice (a visitor counted in more than one
-					cell); pageviews and events are exact.
-				</p>
-			) : null}
-			{anyFilter ? null : (
-				<EngagementCards engagement={data.engagement} compare={cmp?.engagement} />
-			)}
-			<TrafficChart
-				series={displaySeries}
-				loading={false}
-				error={null}
-				annotations={chartAnnotations}
-			/>
-			{isEmpty && data.series.length === 0 ? (
+	// KPI deltas + sparklines for the bento tiles.
+	const cmpSum = anyFilter ? null : cmp?.summary;
+	const pct = (cur: number, prev?: number): number | null =>
+		prev && prev > 0 ? Math.round(((cur - prev) / prev) * 100) : null;
+	const sense = (d: number | null): 'improvement' | 'regression' | 'neutral' =>
+		d == null || d === 0 ? 'neutral' : d > 0 ? 'improvement' : 'regression';
+	const sparkPv = displaySeries.map((p) => p.pageviews);
+	const sparkVis = displaySeries.map((p) => p.visitors);
+	const dPv = pct(displaySummary.pageviews, cmpSum?.pageviews);
+	const dVis = pct(displaySummary.visitors, cmpSum?.visitors);
+	const dEv = pct(displaySummary.events, cmpSum?.events);
+
+	// Cross-filter handlers: cube dims slice instantly; path/referrer refetch server-side.
+	const hasCube = cubeCells.length > 0;
+	const toggleCube = (axis: CubeAxis) => (key: string) =>
+		setCubeFilter({
+			...cubeFilter,
+			[axis]: cubeFilter[axis] === key ? undefined : key,
+		});
+	const toggleServer = (key: keyof ServerFilter) => (value: string) =>
+		setServerFilter({
+			...serverFilter,
+			[key]: serverFilter[key] === value ? undefined : value,
+		});
+	const dimRows = (axis: CubeAxis, fallback: typeof data.top_countries) =>
+		!serverMode && hasCube ? cubeBreakdown(cubeCells, cubeFilter, axis) : fallback;
+	const dimSelect = (axis: CubeAxis) => (hasCube || serverMode ? toggleCube(axis) : undefined);
+
+	const filterBar = (
+		<CubeFilterBar
+			cells={cubeCells}
+			filter={cubeFilter}
+			onChange={setCubeFilter}
+			serverFilter={serverFilter}
+			onServerChange={setServerFilter}
+		/>
+	);
+
+	if (isEmpty && data.series.length === 0) {
+		return (
+			<div className="flex min-h-0 flex-1 flex-col gap-3">
+				{filterBar}
 				<EmptyState title="No data yet">
 					<span>
 						Once your site sends events they will appear here.{' '}
@@ -207,23 +213,113 @@ function Overview({
 						.
 					</span>
 				</EmptyState>
-			) : (
-				<>
-					<ChannelsPanel channels={data.channels} />
-					<div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-						<InteractionsPanel apiKey={apiKey} siteId={siteId} range={range} />
-					</div>
-					<Breakdowns
-						stats={data}
-						cells={cubeCells}
-						filter={cubeFilter}
-						onFilterChange={setCubeFilter}
-						serverFilter={serverFilter}
-						onServerFilterChange={setServerFilter}
-						serverMode={serverMode}
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex min-h-0 flex-col gap-3 lg:h-[calc(100dvh-10rem)]">
+			{filterBar}
+			<div className="grid min-h-0 flex-1 grid-cols-2 gap-3 lg:grid-cols-6 lg:grid-rows-6">
+				<BentoTile
+					label="Traffic over time"
+					className="col-span-2 row-span-2 lg:col-span-4 lg:row-span-4"
+					action={
+						chartAnnotations.length > 0 ? (
+							<span className="inline-flex items-center gap-1 text-[11px] text-neutral-400">
+								<span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" />
+								Anomaly
+							</span>
+						) : null
+					}
+				>
+					<TrafficChart
+						bare
+						series={displaySeries}
+						annotations={chartAnnotations}
+						loading={false}
+						error={null}
 					/>
-				</>
-			)}
+				</BentoTile>
+
+				<BentoTile className="col-span-1 lg:col-span-2 lg:row-span-2">
+					<KpiTile
+						label="Pageviews"
+						value={displaySummary.pageviews}
+						deltaPct={dPv}
+						deltaSense={sense(dPv)}
+						spark={sparkPv}
+						stroke="#0f172a"
+					/>
+				</BentoTile>
+				<BentoTile className="col-span-1 lg:col-span-1 lg:row-span-2">
+					<KpiTile
+						label="Visitors"
+						value={displaySummary.visitors}
+						deltaPct={dVis}
+						deltaSense={sense(dVis)}
+						spark={sparkVis}
+						stroke="#6366f1"
+					/>
+				</BentoTile>
+				<BentoTile className="col-span-2 lg:col-span-1 lg:row-span-2">
+					<KpiTile
+						label="Events"
+						value={displaySummary.events}
+						deltaPct={dEv}
+						deltaSense={sense(dEv)}
+						stroke="#8b5cf6"
+					/>
+				</BentoTile>
+
+				<BentoTile
+					label="Top pages"
+					className="col-span-2 lg:col-span-2 lg:row-span-2"
+					bodyClassName="overflow-y-auto"
+				>
+					<TopList
+						bare
+						limit={6}
+						title="Top pages"
+						rows={data.top_paths}
+						onSelect={toggleServer('path')}
+						activeKey={serverFilter.path}
+					/>
+				</BentoTile>
+				<BentoTile
+					label="Countries"
+					className="col-span-1 lg:col-span-2 lg:row-span-2"
+					bodyClassName="overflow-y-auto"
+				>
+					<TopList
+						bare
+						limit={6}
+						title="Countries"
+						rows={dimRows('country', data.top_countries)}
+						onSelect={dimSelect('country')}
+						activeKey={cubeFilter.country}
+					/>
+				</BentoTile>
+				<BentoTile
+					label="Devices"
+					className="col-span-1 lg:col-span-2 lg:row-span-2"
+					bodyClassName="overflow-y-auto"
+				>
+					<TopList
+						bare
+						limit={6}
+						title="Devices"
+						rows={dimRows('device', data.top_devices)}
+						onSelect={dimSelect('device')}
+						activeKey={cubeFilter.device}
+					/>
+				</BentoTile>
+			</div>
+			{slice?.visitorsApproximate ? (
+				<p className="shrink-0 text-xs text-neutral-400">
+					Visitors is an upper bound under this slice; pageviews and events are exact.
+				</p>
+			) : null}
 		</div>
 	);
 }

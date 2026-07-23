@@ -41,7 +41,7 @@ export function Layout({
 	return (
 		<div className="min-h-screen text-neutral-900">
 			<header className="sticky top-0 z-10 border-b border-neutral-200/70 bg-white/70 backdrop-blur-xl">
-				<div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 py-3">
+				<div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-6 py-3">
 					<div className="flex items-center gap-3">
 						<span className="flex items-center gap-2">
 							<BrandMark />
@@ -69,7 +69,7 @@ export function Layout({
 					</div>
 				</div>
 			</header>
-			<main className="mx-auto max-w-6xl px-6 py-8">{children}</main>
+			<main className="mx-auto max-w-[1600px] px-6 py-6">{children}</main>
 		</div>
 	);
 }

@@ -24,6 +24,8 @@ interface TrafficChartProps {
 	height?: number;
 	/** Vertical markers layered over the series — used to flag anomalies on the timeline. */
 	annotations?: ChartAnnotation[];
+	/** Render just the fill-height canvas (no Card/header) — for embedding inside a bento tile. */
+	bare?: boolean;
 }
 
 const ACCENT = '#6366f1';
@@ -95,10 +97,12 @@ function ChartCanvas({
 	series,
 	height,
 	annotations,
+	fillHeight = false,
 }: {
 	series: SeriesPoint[];
 	height: number;
 	annotations: ChartAnnotation[];
+	fillHeight?: boolean;
 }): ReactElement {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const data = useMemo(() => buildData(series), [series]);
@@ -106,10 +110,12 @@ function ChartCanvas({
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
+		const chartHeight = (): number =>
+			fillHeight && container.clientHeight > 0 ? container.clientHeight : height;
 
 		const opts: uPlot.Options = {
 			width: container.clientWidth || 640,
-			height,
+			height: chartHeight(),
 			padding: [12, 8, 0, 8],
 			plugins: [annotationPlugin(annotations)],
 			cursor: {
@@ -168,7 +174,11 @@ function ChartCanvas({
 
 		const observer = new ResizeObserver((entries) => {
 			const entry = entries[0];
-			if (entry && chart) chart.setSize({ width: entry.contentRect.width, height });
+			if (entry && chart)
+				chart.setSize({
+					width: entry.contentRect.width,
+					height: chartHeight(),
+				});
 		});
 		observer.observe(container);
 
@@ -176,9 +186,14 @@ function ChartCanvas({
 			observer.disconnect();
 			chart?.destroy();
 		};
-	}, [data, height, annotations]);
+	}, [data, height, annotations, fillHeight]);
 
-	return <div ref={containerRef} className="uplot-container w-full" />;
+	return (
+		<div
+			ref={containerRef}
+			className={fillHeight ? 'uplot-container h-full w-full' : 'uplot-container w-full'}
+		/>
+	);
 }
 
 export function TrafficChart({
@@ -188,7 +203,17 @@ export function TrafficChart({
 	title = 'Traffic over time',
 	height = 280,
 	annotations = [],
+	bare = false,
 }: TrafficChartProps): ReactElement {
+	if (bare) {
+		return series.length === 0 ? (
+			<div className="flex h-full items-center justify-center text-sm text-neutral-400">
+				No data yet
+			</div>
+		) : (
+			<ChartCanvas series={series} height={height} annotations={annotations} fillHeight />
+		);
+	}
 	return (
 		<Card>
 			<div className="mb-4 flex items-center justify-between">
