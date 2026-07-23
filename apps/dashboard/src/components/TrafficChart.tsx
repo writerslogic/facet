@@ -122,7 +122,7 @@ function ChartCanvas({
 				y: false,
 				points: { size: 6 },
 			},
-			legend: { show: true, live: true },
+			legend: { show: !fillHeight, live: true },
 			series: [
 				{
 					value: (_u, v) => (v == null ? '—' : new Date(v * 1000).toUTCString()),

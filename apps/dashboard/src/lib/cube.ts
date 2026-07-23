@@ -81,6 +81,55 @@ export function cubeBreakdown(cells: CubeCell[], filter: CubeFilter, axis: CubeA
 		.map(([key, count]) => ({ key, count }));
 }
 
+export interface FlowNode {
+	id: string;
+	label: string;
+	column: number;
+}
+export interface FlowLink {
+	source: string;
+	target: string;
+	value: number;
+}
+
+/** Build a three-stage flow (channel → device → country) from the cube for a Sankey diagram. Countries
+ * beyond the top `topN` fold into "Other" so the diagram stays legible. Link value is pageviews. */
+export function cubeFlow(cells: CubeCell[], topN = 5): { nodes: FlowNode[]; links: FlowLink[] } {
+	const countryTotals = new Map<string, number>();
+	for (const c of cells)
+		countryTotals.set(c.country, (countryTotals.get(c.country) ?? 0) + c.pageviews);
+	const top = new Set(
+		[...countryTotals.entries()]
+			.sort((a, b) => b[1] - a[1])
+			.slice(0, topN)
+			.map(([k]) => k),
+	);
+	const channels = new Set<string>();
+	const devices = new Set<string>();
+	const countries = new Set<string>();
+	const acc = new Map<string, FlowLink>();
+	const bump = (source: string, target: string, v: number): void => {
+		const k = `${source}>${target}`;
+		const e = acc.get(k) ?? { source, target, value: 0 };
+		e.value += v;
+		acc.set(k, e);
+	};
+	for (const c of cells) {
+		const ctry = top.has(c.country) ? c.country : 'Other';
+		channels.add(c.channel);
+		devices.add(c.device);
+		countries.add(ctry);
+		bump(`ch:${c.channel}`, `dev:${c.device}`, c.pageviews);
+		bump(`dev:${c.device}`, `ct:${ctry}`, c.pageviews);
+	}
+	const nodes: FlowNode[] = [
+		...[...channels].map((ch) => ({ id: `ch:${ch}`, label: ch, column: 0 })),
+		...[...devices].map((d) => ({ id: `dev:${d}`, label: d, column: 1 })),
+		...[...countries].map((ct) => ({ id: `ct:${ct}`, label: ct, column: 2 })),
+	];
+	return { nodes, links: [...acc.values()] };
+}
+
 /** Filter + aggregate to a summary slice. */
 export function sliceCube(cells: CubeCell[], filter: CubeFilter): CubeSlice {
 	let pageviews = 0;
