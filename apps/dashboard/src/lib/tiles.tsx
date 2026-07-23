@@ -3,14 +3,20 @@
 // adding a tile type = one entry; "replace" swaps a slot's tileId; "rearrange" reorders slots; and
 // drill-down reuses the same render with `expanded` so a tile can show more when it fills the overlay.
 
-import type { CountRow, EngagementSummary, SeriesPoint, StatsResponse } from '@facet/shared';
+import type {
+	CountRow,
+	CubeCell,
+	EngagementSummary,
+	SeriesPoint,
+	StatsResponse,
+} from '@facet/shared';
 import type { ReactNode } from 'react';
 import { KpiTile, type TileEmphasis } from '../components/BentoTile.js';
-import { Sankey } from '../components/Sankey.js';
+import { FlowTile } from '../components/FlowTile.js';
 import { TopList } from '../components/TopList.js';
 import type { ChartAnnotation } from '../components/TrafficChart.js';
 import { TrafficChart } from '../components/TrafficChart.js';
-import type { CubeAxis, CubeFilter, FlowLink, FlowNode, ServerFilter } from './cube.js';
+import type { CubeAxis, CubeFilter, ServerFilter } from './cube.js';
 import { formatDuration, formatPercent } from './format.js';
 
 /** Everything a tile might render, computed once by the board and shared by every tile + the overlay. */
@@ -21,7 +27,7 @@ export interface TileContext {
 	deltas: { pv: number | null; vis: number | null; ev: number | null };
 	sparks: { pv: number[]; vis: number[]; ev: number[] };
 	sense: (d: number | null) => 'improvement' | 'regression' | 'neutral';
-	flow: { nodes: FlowNode[]; links: FlowLink[] };
+	flowCells: CubeCell[];
 	data: StatsResponse;
 	engagement: EngagementSummary;
 	anyFilter: boolean;
@@ -199,14 +205,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		size: 'tall',
 		emphasis: 'hero',
 		expandable: true,
-		render: (ctx) =>
-			ctx.flow.links.length > 0 ? (
-				<Sankey nodes={ctx.flow.nodes} links={ctx.flow.links} />
-			) : (
-				<div className="flex h-full items-center justify-center text-neutral-400 text-sm">
-					No flow data yet
-				</div>
-			),
+		render: (ctx) => <FlowTile cells={ctx.flowCells} />,
 	},
 	pages: {
 		id: 'pages',

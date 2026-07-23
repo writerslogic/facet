@@ -29,7 +29,6 @@ import {
 	type CubeFilter,
 	type ServerFilter,
 	cubeBreakdown,
-	cubeFlow,
 	cubeSeries,
 	isFilterActive,
 	sliceCube,
@@ -192,7 +191,6 @@ function Overview({
 	const dimRows = (axis: CubeAxis, fallback: typeof data.top_countries) =>
 		!serverMode && hasCube ? cubeBreakdown(cubeCells, cubeFilter, axis) : fallback;
 	const dimSelect = (axis: CubeAxis) => (hasCube || serverMode ? toggleCube(axis) : undefined);
-	const flow = cubeFlow(cubeCells);
 
 	const filterBar = (
 		<CubeFilterBar
@@ -215,7 +213,7 @@ function Overview({
 		deltas: { pv: dPv, vis: dVis, ev: dEv },
 		sparks: { pv: sparkPv, vis: sparkVis, ev: sparkEv },
 		sense,
-		flow,
+		flowCells: cubeCells,
 		data,
 		engagement: data.engagement,
 		anyFilter,

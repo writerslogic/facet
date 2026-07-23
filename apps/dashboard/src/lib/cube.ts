@@ -93,19 +93,21 @@ export interface FlowLink {
 	value: number;
 }
 
-/** Build a three-stage flow (channel → device → country) from the cube for a Sankey diagram. Countries
- * beyond the top `topN` fold into the canonical "other" bucket (same spelling the server/cube use, so a
- * real "other" row merges into it rather than rendering as a second node). Link value is pageviews. */
-export function cubeFlow(cells: CubeCell[], topN = 5): { nodes: FlowNode[]; links: FlowLink[] } {
-	const countryTotals = new Map<string, number>();
-	for (const c of cells)
-		countryTotals.set(c.country, (countryTotals.get(c.country) ?? 0) + c.pageviews);
-	const top = new Set(
-		[...countryTotals.entries()]
-			.sort((a, b) => b[1] - a[1])
-			.slice(0, topN)
-			.map(([k]) => k),
-	);
+/** Node id prefix for each flow column, so a click handler can tell a device (expandable) apart from a
+ * channel/country (isolatable) by inspecting the id. */
+export const FLOW_DEVICE_PREFIX = 'dev:';
+
+/** Build the flow graph for the Sankey. The base is channel → device; a device listed in
+ * `expandedDevices` (by its raw value, e.g. `mobile`) additionally reveals device → country links, so the
+ * country column only exists once something is expanded. Country nodes are shared across expanded devices;
+ * countries beyond the top `topN` (ranked over the expanded devices' traffic) fold into the canonical
+ * "other" bucket. Link value is pageviews. */
+export function cubeFlow(
+	cells: CubeCell[],
+	expandedDevices: ReadonlySet<string> | readonly string[] = [],
+	topN = 5,
+): { nodes: FlowNode[]; links: FlowLink[] } {
+	const expanded = expandedDevices instanceof Set ? expandedDevices : new Set(expandedDevices);
 	const channels = new Set<string>();
 	const devices = new Set<string>();
 	const countries = new Set<string>();
@@ -116,21 +118,47 @@ export function cubeFlow(cells: CubeCell[], topN = 5): { nodes: FlowNode[]; link
 		e.value += v;
 		acc.set(k, e);
 	};
+
+	// Base layer: channel → device for every cell.
 	for (const c of cells) {
-		const ctry = top.has(c.country) ? c.country : 'other';
 		channels.add(c.channel);
 		devices.add(c.device);
-		countries.add(ctry);
-		bump(`ch:${c.channel}`, `dev:${c.device}`, c.pageviews);
-		bump(`dev:${c.device}`, `ct:${ctry}`, c.pageviews);
+		bump(`ch:${c.channel}`, `${FLOW_DEVICE_PREFIX}${c.device}`, c.pageviews);
 	}
+
+	// Country layer: only for expanded devices. Rank countries over just those devices' traffic so the
+	// shown countries are the ones relevant to what the user opened.
+	if (expanded.size > 0) {
+		const countryTotals = new Map<string, number>();
+		for (const c of cells) {
+			if (!expanded.has(c.device)) continue;
+			countryTotals.set(c.country, (countryTotals.get(c.country) ?? 0) + c.pageviews);
+		}
+		const top = new Set(
+			[...countryTotals.entries()]
+				.sort((a, b) => b[1] - a[1])
+				.slice(0, topN)
+				.map(([k]) => k),
+		);
+		for (const c of cells) {
+			if (!expanded.has(c.device)) continue;
+			const ctry = top.has(c.country) ? c.country : 'other';
+			countries.add(ctry);
+			bump(`${FLOW_DEVICE_PREFIX}${c.device}`, `ct:${ctry}`, c.pageviews);
+		}
+	}
+
 	const nodes: FlowNode[] = [
 		...[...channels].map((ch) => ({
 			id: `ch:${ch}`,
 			label: ch,
 			column: 0,
 		})),
-		...[...devices].map((d) => ({ id: `dev:${d}`, label: d, column: 1 })),
+		...[...devices].map((d) => ({
+			id: `${FLOW_DEVICE_PREFIX}${d}`,
+			label: d,
+			column: 1,
+		})),
 		...[...countries].map((ct) => ({
 			id: `ct:${ct}`,
 			label: ct,
