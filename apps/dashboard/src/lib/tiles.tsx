@@ -164,6 +164,12 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 				spark={ctx.sparks.pv}
 				stroke="#0f172a"
 				expanded={expanded}
+				breakdown={{
+					title: 'Top pages',
+					rows: ctx.data.top_paths,
+					onSelect: ctx.toggleServer('path'),
+					activeKey: ctx.serverFilter.path,
+				}}
 			/>
 		),
 	},
@@ -183,6 +189,12 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 				spark={ctx.sparks.vis}
 				stroke="#6366f1"
 				expanded={expanded}
+				breakdown={{
+					title: 'Top countries',
+					rows: ctx.dimRows('country', ctx.data.top_countries),
+					onSelect: ctx.dimSelect('country'),
+					activeKey: ctx.cubeFilter.country,
+				}}
 			/>
 		),
 	},
@@ -202,6 +214,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 				spark={ctx.sparks.ev}
 				stroke="#8b5cf6"
 				expanded={expanded}
+				breakdown={{ title: 'Top events', rows: ctx.data.top_events }}
 			/>
 		),
 	},
