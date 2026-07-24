@@ -17,7 +17,13 @@ import {
 import { type ReactElement, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { readBoardLayout, useBoardLayout } from '../lib/boardLayout.js';
 import { cn } from '../lib/cn.js';
-import { packSlots, trackTemplate, useColumns, useElasticTracks } from '../lib/elasticGrid.js';
+import {
+	packSlots,
+	trackTemplate,
+	useColumns,
+	useElasticTracks,
+	useRowFloor,
+} from '../lib/elasticGrid.js';
 import {
 	CHART_CYCLE,
 	KPI_CYCLE,
@@ -76,6 +82,7 @@ export function BentoBoard({
 		rowCount,
 		focusedIdx >= 0 ? (placements[focusedIdx] ?? null) : null,
 	);
+	const rowFloor = useRowFloor(gridRef, rowCount);
 
 	useEffect(() => {
 		if (!focusUid.current) return;
@@ -225,7 +232,7 @@ export function BentoBoard({
 				className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
 				style={{
 					gridTemplateColumns: trackTemplate(colFr),
-					gridTemplateRows: trackTemplate(rowFr, activeFocus ? '0' : '5rem'),
+					gridTemplateRows: trackTemplate(rowFr, activeFocus ? '0' : rowFloor),
 				}}
 				role={editing ? 'list' : undefined}
 				aria-label={editing ? 'Board tiles — use arrow keys to reorder' : undefined}
@@ -459,13 +466,14 @@ export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
 	const gridRef = useRef<HTMLDivElement>(null);
 	const cols = useColumns(gridRef);
 	const { placements, rowCount } = packSlots(slots, cols);
+	const rowFloor = useRowFloor(gridRef, rowCount);
 	return (
 		<div
 			ref={gridRef}
 			className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
 			style={{
 				gridTemplateColumns: trackTemplate(new Array(cols).fill(1)),
-				gridTemplateRows: trackTemplate(new Array(rowCount).fill(1), '5rem'),
+				gridTemplateRows: trackTemplate(new Array(rowCount).fill(1), rowFloor),
 			}}
 		>
 			{placements.map((p, i) => (

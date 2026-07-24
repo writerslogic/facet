@@ -82,7 +82,69 @@ export function packSlots(
 			}
 		}
 	});
-	return { placements, rowCount: Math.max(1, occ.length) };
+	const rowCount = Math.max(1, occ.length);
+	fillGaps(placements, cols, rowCount);
+	return { placements, rowCount };
+}
+
+/** Grow placed tiles to absorb empty cells so the board never shows a dead gap (e.g. after a tile is
+ * removed, or when the last row doesn't tessellate). Prefers extending the tile ABOVE an empty cell
+ * downward, else the tile to its LEFT rightward — only ever into cells that are empty, keeping every tile
+ * rectangular. Mutates `placements` in place; the persisted slot sizes are untouched, so this is purely a
+ * render-time compaction that re-derives on every pack. Fully-packed layouts (the shipped default) are
+ * left exactly as-is. */
+function fillGaps(placements: Placement[], cols: number, rowCount: number): void {
+	const ownerGrid = (): number[][] => {
+		const g: number[][] = Array.from({ length: rowCount }, () => new Array(cols).fill(-1));
+		placements.forEach((p, idx) => {
+			for (let r = p.rowStart - 1; r < p.rowStart - 1 + p.rowSpan; r++)
+				for (let c = p.colStart - 1; c < p.colStart - 1 + p.colSpan; c++)
+					if (g[r]) (g[r] as number[])[c] = idx;
+		});
+		return g;
+	};
+	const rowClear = (g: number[][], r: number, c0: number, cs: number): boolean => {
+		for (let c = c0; c < c0 + cs; c++) if (g[r]?.[c] !== -1) return false;
+		return true;
+	};
+	const colClear = (g: number[][], c: number, r0: number, rs: number): boolean => {
+		for (let r = r0; r < r0 + rs; r++) if (g[r]?.[c] !== -1) return false;
+		return true;
+	};
+	for (let guard = 0; guard < cols * rowCount; guard++) {
+		const g = ownerGrid();
+		let changed = false;
+		for (let r = 0; r < rowCount && !changed; r++) {
+			for (let c = 0; c < cols && !changed; c++) {
+				if (g[r]?.[c] !== -1) continue;
+				const above = r > 0 ? (g[r - 1]?.[c] ?? -1) : -1;
+				if (above !== -1) {
+					const p = placements[above] as Placement;
+					if (
+						p.rowStart - 1 + p.rowSpan === r &&
+						rowClear(g, r, p.colStart - 1, p.colSpan)
+					) {
+						p.rowSpan++;
+						changed = true;
+						break;
+					}
+				}
+				const left = c > 0 ? (g[r]?.[c - 1] ?? -1) : -1;
+				if (left !== -1) {
+					const p = placements[left] as Placement;
+					if (
+						p.colStart - 1 + p.colSpan === c &&
+						colClear(g, c, p.rowStart - 1, p.rowSpan)
+					) {
+						p.colSpan++;
+						changed = true;
+						break;
+					}
+				}
+			}
+		}
+		if (!changed) break;
+	}
 }
 
 /** The column count for a container width — mirrors the Tailwind `lg` breakpoint the board shipped with. */
@@ -98,6 +160,34 @@ export function useColumns(ref: RefObject<HTMLElement | null>): number {
 		return () => ro.disconnect();
 	}, [ref]);
 	return cols;
+}
+
+/** The resting per-row minimum height (px). Rows want a comfortable ~5rem floor, but the board must never
+ * scroll: once `rowCount` floors would exceed the available height we shrink the floor so every row still
+ * divides the viewport (tiles degrade via their container queries rather than spilling below the fold).
+ * Measured from the grid element itself, which is flex-sized (height independent of the floor) so there is
+ * no feedback loop. */
+export function useRowFloor(
+	ref: RefObject<HTMLElement | null>,
+	rowCount: number,
+	gap = 12,
+): string {
+	const [floor, setFloor] = useState('5rem');
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const measure = (): void => {
+			const h = el.clientHeight;
+			if (h <= 0) return;
+			const per = (h - (rowCount - 1) * gap) / rowCount;
+			setFloor(`${Math.max(0, Math.min(80, Math.floor(per)))}px`);
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [ref, rowCount, gap]);
+	return floor;
 }
 
 const GROW = 2.2; // fr weight of a focused tile's tracks
