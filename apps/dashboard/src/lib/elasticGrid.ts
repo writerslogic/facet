@@ -38,10 +38,6 @@ const SPAN_SM: Record<SizeKey, Span> = {
 	xl: [2, 2],
 };
 
-/** Rows the shipped 6-column layout packs into. At or below this the board fills the viewport with no
- * scroll (fr tracks divide the height); above it, rows fall back to a minimum height and the board scrolls. */
-export const BASE_ROWS = 6;
-
 /** Place slots into a `cols`-wide grid with greedy first-fit — the same sparse algorithm CSS grid uses for
  * auto-placement, so the packed result matches what the browser produced from the old span classes. Returns
  * one placement per slot (in slot order) plus the total row count. */

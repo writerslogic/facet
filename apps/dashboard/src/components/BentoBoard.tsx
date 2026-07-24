@@ -17,13 +17,7 @@ import {
 import { type ReactElement, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
 import { readBoardLayout, useBoardLayout } from '../lib/boardLayout.js';
 import { cn } from '../lib/cn.js';
-import {
-	BASE_ROWS,
-	packSlots,
-	trackTemplate,
-	useColumns,
-	useElasticTracks,
-} from '../lib/elasticGrid.js';
+import { packSlots, trackTemplate, useColumns, useElasticTracks } from '../lib/elasticGrid.js';
 import {
 	CHART_CYCLE,
 	KPI_CYCLE,
@@ -81,9 +75,6 @@ export function BentoBoard({
 		rowCount,
 		focusedIdx >= 0 ? (placements[focusedIdx] ?? null) : null,
 	);
-	// At or below the shipped row count the tracks divide the viewport exactly (no scroll); above it the
-	// board falls back to a per-row minimum and scrolls internally — the page itself never scrolls.
-	const fits = rowCount <= BASE_ROWS;
 
 	useEffect(() => {
 		if (!focusUid.current) return;
@@ -225,14 +216,13 @@ export function BentoBoard({
 
 			<div
 				ref={gridRef}
-				className={cn(
-					'grid min-h-0 flex-1 gap-3',
-					fits ? 'overflow-hidden' : 'overflow-y-auto',
-				)}
+				// The grid always divides the available height into fr rows, so the board fills the viewport
+				// exactly for ANY tile count — adding tiles shrinks every tile rather than spilling into a
+				// scroll. Container queries (see BentoTile) keep the shrunk content legible.
+				className="grid min-h-0 flex-1 gap-3 overflow-hidden"
 				style={{
 					gridTemplateColumns: trackTemplate(colFr),
 					gridTemplateRows: trackTemplate(rowFr),
-					...(fits ? null : { minHeight: `${rowCount * 5}rem` }),
 				}}
 				role={editing ? 'list' : undefined}
 				aria-label={editing ? 'Board tiles — use arrow keys to reorder' : undefined}
@@ -466,18 +456,13 @@ export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
 	const gridRef = useRef<HTMLDivElement>(null);
 	const cols = useColumns(gridRef);
 	const { placements, rowCount } = packSlots(slots, cols);
-	const fits = rowCount <= BASE_ROWS;
 	return (
 		<div
 			ref={gridRef}
-			className={cn(
-				'grid min-h-0 flex-1 gap-3',
-				fits ? 'overflow-hidden' : 'overflow-y-auto',
-			)}
+			className="grid min-h-0 flex-1 gap-3 overflow-hidden"
 			style={{
 				gridTemplateColumns: trackTemplate(new Array(cols).fill(1)),
 				gridTemplateRows: trackTemplate(new Array(rowCount).fill(1)),
-				...(fits ? null : { minHeight: `${rowCount * 5}rem` }),
 			}}
 		>
 			{placements.map((p, i) => (

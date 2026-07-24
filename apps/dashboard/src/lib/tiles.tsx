@@ -48,7 +48,7 @@ export interface TileDef {
 	render: (ctx: TileContext, expanded?: boolean) => ReactNode;
 	/** Optional header control (e.g. the anomaly legend on the traffic chart). */
 	action?: (ctx: TileContext) => ReactNode;
-	/** KPI tiles gain nothing from an overlay; skip the expand affordance for them. */
+	/** Whether the tile offers an expand affordance to focus it in place and reveal `expanded` detail. */
 	expandable?: boolean;
 	/** The body renders its own title (KPI tiles), so the surrounding tile omits its header. */
 	selfLabeled?: boolean;
@@ -154,7 +154,8 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		size: 'kpi',
 		selfLabeled: true,
 		emphasis: 'kpi',
-		render: (ctx) => (
+		expandable: true,
+		render: (ctx, expanded) => (
 			<KpiTile
 				label="Pageviews"
 				value={ctx.summary.pageviews}
@@ -162,6 +163,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 				deltaSense={ctx.sense(ctx.deltas.pv)}
 				spark={ctx.sparks.pv}
 				stroke="#0f172a"
+				expanded={expanded}
 			/>
 		),
 	},
@@ -171,7 +173,8 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		size: 'kpi',
 		selfLabeled: true,
 		emphasis: 'kpi',
-		render: (ctx) => (
+		expandable: true,
+		render: (ctx, expanded) => (
 			<KpiTile
 				label="Visitors"
 				value={ctx.summary.visitors}
@@ -179,6 +182,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 				deltaSense={ctx.sense(ctx.deltas.vis)}
 				spark={ctx.sparks.vis}
 				stroke="#6366f1"
+				expanded={expanded}
 			/>
 		),
 	},
@@ -188,7 +192,8 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		size: 'kpi',
 		selfLabeled: true,
 		emphasis: 'kpi',
-		render: (ctx) => (
+		expandable: true,
+		render: (ctx, expanded) => (
 			<KpiTile
 				label="Events"
 				value={ctx.summary.events}
@@ -196,6 +201,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 				deltaSense={ctx.sense(ctx.deltas.ev)}
 				spark={ctx.sparks.ev}
 				stroke="#8b5cf6"
+				expanded={expanded}
 			/>
 		),
 	},
@@ -293,13 +299,61 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		id: 'engagement',
 		title: 'Engagement',
 		size: 'md',
-		render: (ctx) => {
+		expandable: true,
+		render: (ctx, expanded) => {
 			const e = ctx.engagement;
+			const cells = [
+				{ label: 'Sessions', value: e.sessions.toLocaleString() },
+				{ label: 'Bounce rate', value: formatPercent(e.bounce_rate) },
+				{
+					label: 'Pages / session',
+					value: e.pages_per_session.toFixed(1),
+				},
+				{
+					label: 'Avg. duration',
+					value: formatDuration(e.avg_duration_ms),
+				},
+			];
+			if (expanded) {
+				return (
+					<div className="flex h-full flex-col gap-3">
+						<div className="grid grid-cols-2 gap-3">
+							{cells.map((c) => (
+								<div
+									key={c.label}
+									className="rounded-xl border border-neutral-100 bg-neutral-50/50 p-3"
+								>
+									<div className="text-[10px] font-semibold text-neutral-400 uppercase tracking-[0.08em]">
+										{c.label}
+									</div>
+									<div className="tabular mt-1 font-semibold text-2xl text-neutral-900">
+										{c.value}
+									</div>
+								</div>
+							))}
+						</div>
+						<div className="mt-auto">
+							<div className="mb-1 flex justify-between text-[11px] text-neutral-500">
+								<span>Bounce rate</span>
+								<span className="tabular">{formatPercent(e.bounce_rate)}</span>
+							</div>
+							<div className="h-2 w-full overflow-hidden rounded-full bg-neutral-100">
+								<div
+									className="h-full rounded-full bg-accent-400"
+									style={{
+										width: `${Math.min(100, Math.round(e.bounce_rate * 100))}%`,
+									}}
+								/>
+							</div>
+						</div>
+					</div>
+				);
+			}
 			return (
 				<div className="flex h-full flex-col justify-center">
-					<Stat label="Sessions" value={e.sessions.toLocaleString()} />
-					<Stat label="Bounce rate" value={formatPercent(e.bounce_rate)} />
-					<Stat label="Avg. duration" value={formatDuration(e.avg_duration_ms)} />
+					{cells.map((c) => (
+						<Stat key={c.label} label={c.label} value={c.value} />
+					))}
 				</div>
 			);
 		},

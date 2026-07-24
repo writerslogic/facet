@@ -12,6 +12,7 @@ export function Sparkline({
 	stroke = '#6366f1',
 	className,
 	fill = false,
+	prominent = false,
 }: {
 	values: number[];
 	width?: number;
@@ -19,6 +20,8 @@ export function Sparkline({
 	stroke?: string;
 	className?: string;
 	fill?: boolean;
+	/** A bolder line + stronger area fill, for the large drill-down chart in an expanded KPI tile. */
+	prominent?: boolean;
 }): ReactElement | null {
 	const gradId = useId();
 	if (values.length < 2) return null;
@@ -49,7 +52,11 @@ export function Sparkline({
 				<>
 					<defs>
 						<linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-							<stop offset="0%" stopColor={stroke} stopOpacity="0.22" />
+							<stop
+								offset="0%"
+								stopColor={stroke}
+								stopOpacity={prominent ? '0.35' : '0.22'}
+							/>
 							<stop offset="100%" stopColor={stroke} stopOpacity="0" />
 						</linearGradient>
 					</defs>
@@ -60,7 +67,7 @@ export function Sparkline({
 				points={line}
 				fill="none"
 				stroke={stroke}
-				strokeWidth={responsive ? 1 : 1.5}
+				strokeWidth={prominent ? 2.5 : responsive ? 1 : 1.5}
 				strokeLinecap="round"
 				strokeLinejoin="round"
 				vectorEffect={responsive ? 'non-scaling-stroke' : undefined}

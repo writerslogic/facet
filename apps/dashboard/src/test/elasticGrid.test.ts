@@ -54,7 +54,7 @@ describe('packSlots', () => {
 		expect(placements[0]?.colSpan).toBe(6);
 	});
 
-	it('needs more than the base rows on the narrow grid (so the board scrolls there)', () => {
+	it('packs into more rows on the narrow (2-col) grid — the board shrinks them to fit', () => {
 		const { rowCount } = packSlots(DEFAULT_LAYOUT, 2);
 		expect(rowCount).toBeGreaterThan(6);
 	});
