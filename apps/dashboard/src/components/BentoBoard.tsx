@@ -29,6 +29,7 @@ import {
 	newSlotUid,
 } from '../lib/tiles.js';
 import { BentoTile } from './BentoTile.js';
+import { LivePill } from './LivePill.js';
 
 /** Step a slot to the next size in its kind's cycle (KPIs vs charts/lists have different cycles so a
  * tile only offers sizes that suit it). An off-cycle size snaps to the nearest cycle entry, so every
@@ -151,6 +152,7 @@ export function BentoBoard({
 	return (
 		<div className="flex min-h-0 flex-1 flex-col gap-3">
 			<div className="flex shrink-0 items-center justify-end gap-2">
+				{editing ? null : <LivePill />}
 				{editing ? (
 					<>
 						<div className="relative" ref={addWrapRef}>
