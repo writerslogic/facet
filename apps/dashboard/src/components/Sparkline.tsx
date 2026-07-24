@@ -14,6 +14,7 @@ export function Sparkline({
 	fill = false,
 	prominent = false,
 	marker = false,
+	prism = false,
 }: {
 	values: number[];
 	width?: number;
@@ -25,8 +26,12 @@ export function Sparkline({
 	prominent?: boolean;
 	/** A focal dot at the latest value — the "you are here" point that makes the spark read as live. */
 	marker?: boolean;
+	/** Stroke the line + marker with the prismatic sweep (indigo→violet→fuchsia) instead of a flat colour. */
+	prism?: boolean;
 }): ReactElement | null {
 	const gradId = useId();
+	const strokeId = useId();
+	const strokeRef = prism ? `url(#${strokeId})` : stroke;
 	if (values.length < 2) return null;
 	const max = Math.max(...values);
 	const min = Math.min(...values);
@@ -52,6 +57,15 @@ export function Sparkline({
 			aria-hidden="true"
 			focusable="false"
 		>
+			{prism ? (
+				<defs>
+					<linearGradient id={strokeId} x1="0" y1="0" x2="1" y2="0">
+						<stop offset="0%" stopColor="#6366f1" />
+						<stop offset="50%" stopColor="#8b5cf6" />
+						<stop offset="100%" stopColor="#d946ef" />
+					</linearGradient>
+				</defs>
+			) : null}
 			{fill ? (
 				<>
 					<defs>
@@ -70,8 +84,8 @@ export function Sparkline({
 			<polyline
 				points={line}
 				fill="none"
-				stroke={stroke}
-				strokeWidth={prominent ? 2.5 : responsive ? 1 : 1.5}
+				stroke={strokeRef}
+				strokeWidth={prominent ? 2.5 : responsive ? 1.4 : 1.5}
 				strokeLinecap="round"
 				strokeLinejoin="round"
 				vectorEffect={responsive ? 'non-scaling-stroke' : undefined}
@@ -84,7 +98,7 @@ export function Sparkline({
 						const r = prominent ? 3.2 : 2.6;
 						return `M${x},${y - r} L${x + r},${y} L${x},${y + r} L${x - r},${y} Z`;
 					})()}
-					fill={stroke}
+					fill={strokeRef}
 					stroke="white"
 					strokeWidth={prominent ? 2 : 1.5}
 					strokeLinejoin="round"

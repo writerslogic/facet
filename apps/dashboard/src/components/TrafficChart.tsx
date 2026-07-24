@@ -2,12 +2,12 @@
 // series with a hovering cursor, readable UTC date/number axes, and a subtle grid. Resizes with a
 // ResizeObserver. uPlot needs canvas; if the mount throws (e.g. under jsdom) it degrades gracefully.
 
-import type { SeriesPoint } from '@facet/shared';
-import { type ReactElement, useEffect, useMemo, useRef } from 'react';
-import uPlot from 'uplot';
-import 'uplot/dist/uPlot.min.css';
-import { formatCompact, formatNumber } from '../lib/format.js';
-import { Card } from './Card.js';
+import type { SeriesPoint } from "@facet/shared";
+import { type ReactElement, useEffect, useMemo, useRef } from "react";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
+import { formatCompact, formatNumber } from "../lib/format.js";
+import { Card } from "./Card.js";
 
 /** A vertical event marker on the time axis (e.g. a detected anomaly). */
 export interface ChartAnnotation {
@@ -28,11 +28,11 @@ interface TrafficChartProps {
 	bare?: boolean;
 }
 
-const ACCENT = '#6366f1';
-const INK = '#0f172a';
-const GRID = '#f1f0ee';
-const AXIS = '#a3a3a3';
-const MARK = '#e11d48';
+const ACCENT = "#6366f1";
+const INK = "#0f172a";
+const GRID = "#f1f0ee";
+const AXIS = "#a3a3a3";
+const MARK = "#e11d48";
 
 /** uPlot plugin: draw a dashed vertical line + top caret at each annotation's time position. Positions
  * come from `valToPos(..., true)` (canvas pixels), matching `u.bbox`, so it aligns at any zoom/size.
@@ -47,9 +47,9 @@ function annotationPlugin(get: () => ChartAnnotation[]): uPlot.Plugin {
 				const { left, top, width, height } = u.bbox;
 				ctx.save();
 				for (const a of annotations) {
-					const cx = Math.round(u.valToPos(a.t / 1000, 'x', true));
+					const cx = Math.round(u.valToPos(a.t / 1000, "x", true));
 					if (cx < left || cx > left + width) continue;
-					ctx.strokeStyle = 'rgba(225,29,72,0.45)';
+					ctx.strokeStyle = "rgba(225,29,72,0.45)";
 					ctx.lineWidth = 1;
 					ctx.setLineDash([4, 3]);
 					ctx.beginPath();
@@ -66,6 +66,39 @@ function annotationPlugin(get: () => ChartAnnotation[]): uPlot.Plugin {
 					ctx.fill();
 				}
 				ctx.restore();
+			},
+		},
+	};
+}
+
+/** uPlot plugin: a floating hover readout (date + each series' exact value) that follows the cursor, so
+ * the bare bento chart is explorable without the legend. Reads the hovered index from `u.cursor.idx`. */
+function tooltipPlugin(getEl: () => HTMLDivElement | null): uPlot.Plugin {
+	const fmtDate = (s: number): string =>
+		new Date(s * 1000).toLocaleDateString("en-US", {
+			month: "short",
+			day: "numeric",
+			timeZone: "UTC",
+		});
+	return {
+		hooks: {
+			setCursor: (u: uPlot) => {
+				const el = getEl();
+				if (!el) return;
+				const idx = u.cursor.idx;
+				if (idx == null || u.cursor.left == null || u.cursor.left < 0) {
+					el.style.opacity = "0";
+					return;
+				}
+				const t = u.data[0]?.[idx];
+				const pv = u.data[1]?.[idx];
+				const vis = u.data[2]?.[idx];
+				el.innerHTML = `<div class="mb-1 font-medium text-[11px] text-neutral-400">${t == null ? "" : fmtDate(t)}</div><div class="flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#0f172a"></span><span class="text-neutral-500">Pageviews</span><span class="tabular ml-auto font-semibold text-neutral-900">${pv == null ? "—" : formatNumber(pv)}</span></div><div class="mt-0.5 flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#6366f1"></span><span class="text-neutral-500">Visitors</span><span class="tabular ml-auto font-semibold text-neutral-900">${vis == null ? "—" : formatNumber(vis)}</span></div>`;
+				const left = u.cursor.left;
+				const flip = left > u.width / 2;
+				el.style.opacity = "1";
+				el.style.left = `${left}px`;
+				el.style.transform = `translate(${flip ? "calc(-100% - 14px)" : "14px"}, 8px)`;
 			},
 		},
 	};
@@ -107,6 +140,7 @@ function ChartCanvas({
 	fillHeight?: boolean;
 }): ReactElement {
 	const containerRef = useRef<HTMLDivElement>(null);
+	const tooltipRef = useRef<HTMLDivElement>(null);
 	const chartRef = useRef<uPlot | null>(null);
 	const annotationsRef = useRef(annotations);
 	annotationsRef.current = annotations;
@@ -123,13 +157,20 @@ function ChartCanvas({
 		const container = containerRef.current;
 		if (!container) return;
 		const chartHeight = (): number =>
-			fillHeight && container.clientHeight > 0 ? container.clientHeight : height;
+			fillHeight && container.clientHeight > 0
+				? container.clientHeight
+				: height;
 
 		const opts: uPlot.Options = {
 			width: container.clientWidth || 640,
 			height: chartHeight(),
 			padding: [12, 8, 0, 8],
-			plugins: [annotationPlugin(() => annotationsRef.current)],
+			plugins: [
+				annotationPlugin(() => annotationsRef.current),
+				...(fillHeight
+					? [tooltipPlugin(() => tooltipRef.current)]
+					: []),
+			],
 			cursor: {
 				y: false,
 				// A bold hover marker: a filled ring at the hovered value on each series.
@@ -138,35 +179,36 @@ function ChartCanvas({
 			legend: { show: !fillHeight, live: true },
 			series: [
 				{
-					value: (_u, v) => (v == null ? '—' : new Date(v * 1000).toUTCString()),
+					value: (_u, v) =>
+						v == null ? "—" : new Date(v * 1000).toUTCString(),
 				},
 				{
-					label: 'Pageviews',
+					label: "Pageviews",
 					stroke: INK,
 					width: 2.25,
 					fill: (u) =>
 						fill(
 							u.ctx,
-							'rgba(15,23,42,0.16)',
-							'rgba(15,23,42,0.00)',
+							"rgba(15,23,42,0.16)",
+							"rgba(15,23,42,0.00)",
 							u.bbox.top + u.bbox.height,
 						),
 					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+					value: (_u, v) => (v == null ? "—" : formatNumber(v)),
 				},
 				{
-					label: 'Visitors',
+					label: "Visitors",
 					stroke: ACCENT,
 					width: 2.25,
 					fill: (u) =>
 						fill(
 							u.ctx,
-							'rgba(99,102,241,0.26)',
-							'rgba(99,102,241,0.00)',
+							"rgba(99,102,241,0.26)",
+							"rgba(99,102,241,0.00)",
 							u.bbox.top + u.bbox.height,
 						),
 					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+					value: (_u, v) => (v == null ? "—" : formatNumber(v)),
 				},
 			],
 			axes: [
@@ -174,14 +216,14 @@ function ChartCanvas({
 					stroke: AXIS,
 					grid: { show: false },
 					ticks: { stroke: GRID, size: 4 },
-					font: '11px Inter, sans-serif',
+					font: "11px Inter, sans-serif",
 					space: 64,
 				},
 				{
 					stroke: AXIS,
 					grid: { stroke: GRID, width: 1 },
 					ticks: { show: false },
-					font: '11px Inter, sans-serif',
+					font: "11px Inter, sans-serif",
 					size: 44,
 					values: (_u, splits) => splits.map((v) => formatCompact(v)),
 				},
@@ -218,9 +260,19 @@ function ChartCanvas({
 		<div
 			ref={containerRef}
 			className={
-				fillHeight ? 'uplot-container chart-hero h-full w-full' : 'uplot-container w-full'
+				fillHeight
+					? "uplot-container chart-hero relative h-full w-full"
+					: "uplot-container w-full"
 			}
-		/>
+		>
+			{fillHeight ? (
+				<div
+					ref={tooltipRef}
+					className="pointer-events-none absolute top-0 left-0 z-20 rounded-lg border border-neutral-200/70 bg-white/95 px-2.5 py-2 opacity-0 shadow-float ring-1 ring-neutral-900/5 backdrop-blur transition-opacity duration-100"
+					aria-hidden="true"
+				/>
+			) : null}
+		</div>
 	);
 }
 
@@ -228,7 +280,7 @@ export function TrafficChart({
 	series,
 	loading,
 	error,
-	title = 'Traffic over time',
+	title = "Traffic over time",
 	height = 280,
 	annotations = [],
 	bare = false,
@@ -239,7 +291,12 @@ export function TrafficChart({
 				No data yet
 			</div>
 		) : (
-			<ChartCanvas series={series} height={height} annotations={annotations} fillHeight />
+			<ChartCanvas
+				series={series}
+				height={height}
+				annotations={annotations}
+				fillHeight
+			/>
 		);
 	}
 	return (
@@ -280,7 +337,11 @@ export function TrafficChart({
 					No data yet
 				</div>
 			) : (
-				<ChartCanvas series={series} height={height} annotations={annotations} />
+				<ChartCanvas
+					series={series}
+					height={height}
+					annotations={annotations}
+				/>
 			)}
 		</Card>
 	);

@@ -284,6 +284,7 @@ export function KpiTile({
 						stroke={stroke}
 						fill
 						marker
+						prism
 						className="h-full w-full"
 					/>
 				</div>
