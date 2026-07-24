@@ -216,13 +216,14 @@ export function BentoBoard({
 
 			<div
 				ref={gridRef}
-				// The grid always divides the available height into fr rows, so the board fills the viewport
-				// exactly for ANY tile count — adding tiles shrinks every tile rather than spilling into a
-				// scroll. Container queries (see BentoTile) keep the shrunk content legible.
-				className="grid min-h-0 flex-1 gap-3 overflow-hidden"
+				// Rows divide the viewport as fr tracks with a per-row floor so every tile stays big enough to
+				// show its content; once those floors exceed the height the board scrolls INTERNALLY (the page
+				// never scrolls). A focused tile drops the floor to 0 so its neighbours can collapse for a
+				// dramatic in-place expand.
+				className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
 				style={{
 					gridTemplateColumns: trackTemplate(colFr),
-					gridTemplateRows: trackTemplate(rowFr),
+					gridTemplateRows: trackTemplate(rowFr, activeFocus ? '0' : '5rem'),
 				}}
 				role={editing ? 'list' : undefined}
 				aria-label={editing ? 'Board tiles — use arrow keys to reorder' : undefined}
@@ -459,10 +460,10 @@ export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
 	return (
 		<div
 			ref={gridRef}
-			className="grid min-h-0 flex-1 gap-3 overflow-hidden"
+			className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
 			style={{
 				gridTemplateColumns: trackTemplate(new Array(cols).fill(1)),
-				gridTemplateRows: trackTemplate(new Array(rowCount).fill(1)),
+				gridTemplateRows: trackTemplate(new Array(rowCount).fill(1), '5rem'),
 			}}
 		>
 			{placements.map((p, i) => (

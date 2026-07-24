@@ -177,8 +177,10 @@ export function useElasticTracks(
 	return { colFr, rowFr };
 }
 
-/** Turn an fr array into a grid-template string. `minmax(0, Nfr)` lets a focused track collapse its
- * neighbours all the way, so the elastic effect is dramatic and the grid still fills its container exactly. */
-export function trackTemplate(fr: number[]): string {
-	return fr.map((f) => `minmax(0, ${f}fr)`).join(' ');
+/** Turn an fr array into a grid-template string. Each track is `minmax(min, Nfr)`: with `min` at 0 a
+ * focused track can collapse its neighbours all the way (dramatic elastic focus); with a real `min` (e.g.
+ * a row floor at rest) every tile keeps enough size to show its content, and the board scrolls internally
+ * once the mins exceed the viewport rather than shrinking tiles to nothing. */
+export function trackTemplate(fr: number[], min = '0'): string {
+	return fr.map((f) => `minmax(${min}, ${f}fr)`).join(' ');
 }

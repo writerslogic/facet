@@ -92,8 +92,41 @@ export function BentoTile({
 				className,
 			)}
 		>
-			{label || action || onExpand || onClose ? (
-				<header className="relative z-10 mb-2 flex shrink-0 items-center justify-between gap-2">
+			{/* Controls float as an overlay (not a header row) so a short tile keeps its full height for content. */}
+			{onClose ? (
+				<button
+					type="button"
+					data-tile-close
+					onClick={onClose}
+					aria-label={`Close ${label ?? 'tile'} detail`}
+					className={cn(
+						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
+						dark
+							? 'text-neutral-300 hover:bg-white/10 hover:text-white'
+							: 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700',
+					)}
+				>
+					<X className="h-3.5 w-3.5" aria-hidden="true" />
+				</button>
+			) : onExpand ? (
+				<button
+					type="button"
+					data-tile-expand
+					onClick={onExpand}
+					aria-label={`Expand ${label ?? 'tile'}`}
+					// Faintly visible at rest so every tile signals it can be expanded; solid on hover/focus.
+					className={cn(
+						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 opacity-40 transition focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 group-hover:opacity-100',
+						dark
+							? 'text-neutral-300 hover:bg-white/10 hover:text-white'
+							: 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700',
+					)}
+				>
+					<Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+				</button>
+			) : null}
+			{label || action ? (
+				<header className="relative z-10 mb-2 flex shrink-0 items-center justify-between gap-2 pr-7">
 					{label ? (
 						<h3
 							className={cn(
@@ -106,41 +139,7 @@ export function BentoTile({
 					) : (
 						<span />
 					)}
-					<div className="flex items-center gap-1.5">
-						{action}
-						{onClose ? (
-							<button
-								type="button"
-								data-tile-close
-								onClick={onClose}
-								aria-label={`Close ${label ?? 'tile'} detail`}
-								className={cn(
-									'rounded-md p-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
-									dark
-										? 'text-neutral-300 hover:bg-white/10 hover:text-white'
-										: 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700',
-								)}
-							>
-								<X className="h-3.5 w-3.5" aria-hidden="true" />
-							</button>
-						) : onExpand ? (
-							<button
-								type="button"
-								data-tile-expand
-								onClick={onExpand}
-								aria-label={`Expand ${label ?? 'tile'}`}
-								// Faintly visible at rest so every tile signals it can be expanded; solid on hover/focus.
-								className={cn(
-									'rounded-md p-1 opacity-40 transition focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 group-hover:opacity-100',
-									dark
-										? 'text-neutral-300 hover:bg-white/10 hover:text-white'
-										: 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700',
-								)}
-							>
-								<Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
-							</button>
-						) : null}
-					</div>
+					{action ? <div className="flex items-center gap-1.5">{action}</div> : null}
 				</header>
 			) : null}
 			<div className={cn('@container/tile relative z-10 min-h-0 flex-1', bodyClassName)}>
