@@ -4,18 +4,33 @@
 // the Sankey tweens between layouts.
 
 import type { CubeCell } from '@facet/shared';
-import { type ReactElement, useMemo, useState } from 'react';
+import { type ReactElement, useEffect, useMemo, useState } from 'react';
 import { FLOW_DEVICE_PREFIX, cubeFlow } from '../lib/cube.js';
 import { Sankey } from './Sankey.js';
 
 export function FlowTile({
 	cells,
 	dark,
+	expanded,
 }: {
 	cells: CubeCell[];
 	dark?: boolean;
+	/** Drill-down: auto-reveal the device → country third column so the focused flow shows the full
+	 * channel → device → country path, not just the compact two columns. */
+	expanded?: boolean;
 }): ReactElement {
+	const allDevices = useMemo(
+		() =>
+			cubeFlow(cells, new Set())
+				.nodes.filter((n) => n.id.startsWith(FLOW_DEVICE_PREFIX))
+				.map((n) => n.id.slice(FLOW_DEVICE_PREFIX.length)),
+		[cells],
+	);
 	const [expandedDevices, setExpandedDevices] = useState<ReadonlySet<string>>(() => new Set());
+	// Focusing the tile fans every device open to its countries; collapsing returns to the compact graph.
+	useEffect(() => {
+		setExpandedDevices(expanded ? new Set(allDevices) : new Set());
+	}, [expanded, allDevices]);
 	const [isolated, setIsolated] = useState<string | null>(null);
 	const flow = useMemo(() => cubeFlow(cells, expandedDevices), [cells, expandedDevices]);
 

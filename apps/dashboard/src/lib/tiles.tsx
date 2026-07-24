@@ -17,7 +17,7 @@ import { TopList } from '../components/TopList.js';
 import type { ChartAnnotation } from '../components/TrafficChart.js';
 import { TrafficChart } from '../components/TrafficChart.js';
 import type { CubeAxis, CubeFilter, ServerFilter } from './cube.js';
-import { formatDuration, formatPercent } from './format.js';
+import { formatDuration, formatNumber, formatPercent } from './format.js';
 
 /** Everything a tile might render, computed once by the board and shared by every tile + the overlay. */
 export interface TileContext {
@@ -123,6 +123,88 @@ function Stat({ label, value }: { label: string; value: string }): ReactNode {
 	);
 }
 
+/** One headline figure in the expanded traffic view. The diamond keys the series colour, so the strip
+ * doubles as the chart legend. */
+function DetailStat({
+	label,
+	value,
+	sub,
+	stroke,
+}: {
+	label: string;
+	value: string;
+	sub?: string;
+	stroke?: string;
+}): ReactNode {
+	return (
+		<div className="rounded-xl border border-neutral-100 bg-neutral-50/60 px-3 py-2">
+			<div className="flex items-center gap-1.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-[0.08em]">
+				{stroke ? (
+					<span
+						className="inline-block size-1.5 rotate-45 rounded-[1px]"
+						style={{ background: stroke }}
+						aria-hidden="true"
+					/>
+				) : null}
+				{label}
+			</div>
+			<div className="tabular mt-0.5 font-semibold text-2xl text-neutral-900 leading-none">
+				{value}
+			</div>
+			{sub ? <div className="mt-0.5 text-[11px] text-neutral-400">{sub}</div> : null}
+		</div>
+	);
+}
+
+/** The expanded Traffic-over-time drill-down: a headline strip (totals, peak day, daily average) over the
+ * full chart — materially more than the compact tile, which is the chart alone. */
+function TrafficDetail({
+	series,
+	annotations,
+}: {
+	series: SeriesPoint[];
+	annotations: ChartAnnotation[];
+}): ReactNode {
+	const totalPv = series.reduce((s, p) => s + p.pageviews, 0);
+	const totalVis = series.reduce((s, p) => s + p.visitors, 0);
+	const peak = series.reduce(
+		(best, p) => (p.pageviews > best.pageviews ? p : best),
+		series[0] ?? { t: 0, pageviews: 0, visitors: 0 },
+	);
+	const peakDate =
+		peak.t > 0
+			? new Date(peak.t).toLocaleDateString('en-US', {
+					month: 'short',
+					day: 'numeric',
+					timeZone: 'UTC',
+				})
+			: '—';
+	const avg = series.length > 0 ? Math.round(totalPv / series.length) : 0;
+	return (
+		<div className="flex h-full flex-col gap-3">
+			<div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
+				<DetailStat label="Pageviews" value={formatNumber(totalPv)} stroke="#0f172a" />
+				<DetailStat label="Visitors" value={formatNumber(totalVis)} stroke="#6366f1" />
+				<DetailStat
+					label="Peak / day"
+					value={formatNumber(peak.pageviews)}
+					sub={peakDate}
+				/>
+				<DetailStat label="Avg / day" value={formatNumber(avg)} />
+			</div>
+			<div className="min-h-0 flex-1">
+				<TrafficChart
+					bare
+					series={series}
+					annotations={annotations}
+					loading={false}
+					error={null}
+				/>
+			</div>
+		</div>
+	);
+}
+
 /** The catalog, keyed by tile id. Order here is the "Add tile" menu order. */
 export const TILE_REGISTRY: Record<string, TileDef> = {
 	traffic: {
@@ -138,15 +220,18 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 					Anomaly
 				</span>
 			) : null,
-		render: (ctx) => (
-			<TrafficChart
-				bare
-				series={ctx.series}
-				annotations={ctx.annotations}
-				loading={false}
-				error={null}
-			/>
-		),
+		render: (ctx, expanded) =>
+			expanded ? (
+				<TrafficDetail series={ctx.series} annotations={ctx.annotations} />
+			) : (
+				<TrafficChart
+					bare
+					series={ctx.series}
+					annotations={ctx.annotations}
+					loading={false}
+					error={null}
+				/>
+			),
 	},
 	pageviews: {
 		id: 'pageviews',
@@ -224,7 +309,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		size: 'tall',
 		emphasis: 'flow',
 		expandable: true,
-		render: (ctx) => <FlowTile cells={ctx.flowCells} dark />,
+		render: (ctx, expanded) => <FlowTile cells={ctx.flowCells} dark expanded={expanded} />,
 	},
 	pages: {
 		id: 'pages',
