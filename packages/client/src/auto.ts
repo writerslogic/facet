@@ -3,7 +3,7 @@
 
 import { assignment, variant, whenReady } from './experiments.js';
 import { init, track } from './index.js';
-import { isOptedOut, optIn, optOut, setOptOutScript } from './optout.js';
+import { isExplicitlyOptedOut, isOptedOut, optIn, optOut, setOptOutScript } from './optout.js';
 
 declare global {
 	interface Window {
@@ -58,7 +58,8 @@ function boot(): void {
 	// Resolve readiness even when opted out or when there are no experiments to fetch.
 	void whenReady();
 
-	if (isOptedOut()) return;
+	// A deliberate opt-out installs no trackers at all; a passive GPC/DNT signal still counts anonymously.
+	if (isExplicitlyOptedOut()) return;
 
 	track();
 

@@ -72,6 +72,38 @@ describe('opt-out state', () => {
 		expect(isOptedOut()).toBe(true);
 	});
 
+	it('isExplicitlyOptedOut() ignores the passive GPC/DNT signal so counting stays accurate', async () => {
+		stubPage();
+		stubStorage();
+		vi.stubGlobal('navigator', {
+			globalPrivacyControl: true,
+			doNotTrack: '1',
+		});
+		const { isOptedOut, isExplicitlyOptedOut } = await import('../src/optout.js');
+		// The passive signal opts out of personalization but NOT the anonymous count.
+		expect(isOptedOut()).toBe(true);
+		expect(isExplicitlyOptedOut()).toBe(false);
+	});
+
+	it('isExplicitlyOptedOut() honors the deliberate kill switch and data-facet-optout', async () => {
+		stubPage();
+		vi.stubGlobal('navigator', {});
+		const { isExplicitlyOptedOut, setOptOutScript } = await import('../src/optout.js');
+		const store: Record<string, string> = { 'facet.optout': '1' };
+		vi.stubGlobal('localStorage', {
+			getItem: (k: string) => store[k] ?? null,
+			setItem: (k: string, v: string) => {
+				store[k] = v;
+			},
+		});
+		expect(isExplicitlyOptedOut()).toBe(true);
+		store['facet.optout'] = '0';
+		expect(isExplicitlyOptedOut()).toBe(false);
+		setOptOutScript({ getAttribute: () => '' });
+		delete store['facet.optout'];
+		expect(isExplicitlyOptedOut()).toBe(true);
+	});
+
 	it('does NOT opt out for globalPrivacyControl === false', async () => {
 		stubPage();
 		stubStorage();
@@ -191,7 +223,7 @@ describe('opt-out blocks collection', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('track() no-ops when opted out via DNT', async () => {
+	it('track() STILL sends under DNT — the anonymous count is not suppressed', async () => {
 		stubPage();
 		stubStorage();
 		const beacon = vi.fn(() => true);
@@ -200,10 +232,10 @@ describe('opt-out blocks collection', () => {
 		init({ host: HOST, siteId: SITE });
 		track('signup');
 		await new Promise((r) => setTimeout(r, 0));
-		expect(beacon).not.toHaveBeenCalled();
+		expect(beacon).toHaveBeenCalledOnce();
 	});
 
-	it('track() no-ops when opted out via GPC', async () => {
+	it('track() STILL sends under GPC — the anonymous count is not suppressed', async () => {
 		stubPage();
 		stubStorage();
 		const beacon = vi.fn(() => true);
@@ -211,6 +243,18 @@ describe('opt-out blocks collection', () => {
 			globalPrivacyControl: true,
 			sendBeacon: beacon,
 		});
+		const { init, track } = await import('../src/index.js');
+		init({ host: HOST, siteId: SITE });
+		track('signup');
+		await new Promise((r) => setTimeout(r, 0));
+		expect(beacon).toHaveBeenCalledOnce();
+	});
+
+	it('track() no-ops under the DELIBERATE localStorage kill switch', async () => {
+		stubPage();
+		stubStorage({ 'facet.optout': '1' });
+		const beacon = vi.fn(() => true);
+		vi.stubGlobal('navigator', { sendBeacon: beacon });
 		const { init, track } = await import('../src/index.js');
 		init({ host: HOST, siteId: SITE });
 		track('signup');

@@ -2,7 +2,7 @@
 // config. Zero dependencies.
 
 import type { EventProps } from '@facet/shared';
-import { isOptedOut } from './optout.js';
+import { isExplicitlyOptedOut } from './optout.js';
 
 export interface FacetConfig {
 	/** Collect endpoint origin, e.g. "https://analytics.example.com". */
@@ -28,7 +28,9 @@ function parseUtmFromSearch(search: string): Record<string, string> | undefined 
 
 /** Track a pageview (no name) or a named custom event. */
 export function track(_name?: string, _props?: EventProps): void {
-	if (!Config || isOptedOut()) return;
+	// Only a DELIBERATE opt-out suppresses the anonymous, cookieless pageview/event — a passive GPC/DNT
+	// signal does not, so total traffic stays accurately counted (see isExplicitlyOptedOut).
+	if (!Config || isExplicitlyOptedOut()) return;
 	const { host, siteId } = Config;
 	const hostname = typeof location !== 'undefined' ? location.hostname : '';
 	const path = typeof location !== 'undefined' ? location.pathname : '/';

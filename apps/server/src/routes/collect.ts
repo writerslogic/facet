@@ -19,11 +19,11 @@ collectRoute.post(
 	rateLimit((c) => `collect:${clientIp(c.req.raw)}`),
 	vValidator('json', CollectPayloadSchema, validationErrorHook),
 	async (c) => {
-		// GPC opt-out: drop silently (202) before any hashing or write, like a client opt-out.
+		// GPC (Sec-GPC: 1) no longer drops the event: an anonymous, cookieless pageview carries no personal
+		// data, so it is still counted so total traffic stays accurate. GPC instead forces the anonymous
+		// Tier-0 hash downstream (a GPC visitor is never identity-elevated). A deliberate client opt-out
+		// sends no beacon at all, so it never reaches here.
 		const gpc = isGpcOptOut(c.req.raw);
-		if (gpc) {
-			return c.body(null, 202);
-		}
 		const body = c.req.valid('json');
 		const ua = c.req.header('user-agent') ?? '';
 		// The public beacon carries no trusted identity, so it can only ever produce a Tier 0/1 hash.

@@ -1,6 +1,7 @@
-// Global Privacy Control: a `Sec-GPC: 1` request signal is an opt-out. Both the public beacon
-// (/api/collect, which also carries experiment exposures) and the authenticated first-party endpoint
-// (/api/event) must drop the request with 202 and write nothing. Without the header, ingest proceeds.
+// Global Privacy Control: a `Sec-GPC: 1` request signal no longer drops the request — an anonymous,
+// cookieless pageview carries no personal data, so both the public beacon (/api/collect) and the
+// authenticated first-party endpoint (/api/event) still COUNT it (accurate total traffic). GPC forces
+// the anonymous Tier-0 hash downstream, so the visitor is never identity-elevated.
 
 import { env } from 'cloudflare:test';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -56,11 +57,11 @@ describe('isGpcOptOut', () => {
 });
 
 describe('GPC on /api/collect', () => {
-	it('drops the beacon (and experiment exposure) with 202 and writes nothing', async () => {
+	it('still counts the beacon under GPC (anonymous, cookieless — accurate total traffic)', async () => {
 		const res = await collect({ 'Sec-GPC': '1' });
 		expect(res.status).toBe(202);
 		expect(await res.text()).toBe('');
-		expect(await eventCount(SITE_COLLECT)).toBe(0);
+		expect(await eventCount(SITE_COLLECT)).toBe(1);
 	});
 
 	it('ingests normally without the GPC signal', async () => {
@@ -96,10 +97,10 @@ describe('GPC on /api/event', () => {
 		);
 	}
 
-	it('drops the event with 202 and writes nothing under GPC', async () => {
+	it('still counts the event under GPC (anonymously — never identity-elevated)', async () => {
 		const res = await post({ 'Sec-GPC': '1' });
 		expect(res.status).toBe(202);
-		expect(await eventCount(SITE_EVENT)).toBe(0);
+		expect(await eventCount(SITE_EVENT)).toBe(1);
 	});
 
 	it('ingests normally without the GPC signal', async () => {

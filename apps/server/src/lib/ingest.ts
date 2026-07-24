@@ -3,13 +3,13 @@
 // privacy-safe visitor hash, classifies the traffic channel, and writes a raw event + session.
 // The raw IP is used only to derive the hash and is never stored, logged, or returned.
 
-import type { EventProps } from '@facet/shared';
-import { insertEvent, upsertSession } from '../db/queries.js';
-import type { Env } from '../env.js';
-import { isBot } from './bots.js';
-import { classifyChannel } from './channel.js';
-import { findActiveConsent } from './consent.js';
-import { visitorHash } from './hash.js';
+import type { EventProps } from "@facet/shared";
+import { insertEvent, upsertSession } from "../db/queries.js";
+import type { Env } from "../env.js";
+import { isBot } from "./bots.js";
+import { classifyChannel } from "./channel.js";
+import { findActiveConsent } from "./consent.js";
+import { visitorHash } from "./hash.js";
 import {
 	type IdentityPolicy,
 	deriveVisitorHash,
@@ -17,8 +17,8 @@ import {
 	resolvePolicy,
 	windowEndMs,
 	windowKey,
-} from './identity.js';
-import { dayKey, getDailySalt } from './salt.js';
+} from "./identity.js";
+import { dayKey, getDailySalt } from "./salt.js";
 
 export interface IngestInput {
 	siteId: string;
@@ -35,8 +35,9 @@ export interface IngestInput {
 	country: string | null;
 	device: string | null;
 	now: number;
-	/** The visitor's GPC opt-out signal. Enforced HERE (not only at the route) so every caller of
-	 * ingestEvent drops a GPC visitor by construction — a new write path can't forget it. */
+	/** The visitor's GPC signal. Enforced HERE (not only at the route) so every caller of ingestEvent
+	 * treats a GPC visitor the same by construction: still counted, but forced to the anonymous Tier-0
+	 * hash (never identity-elevated) — a new write path can't forget it. */
 	gpc: boolean;
 	/** Deployment request URL, for the did:web issuer binding when verifying consent. */
 	url: URL;
@@ -49,15 +50,16 @@ export interface IngestInput {
 /** Derive the visitor hash under the site's identity policy. Tier 0 is the legacy day-salt path,
  * byte-for-byte unchanged. Above Tier 0, elevation happens ONLY when an active, deployment-key-signed,
  * context-bound consent record exists for the derived per-window hash; otherwise the event silently
- * downgrades to the anonymous Tier-0 hash (never dropped — dropping is reserved for GPC). Only an
- * elevated site (explicitly opted in) ever touches `identity_salts`. */
+ * downgrades to the anonymous Tier-0 hash. A GPC signal forces the anonymous Tier-0 hash outright, so a
+ * GPC visitor is counted but never identity-elevated. Only an elevated site (explicitly opted in) ever
+ * touches `identity_salts`. */
 async function deriveForIngest(
 	env: Env,
 	input: IngestInput,
 	policy: IdentityPolicy,
 	dk: string,
 ): Promise<string> {
-	if (policy.tier === 'anonymous') {
+	if (policy.tier === "anonymous" || input.gpc) {
 		const salt = await getDailySalt(env, dk, input.now);
 		return visitorHash(input.ip, input.ua, salt, input.siteId);
 	}
@@ -70,7 +72,10 @@ async function deriveForIngest(
 		windowEndMs(policy.window, input.now),
 		input.now,
 	);
-	const uid = policy.tier === 'identified' && input.consent === true ? (input.uid ?? null) : null;
+	const uid =
+		policy.tier === "identified" && input.consent === true
+			? (input.uid ?? null)
+			: null;
 	const vh = await deriveVisitorHash(
 		policy.tier,
 		{ ip: input.ip, ua: input.ua, uid },
@@ -90,9 +95,13 @@ async function deriveForIngest(
 	return visitorHash(input.ip, input.ua, daySalt, input.siteId);
 }
 
-/** Run the ingest pipeline for one event. Returns whether a row was written (bots and GPC drop). */
-export async function ingestEvent(env: Env, input: IngestInput): Promise<{ inserted: boolean }> {
-	if (isBot(input.ua) || input.gpc) {
+/** Run the ingest pipeline for one event. Returns whether a row was written. Bots are dropped; a GPC
+ * visitor is still counted (anonymously — deriveForIngest forces the Tier-0 hash for them). */
+export async function ingestEvent(
+	env: Env,
+	input: IngestInput,
+): Promise<{ inserted: boolean }> {
+	if (isBot(input.ua)) {
 		return { inserted: false };
 	}
 	// Sessions always dedup on the calendar day, INDEPENDENT of the hash's salt window, so a wider

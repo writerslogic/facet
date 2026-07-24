@@ -71,7 +71,8 @@ function scriptOptOut(): boolean {
 }
 
 /**
- * Whether the visitor is opted out. Precedence (highest first):
+ * Whether the visitor is opted out of INDIVIDUAL tracking / personalization (experiments, flags).
+ * Precedence (highest first):
  *   1. localStorage['facet.optout'] explicit value ('1'/'true' out, '0'/'false' in) — the
  *      visitor's persistent choice, which OVERRIDES DNT because it is deliberate and per-visitor.
  *   2. data-facet-optout script attribute.
@@ -84,6 +85,21 @@ export function isOptedOut(): boolean {
 	if (stored === '0' || stored === 'false') return false;
 	if (scriptOptOut()) return true;
 	return browserSignalOptOut();
+}
+
+/**
+ * Whether the visitor made a DELIBERATE opt-out choice — the localStorage kill switch or the
+ * `data-facet-optout` script attribute. This is the gate for anonymous pageview/event counting, and
+ * unlike isOptedOut() it does NOT treat the passive Do-Not-Track / Global Privacy Control browser
+ * signal as opt-out. Those signals govern the sale/sharing of PERSONAL data; a cookieless, aggregate
+ * pageview carries none, so counting it keeps total-traffic figures accurate while staying privacy-first
+ * (the Plausible/Fathom model). An explicit localStorage opt-in ('0'/'false') is honored as opted-in.
+ */
+export function isExplicitlyOptedOut(): boolean {
+	const stored = safeGet(OPTOUT_KEY);
+	if (stored === '1' || stored === 'true') return true;
+	if (stored === '0' || stored === 'false') return false;
+	return scriptOptOut();
 }
 
 /** Persist a visitor opt-out. Takes effect immediately for every collection path. */

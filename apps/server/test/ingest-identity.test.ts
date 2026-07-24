@@ -62,10 +62,11 @@ describe('ingestEvent under the identity spectrum', () => {
 		expect(await storedHashes(env)).toEqual([legacy]);
 	});
 
-	it('drops a GPC visitor inside ingestEvent (structural backstop)', async () => {
+	it('counts a GPC visitor anonymously inside ingestEvent (Tier-0, never dropped)', async () => {
 		const res = await ingestEvent(env, { ...baseInput, gpc: true });
-		expect(res.inserted).toBe(false);
-		expect(await storedHashes(env)).toEqual([]);
+		expect(res.inserted).toBe(true);
+		const anon = await visitorHash(IP, UA, await getDailySalt(env, dayKey(NOW), NOW), SITE);
+		expect(await storedHashes(env)).toEqual([anon]);
 	});
 
 	describe('elevated site', () => {

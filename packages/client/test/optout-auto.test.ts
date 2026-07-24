@@ -1,6 +1,7 @@
-// Opt-out gating of the auto bundle: when opted out (DNT, data-facet-optout, or the localStorage
-// kill switch) the bundle sends no initial pageview, no SPA navigation events, no form_submit, and
-// reads no UTM. The umami shim obeys the same state, and whenReady() still resolves.
+// Opt-out gating of the auto bundle: a DELIBERATE opt-out (data-facet-optout or the localStorage kill
+// switch) sends no initial pageview, no SPA navigation events, no form_submit, and reads no UTM; the
+// umami shim obeys the same state, and whenReady() still resolves. A passive DNT/GPC browser signal does
+// NOT suppress counting — anonymous, cookieless pageviews are still sent so total traffic stays accurate.
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -96,20 +97,21 @@ describe('opt-out gates the auto bundle', () => {
 		vi.unstubAllGlobals();
 	});
 
-	it('sends nothing when opted out via DNT: no pageview, SPA, form, or UTM', async () => {
+	it('still counts under a passive DNT signal: anonymous pageview + SPA + form all send', async () => {
 		const env = setup({ dnt: true });
 		await import('../src/auto.js');
-		expect(env.beacons()).toBe(0);
+		// Initial pageview is counted despite DNT — DNT is not a deliberate opt-out.
+		expect(env.beacons()).toBe(1);
 		env.pushState();
 		env.popstate();
 		env.submit(form());
 		await new Promise((r) => setTimeout(r, 0));
-		expect(env.beacons()).toBe(0);
-		// The umami shim obeys the same opt-out state.
+		// pushState + popstate + form_submit each add a beacon.
+		expect(env.beacons()).toBe(4);
 		expect(typeof window.umami?.track).toBe('function');
 		window.umami?.track('signup');
 		await new Promise((r) => setTimeout(r, 0));
-		expect(env.beacons()).toBe(0);
+		expect(env.beacons()).toBe(5);
 	});
 
 	it('sends nothing when opted out via data-facet-optout', async () => {

@@ -25,12 +25,10 @@ eventRoute.post(
 	rateLimit((c) => `event:${c.get('siteId')}`),
 	vValidator('json', ServerEventSchema, validationErrorHook),
 	async (c) => {
-		// GPC opt-out: an authenticated backend still relays the visitor's signal; drop before write.
-		// GPC-at-request-time beats any stored consent — the opt-out is the visitor's, not the caller's.
+		// GPC (relayed by the backend) no longer drops the event: the anonymous pageview is still counted
+		// so total traffic stays accurate. It forces the anonymous Tier-0 hash downstream, so a GPC visitor
+		// is counted but never identity-elevated, regardless of any stored consent or supplied user_id.
 		const gpc = isGpcOptOut(c.req.raw);
-		if (gpc) {
-			return c.body(null, 202);
-		}
 		const body = c.req.valid('json');
 		const ua = body.user_agent ?? '';
 		await ingestEvent(c.env, {
