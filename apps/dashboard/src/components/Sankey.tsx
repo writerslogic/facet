@@ -58,7 +58,7 @@ interface Layout {
 /** Lay out nodes column-by-column, height ∝ throughput, then compute per-link source/target offsets so
  * bands stack within each node without overlapping. Returns placed nodes + ribbon endpoint coordinates
  * (numbers, not a path string) so the render can interpolate them frame-by-frame. */
-function layout(nodes: SankeyNode[], links: SankeyLink[]): Layout {
+function layout(nodes: SankeyNode[], links: SankeyLink[], h: number): Layout {
 	const columns = [...new Set(nodes.map((n) => n.column))].sort((a, b) => a - b);
 	const outByNode = new Map<string, number>();
 	const inByNode = new Map<string, number>();
@@ -75,7 +75,7 @@ function layout(nodes: SankeyNode[], links: SankeyLink[]): Layout {
 	for (const c of columns) {
 		const colNodes = nodes.filter((n) => n.column === c);
 		const total = colNodes.reduce((s, n) => s + throughput(n.id), 0) || 1;
-		const usable = H - GAP * Math.max(0, colNodes.length - 1);
+		const usable = h - GAP * Math.max(0, colNodes.length - 1);
 		let y = 0;
 		for (const n of colNodes.sort((a, b) => throughput(b.id) - throughput(a.id))) {
 			const h = Math.max(2, (throughput(n.id) / total) * usable);
@@ -208,9 +208,26 @@ export function Sankey({
 	className?: string;
 }): ReactElement | null {
 	const gid = useId();
+	const svgRef = useRef<SVGSVGElement>(null);
+	// Match the viewBox height to the container's real aspect ratio so the diagram fills the tile instead
+	// of letterboxing — the layout then spreads its node stacks across the full measured height.
+	const [vbH, setVbH] = useState(H);
+	useEffect(() => {
+		const el = svgRef.current;
+		if (!el) return;
+		const measure = (): void => {
+			const r = el.getBoundingClientRect();
+			if (r.width > 0 && r.height > 0)
+				setVbH(Math.max(160, ((W + 128) * r.height) / r.width - 16));
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, []);
 	const target = useMemo(
-		() => (nodes.length === 0 || links.length === 0 ? null : layout(nodes, links)),
-		[nodes, links],
+		() => (nodes.length === 0 || links.length === 0 ? null : layout(nodes, links, vbH)),
+		[nodes, links, vbH],
 	);
 	// The displayed layout is always derived from the CURRENT target's structure, tweened toward it by a
 	// progress scalar — so a graph change shows the new nodes/ribbons immediately (positions animate, not
@@ -261,7 +278,8 @@ export function Sankey({
 
 	return (
 		<svg
-			viewBox={`-64 -8 ${W + 128} ${H + 16}`}
+			ref={svgRef}
+			viewBox={`-64 -8 ${W + 128} ${vbH + 16}`}
 			preserveAspectRatio="xMidYMid meet"
 			className={cn('h-full w-full', className)}
 			role="img"
