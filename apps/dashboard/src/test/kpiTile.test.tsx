@@ -14,6 +14,20 @@ describe('KpiTile', () => {
 		expect(screen.queryByText('Peak')).toBeNull();
 	});
 
+	it('shows the delta magnitude without a sign (direction is carried by the arrow)', () => {
+		render(
+			<KpiTile
+				label="Visitors"
+				value={100}
+				deltaPct={-12}
+				deltaSense="regression"
+				spark={SPARK}
+			/>,
+		);
+		expect(screen.getByText('12%')).toBeInTheDocument();
+		expect(screen.queryByText('-12%')).toBeNull();
+	});
+
 	it('expanded mode reveals the Avg/Peak/Low detail from the series', () => {
 		render(<KpiTile label="Pageviews" value={744} spark={SPARK} expanded />);
 		expect(screen.getByText('744')).toBeInTheDocument();

@@ -34,6 +34,9 @@ export function TopList({
 }: TopListProps): ReactElement {
 	const shown = limit ? rows.slice(0, limit) : rows;
 	const max = shown.reduce((acc, row) => Math.max(acc, row.count), 0);
+	// Share is of the WHOLE dataset (all rows), not just the shown top-N, so a row's % reads as its
+	// true portion of traffic rather than its portion of the visible slice.
+	const total = rows.reduce((acc, row) => acc + row.count, 0);
 	const interactive = Boolean(onSelect);
 	const cls =
 		'group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-lg px-2.5 py-2 text-left text-sm transition-colors';
@@ -71,8 +74,13 @@ export function TopList({
 								) : null}
 								<span className="truncate">{row.key}</span>
 							</span>
-							<span className="relative z-10 shrink-0 font-semibold text-neutral-900 tabular-nums">
-								{formatNumber(row.count)}
+							<span className="relative z-10 flex shrink-0 items-baseline gap-1.5">
+								<span className="text-[11px] text-neutral-400 tabular-nums">
+									{total > 0 ? Math.round((row.count / total) * 100) : 0}%
+								</span>
+								<span className="font-semibold text-neutral-900 tabular-nums">
+									{formatNumber(row.count)}
+								</span>
 							</span>
 						</>
 					);

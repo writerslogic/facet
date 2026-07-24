@@ -20,6 +20,16 @@ describe('TopList', () => {
 		expect(bars[1]).toHaveStyle({ width: '25%' });
 	});
 
+	it("shows each row's share of the whole dataset", () => {
+		const rows: CountRow[] = [
+			{ key: '/a', count: 75 },
+			{ key: '/b', count: 25 },
+		];
+		render(<TopList title="Top Pages" rows={rows} />);
+		expect(screen.getByText('75%')).toBeInTheDocument();
+		expect(screen.getByText('25%')).toBeInTheDocument();
+	});
+
 	it('renders an empty state for an empty list', () => {
 		render(<TopList title="Top Pages" rows={[]} />);
 		expect(screen.getByText('No data yet')).toBeInTheDocument();

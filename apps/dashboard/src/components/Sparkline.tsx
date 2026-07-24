@@ -13,6 +13,7 @@ export function Sparkline({
 	className,
 	fill = false,
 	prominent = false,
+	marker = false,
 }: {
 	values: number[];
 	width?: number;
@@ -22,6 +23,8 @@ export function Sparkline({
 	fill?: boolean;
 	/** A bolder line + stronger area fill, for the large drill-down chart in an expanded KPI tile. */
 	prominent?: boolean;
+	/** A focal dot at the latest value — the "you are here" point that makes the spark read as live. */
+	marker?: boolean;
 }): ReactElement | null {
 	const gradId = useId();
 	if (values.length < 2) return null;
@@ -36,6 +39,7 @@ export function Sparkline({
 	});
 	const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
 	const area = `${coords[0]?.[0].toFixed(1)},${height} ${line} ${coords[coords.length - 1]?.[0].toFixed(1)},${height}`;
+	const last = coords[coords.length - 1];
 	const responsive = Boolean(className);
 
 	return (
@@ -72,6 +76,17 @@ export function Sparkline({
 				strokeLinejoin="round"
 				vectorEffect={responsive ? 'non-scaling-stroke' : undefined}
 			/>
+			{marker && last ? (
+				<circle
+					cx={last[0]}
+					cy={last[1]}
+					r={prominent ? 3 : 2.2}
+					fill={stroke}
+					stroke="white"
+					strokeWidth={prominent ? 2 : 1.5}
+					vectorEffect={responsive ? 'non-scaling-stroke' : undefined}
+				/>
+			) : null}
 		</svg>
 	);
 }

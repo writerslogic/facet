@@ -2,7 +2,7 @@
 // ring, gradient-lit face, top highlight) that lifts on hover and can expand to a focused drill-down;
 // a count-up hook so metrics animate in "alive"; and a compact KPI readout for a tile.
 
-import { Maximize2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Maximize2, X } from 'lucide-react';
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/cn.js';
 import { formatNumber } from '../lib/format.js';
@@ -199,12 +199,16 @@ export function KpiTile({
 		deltaPct != null ? (
 			<span
 				className={cn(
-					'tabular inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1',
+					'tabular inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1',
 					tone,
 				)}
 			>
-				{deltaPct >= 0 ? '+' : ''}
-				{deltaPct}%
+				{deltaPct >= 0 ? (
+					<ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />
+				) : (
+					<ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />
+				)}
+				{Math.abs(deltaPct)}%
 			</span>
 		) : null;
 
@@ -247,6 +251,7 @@ export function KpiTile({
 							stroke={stroke}
 							fill
 							prominent
+							marker
 							className="h-full w-full"
 						/>
 					</div>
@@ -274,6 +279,7 @@ export function KpiTile({
 						values={spark as number[]}
 						stroke={stroke}
 						fill
+						marker
 						className="h-full w-full"
 					/>
 				</div>
