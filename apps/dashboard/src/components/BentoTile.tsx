@@ -81,7 +81,7 @@ export function BentoTile({
 	return (
 		<section
 			className={cn(
-				'group relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-200/70 p-4',
+				'facet-glint group relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-neutral-200/70 p-4',
 				'shadow-card ring-1 transition-all duration-300 ease-out',
 				focused
 					? 'z-20 shadow-float ring-2 ring-accent-500/30'
@@ -226,7 +226,12 @@ export function KpiTile({
 		return (
 			<div className="flex h-full items-stretch gap-5" style={{ background: tint }}>
 				<div className="flex min-w-0 flex-col justify-center">
-					<div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+					<div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-500">
+						<span
+							className="inline-block size-1.5 rotate-45 rounded-[1px]"
+							style={{ background: stroke }}
+							aria-hidden="true"
+						/>
 						{label}
 					</div>
 					<div className="mt-1 flex items-baseline gap-2">

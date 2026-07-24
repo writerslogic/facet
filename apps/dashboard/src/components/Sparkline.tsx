@@ -77,13 +77,17 @@ export function Sparkline({
 				vectorEffect={responsive ? 'non-scaling-stroke' : undefined}
 			/>
 			{marker && last ? (
-				<circle
-					cx={last[0]}
-					cy={last[1]}
-					r={prominent ? 3 : 2.2}
+				// A faceted diamond (rotated square) rather than a dot — the "cut gem" motif on the live value.
+				<path
+					d={(() => {
+						const [x, y] = last;
+						const r = prominent ? 3.2 : 2.6;
+						return `M${x},${y - r} L${x + r},${y} L${x},${y + r} L${x - r},${y} Z`;
+					})()}
 					fill={stroke}
 					stroke="white"
 					strokeWidth={prominent ? 2 : 1.5}
+					strokeLinejoin="round"
 					vectorEffect={responsive ? 'non-scaling-stroke' : undefined}
 				/>
 			) : null}
