@@ -35,6 +35,141 @@ html {
 	font-feature-settings: 'cv11', 'ss01';
 }
 
+/* --- Theme tokens -----------------------------------------------------------------------------
+   Semantic variables so the whole app can re-skin from Settings. The PRINCIPLE (per design review):
+   surfaces + text + borders stay NEUTRAL; the vibrant palette colours (--d1..--d3, --c1..--c6, --pos)
+   are reserved strictly for DATA (chart lines, bars, map, ribbons, active filters) so metrics pop.
+   `--palette` sets the data + dark surfaces; `[data-mode="light"]` flips surfaces (and tunes data for a
+   white background). Default (no attribute) = Prism dark, so an un-themed render still looks right. */
+:root,
+[data-palette='prism'] {
+	--bg: #0a0a0f;
+	--panel: #16161d;
+	--border: 255 255 255 / 0.08;
+	--hover: 255 255 255 / 0.045;
+	--ink: #f5f4fb;
+	--muted: #9ca3b8;
+	--faint: #6b7192;
+	--bloom1: 99 102 241 / 0.2;
+	--bloom2: 217 70 239 / 0.12;
+	--d1: #818cf8;
+	--d2: #c4b5fd;
+	--d3: #e879f9;
+	--pos: #34d399;
+	--neg: #fb7185;
+	--c1: #6366f1;
+	--c2: #8b5cf6;
+	--c3: #d946ef;
+	--c4: #22d3ee;
+	--c5: #f59e0b;
+	--c6: #34d399;
+}
+[data-palette='bio'] {
+	--bg: #0b0c10;
+	--panel: #1f2833;
+	--border: 200 240 240 / 0.1;
+	--hover: 200 240 240 / 0.06;
+	--ink: #eaf6f6;
+	--muted: #9aa8ad;
+	--faint: #66757f;
+	--bloom1: 102 252 241 / 0.16;
+	--bloom2: 240 0 255 / 0.12;
+	--d1: #66fcf1;
+	--d2: #f000ff;
+	--d3: #45a29e;
+	--pos: #45a29e;
+	--neg: #ff5470;
+	--c1: #66fcf1;
+	--c2: #f000ff;
+	--c3: #7b6cff;
+	--c4: #ffd166;
+	--c5: #ff6b6b;
+	--c6: #45a29e;
+}
+[data-palette='aurora'] {
+	--bg: #121420;
+	--panel: #1e2235;
+	--border: 200 200 255 / 0.1;
+	--hover: 200 200 255 / 0.06;
+	--ink: #f2f1f9;
+	--muted: #9aa0b8;
+	--faint: #6b7192;
+	--bloom1: 255 107 107 / 0.16;
+	--bloom2: 255 209 102 / 0.12;
+	--d1: #ff6b6b;
+	--d2: #ffd166;
+	--d3: #06d6a0;
+	--pos: #06d6a0;
+	--neg: #ff6b6b;
+	--c1: #ff6b6b;
+	--c2: #ffd166;
+	--c3: #06d6a0;
+	--c4: #4d96ff;
+	--c5: #c77dff;
+	--c6: #ff9f1c;
+}
+[data-palette='fintech'] {
+	--bg: #1a1a1d;
+	--panel: #2b2b30;
+	--border: 255 255 255 / 0.09;
+	--hover: 255 255 255 / 0.05;
+	--ink: #ececed;
+	--muted: #a0a0a8;
+	--faint: #74747e;
+	--bloom1: 77 143 172 / 0.16;
+	--bloom2: 181 131 141 / 0.12;
+	--d1: #4d8fac;
+	--d2: #b5838d;
+	--d3: #81b29a;
+	--pos: #81b29a;
+	--neg: #c98a91;
+	--c1: #4d8fac;
+	--c2: #b5838d;
+	--c3: #81b29a;
+	--c4: #e0b589;
+	--c5: #6d8299;
+	--c6: #a5a58d;
+}
+
+/* Light mode: neutral near-white surfaces for every palette; data colours deepen for contrast on white. */
+[data-mode='light'] {
+	--bg: #f6f7f9;
+	--panel: #ffffff;
+	--border: 15 23 42 / 0.08;
+	--hover: 15 23 42 / 0.035;
+	--ink: #0f172a;
+	--muted: #475569;
+	--faint: #94a3b8;
+	--bloom1: 99 102 241 / 0.07;
+	--bloom2: 217 70 239 / 0.05;
+}
+[data-mode='light'][data-palette='prism'] {
+	--d1: #4f46e5;
+	--d2: #7c3aed;
+	--d3: #c026d3;
+}
+[data-mode='light'][data-palette='bio'] {
+	--d1: #0891b2;
+	--d2: #c026d3;
+	--d3: #0f766e;
+	--bloom1: 8 145 178 / 0.07;
+	--bloom2: 192 38 211 / 0.05;
+}
+[data-mode='light'][data-palette='aurora'] {
+	--d1: #ea580c;
+	--d2: #d97706;
+	--d3: #059669;
+	--bloom1: 234 88 12 / 0.07;
+	--bloom2: 217 119 6 / 0.05;
+}
+[data-mode='light'][data-palette='fintech'] {
+	--d1: #2f6f8f;
+	--d2: #9d6b74;
+	--d3: #4a7c59;
+	--bloom1: 47 111 143 / 0.07;
+	--bloom2: 157 107 116 / 0.05;
+}
+
 /* Warm-neutral base lit by two faint accent auras (top-left indigo, top-right violet), so the canvas
    reads as designed light rather than flat #fff. Fixed so it doesn't scroll away under content. */
 body {
@@ -72,6 +207,8 @@ body {
    + data-viz rather than washing whole surfaces. */
 :root {
 	--gradient-prism: linear-gradient(115deg, #6366f1 0%, #8b5cf6 46%, #d946ef 100%);
+	/* The active palette's data gradient (late-bound to --c1..--c3), used on data accents + the tile edge. */
+	--gradient-data: linear-gradient(115deg, var(--c1) 0%, var(--c2) 46%, var(--c3) 100%);
 }
 .text-prism {
 	background-image: var(--gradient-prism);
@@ -99,13 +236,13 @@ body {
    the prismatic charts glow on it. Scoped to `.facet-dark` (the Overview shell only) — the other tabs
    stay light. Fixed so the bloom doesn't scroll under the board. */
 .facet-dark {
-	background-color: #05040c;
+	background-color: var(--bg);
 	background-image:
-		radial-gradient(72rem 46rem at 28% -6%, rgb(99 102 241 / 0.2), transparent 60%),
-		radial-gradient(56rem 40rem at 104% 0%, rgb(217 70 239 / 0.12), transparent 55%),
-		conic-gradient(from 210deg at 36% 22%, rgb(99 102 241 / 0.13), rgb(217 70 239 / 0.06), transparent 42%),
-		repeating-linear-gradient(30deg, rgb(196 181 253 / 0.035) 0 1px, transparent 1px 48px),
-		repeating-linear-gradient(150deg, rgb(196 181 253 / 0.03) 0 1px, transparent 1px 48px);
+		radial-gradient(72rem 46rem at 28% -6%, rgb(var(--bloom1)), transparent 60%),
+		radial-gradient(56rem 40rem at 104% 0%, rgb(var(--bloom2)), transparent 55%),
+		conic-gradient(from 210deg at 36% 22%, rgb(var(--bloom1)), rgb(var(--bloom2)), transparent 42%),
+		repeating-linear-gradient(30deg, rgb(var(--border)) 0 1px, transparent 1px 48px),
+		repeating-linear-gradient(150deg, rgb(var(--border)) 0 1px, transparent 1px 48px);
 	background-attachment: fixed;
 	background-repeat: no-repeat;
 }
@@ -113,12 +250,12 @@ body {
 /* A single dark tile: opaque ink face (blur fights the canvas charts), hairline lilac border, and a
    bevel — top-left light, bottom-right dark — read as a cut facet rather than a floating card. */
 .tile-dark {
-	background-color: #0c0b16;
-	border: 1px solid rgb(196 181 253 / 0.14);
+	background-color: var(--panel);
+	border: 1px solid rgb(var(--border));
 	box-shadow:
-		inset 1px 1px 0 rgb(255 255 255 / 0.06),
-		inset -1px -1px 0 rgb(0 0 0 / 0.5),
-		0 12px 34px -14px rgb(0 0 0 / 0.7);
+		inset 1px 1px 0 rgb(255 255 255 / 0.05),
+		inset -1px -1px 0 rgb(0 0 0 / 0.35),
+		0 12px 34px -14px rgb(0 0 0 / 0.55);
 }
 /* Hover/focus lights the perimeter with the prism gradient (border only — no floating shadow). */
 .tile-dark::before {
@@ -127,7 +264,7 @@ body {
 	inset: -1px;
 	border-radius: inherit;
 	padding: 1px;
-	background: var(--gradient-prism);
+	background: var(--gradient-data);
 	-webkit-mask:
 		linear-gradient(#000 0 0) content-box,
 		linear-gradient(#000 0 0);

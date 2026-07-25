@@ -2,12 +2,13 @@
 // series with a hovering cursor, readable UTC date/number axes, and a subtle grid. Resizes with a
 // ResizeObserver. uPlot needs canvas; if the mount throws (e.g. under jsdom) it degrades gracefully.
 
-import type { SeriesPoint } from '@facet/shared';
-import { type ReactElement, useEffect, useMemo, useRef } from 'react';
-import uPlot from 'uplot';
-import 'uplot/dist/uPlot.min.css';
-import { formatCompact, formatNumber } from '../lib/format.js';
-import { Card } from './Card.js';
+import type { SeriesPoint } from "@facet/shared";
+import { type ReactElement, useEffect, useMemo, useRef } from "react";
+import uPlot from "uplot";
+import "uplot/dist/uPlot.min.css";
+import { formatCompact, formatNumber } from "../lib/format.js";
+import { type ThemeColors, useThemeColors } from "../theme.js";
+import { Card } from "./Card.js";
 
 /** A vertical event marker on the time axis (e.g. a detected anomaly). */
 export interface ChartAnnotation {
@@ -28,8 +29,8 @@ interface TrafficChartProps {
 	bare?: boolean;
 }
 
-// Two palettes: DARK for the ink board (pageviews ridge white-hot, visitors luminous indigo, fuchsia
-// anomalies), LIGHT for the Ask tab's white cards. `bare` (the board's fill-height mode) selects dark.
+// The chart's resolved colours (from the active theme): pageviews on `ink`=primary, visitors on
+// `accent`=secondary, anomalies on `mark`=accent hue, over a faint token grid.
 interface Palette {
 	accent: string;
 	ink: string;
@@ -39,29 +40,14 @@ interface Palette {
 	pvFill: [string, string];
 	visFill: [string, string];
 }
-const DARK: Palette = {
-	accent: '#818cf8',
-	ink: '#f5f3ff',
-	grid: 'rgba(196,181,253,0.08)',
-	axis: '#6b7192',
-	mark: '#d946ef',
-	pvFill: ['rgba(245,243,255,0.22)', 'rgba(245,243,255,0.00)'],
-	visFill: ['rgba(129,140,248,0.30)', 'rgba(129,140,248,0.00)'],
-};
-const LIGHT: Palette = {
-	accent: '#6366f1',
-	ink: '#0f172a',
-	grid: '#f1f0ee',
-	axis: '#a3a3a3',
-	mark: '#e11d48',
-	pvFill: ['rgba(15,23,42,0.16)', 'rgba(15,23,42,0.00)'],
-	visFill: ['rgba(99,102,241,0.26)', 'rgba(99,102,241,0.00)'],
-};
 
 /** uPlot plugin: draw a dashed vertical line + top caret at each annotation's time position. Positions
  * come from `valToPos(..., true)` (canvas pixels), matching `u.bbox`, so it aligns at any zoom/size.
  * Reads annotations through a getter so the chart never has to be rebuilt when only they change. */
-function annotationPlugin(get: () => ChartAnnotation[], mark: string): uPlot.Plugin {
+function annotationPlugin(
+	get: () => ChartAnnotation[],
+	mark: string,
+): uPlot.Plugin {
 	return {
 		hooks: {
 			draw: (u: uPlot) => {
@@ -71,7 +57,7 @@ function annotationPlugin(get: () => ChartAnnotation[], mark: string): uPlot.Plu
 				const { left, top, width, height } = u.bbox;
 				ctx.save();
 				for (const a of annotations) {
-					const cx = Math.round(u.valToPos(a.t / 1000, 'x', true));
+					const cx = Math.round(u.valToPos(a.t / 1000, "x", true));
 					if (cx < left || cx > left + width) continue;
 					ctx.strokeStyle = mark;
 					ctx.globalAlpha = 0.5;
@@ -101,10 +87,10 @@ function annotationPlugin(get: () => ChartAnnotation[], mark: string): uPlot.Plu
  * the bare bento chart is explorable without the legend. Reads the hovered index from `u.cursor.idx`. */
 function tooltipPlugin(getEl: () => HTMLDivElement | null): uPlot.Plugin {
 	const fmtDate = (s: number): string =>
-		new Date(s * 1000).toLocaleDateString('en-US', {
-			month: 'short',
-			day: 'numeric',
-			timeZone: 'UTC',
+		new Date(s * 1000).toLocaleDateString("en-US", {
+			month: "short",
+			day: "numeric",
+			timeZone: "UTC",
 		});
 	return {
 		hooks: {
@@ -113,18 +99,18 @@ function tooltipPlugin(getEl: () => HTMLDivElement | null): uPlot.Plugin {
 				if (!el) return;
 				const idx = u.cursor.idx;
 				if (idx == null || u.cursor.left == null || u.cursor.left < 0) {
-					el.style.opacity = '0';
+					el.style.opacity = "0";
 					return;
 				}
 				const t = u.data[0]?.[idx];
 				const pv = u.data[1]?.[idx];
 				const vis = u.data[2]?.[idx];
-				el.innerHTML = `<div class="mb-1 font-medium text-[11px] text-neutral-400">${t == null ? '' : fmtDate(t)}</div><div class="flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#f5f3ff"></span><span class="text-neutral-500">Pageviews</span><span class="tabular ml-auto font-semibold text-neutral-900">${pv == null ? '—' : formatNumber(pv)}</span></div><div class="mt-0.5 flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#818cf8"></span><span class="text-neutral-500">Visitors</span><span class="tabular ml-auto font-semibold text-neutral-900">${vis == null ? '—' : formatNumber(vis)}</span></div>`;
+				el.innerHTML = `<div class="mb-1 font-medium text-[11px] text-neutral-400">${t == null ? "" : fmtDate(t)}</div><div class="flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#f5f3ff"></span><span class="text-neutral-500">Pageviews</span><span class="tabular ml-auto font-semibold text-neutral-900">${pv == null ? "—" : formatNumber(pv)}</span></div><div class="mt-0.5 flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#818cf8"></span><span class="text-neutral-500">Visitors</span><span class="tabular ml-auto font-semibold text-neutral-900">${vis == null ? "—" : formatNumber(vis)}</span></div>`;
 				const left = u.cursor.left;
 				const flip = left > u.width / 2;
-				el.style.opacity = '1';
+				el.style.opacity = "1";
 				el.style.left = `${left}px`;
-				el.style.transform = `translate(${flip ? 'calc(-100% - 14px)' : '14px'}, 8px)`;
+				el.style.transform = `translate(${flip ? "calc(-100% - 14px)" : "14px"}, 8px)`;
 			},
 		},
 	};
@@ -154,15 +140,31 @@ function fill(
 	return grad;
 }
 
+/** Hex (#rrggbb) → rgba string with alpha, for the canvas area fills (which need concrete colours). */
+function hexA(hex: string, a: number): string {
+	const h = hex.replace("#", "").trim();
+	const full =
+		h.length === 3
+			? h
+					.split("")
+					.map((c) => c + c)
+					.join("")
+			: h;
+	const n = Number.parseInt(full || "818cf8", 16);
+	return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
+
 function ChartCanvas({
 	series,
 	height,
 	annotations,
+	colors,
 	fillHeight = false,
 }: {
 	series: SeriesPoint[];
 	height: number;
 	annotations: ChartAnnotation[];
+	colors: ThemeColors;
 	fillHeight?: boolean;
 }): ReactElement {
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -176,16 +178,28 @@ function ChartCanvas({
 	// (canvas-allocating) chart — the mount effect below intentionally omits them from its deps.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: redraw must fire when the array changes; the body reads it through the ref
 	useEffect(() => {
-		chartRef.current?.redraw();
+		if (typeof chartRef.current?.redraw === "function")
+			chartRef.current.redraw();
 	}, [annotations]);
 
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
-		// The board (fill-height) renders on the ink surface; the Ask tab's card stays light.
-		const P = fillHeight ? DARK : LIGHT;
+		// Colours come from the active theme: pageviews on the primary data hue, visitors on the secondary,
+		// anomalies on the accent, over a faint token grid.
+		const P: Palette = {
+			ink: colors.d1,
+			accent: colors.d2,
+			mark: colors.d3,
+			axis: colors.faint,
+			grid: colors.grid,
+			pvFill: [hexA(colors.d1, 0.22), hexA(colors.d1, 0)],
+			visFill: [hexA(colors.d2, 0.3), hexA(colors.d2, 0)],
+		};
 		const chartHeight = (): number =>
-			fillHeight && container.clientHeight > 0 ? container.clientHeight : height;
+			fillHeight && container.clientHeight > 0
+				? container.clientHeight
+				: height;
 
 		const opts: uPlot.Options = {
 			width: container.clientWidth || 640,
@@ -193,7 +207,9 @@ function ChartCanvas({
 			padding: [12, 8, 0, 8],
 			plugins: [
 				annotationPlugin(() => annotationsRef.current, P.mark),
-				...(fillHeight ? [tooltipPlugin(() => tooltipRef.current)] : []),
+				...(fillHeight
+					? [tooltipPlugin(() => tooltipRef.current)]
+					: []),
 			],
 			cursor: {
 				y: false,
@@ -203,24 +219,36 @@ function ChartCanvas({
 			legend: { show: !fillHeight, live: true },
 			series: [
 				{
-					value: (_u, v) => (v == null ? '—' : new Date(v * 1000).toUTCString()),
+					value: (_u, v) =>
+						v == null ? "—" : new Date(v * 1000).toUTCString(),
 				},
 				{
-					label: 'Pageviews',
+					label: "Pageviews",
 					stroke: P.ink,
 					width: 2.25,
-					fill: (u) => fill(u.ctx, P.pvFill[0], P.pvFill[1], u.bbox.top + u.bbox.height),
+					fill: (u) =>
+						fill(
+							u.ctx,
+							P.pvFill[0],
+							P.pvFill[1],
+							u.bbox.top + u.bbox.height,
+						),
 					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+					value: (_u, v) => (v == null ? "—" : formatNumber(v)),
 				},
 				{
-					label: 'Visitors',
+					label: "Visitors",
 					stroke: P.accent,
 					width: 2.25,
 					fill: (u) =>
-						fill(u.ctx, P.visFill[0], P.visFill[1], u.bbox.top + u.bbox.height),
+						fill(
+							u.ctx,
+							P.visFill[0],
+							P.visFill[1],
+							u.bbox.top + u.bbox.height,
+						),
 					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+					value: (_u, v) => (v == null ? "—" : formatNumber(v)),
 				},
 			],
 			axes: [
@@ -228,14 +256,14 @@ function ChartCanvas({
 					stroke: P.axis,
 					grid: { show: false },
 					ticks: { stroke: P.grid, size: 4 },
-					font: '11px Inter, sans-serif',
+					font: "11px Inter, sans-serif",
 					space: 64,
 				},
 				{
 					stroke: P.axis,
 					grid: { stroke: P.grid, width: 1 },
 					ticks: { show: false },
-					font: '11px Inter, sans-serif',
+					font: "11px Inter, sans-serif",
 					size: 44,
 					values: (_u, splits) => splits.map((v) => formatCompact(v)),
 				},
@@ -266,15 +294,24 @@ function ChartCanvas({
 			chart?.destroy();
 			chartRef.current = null;
 		};
-	}, [data, height, fillHeight]);
+	}, [
+		data,
+		height,
+		fillHeight,
+		colors.d1,
+		colors.d2,
+		colors.d3,
+		colors.grid,
+		colors.faint,
+	]);
 
 	return (
 		<div
 			ref={containerRef}
 			className={
 				fillHeight
-					? 'uplot-container chart-hero relative h-full w-full'
-					: 'uplot-container w-full'
+					? "uplot-container chart-hero relative h-full w-full"
+					: "uplot-container w-full"
 			}
 		>
 			{fillHeight ? (
@@ -292,18 +329,25 @@ export function TrafficChart({
 	series,
 	loading,
 	error,
-	title = 'Traffic over time',
+	title = "Traffic over time",
 	height = 280,
 	annotations = [],
 	bare = false,
 }: TrafficChartProps): ReactElement {
+	const colors = useThemeColors();
 	if (bare) {
 		return series.length === 0 ? (
-			<div className="flex h-full items-center justify-center text-sm text-neutral-400">
+			<div className="flex h-full items-center justify-center text-sm text-[color:var(--faint)]">
 				No data yet
 			</div>
 		) : (
-			<ChartCanvas series={series} height={height} annotations={annotations} fillHeight />
+			<ChartCanvas
+				series={series}
+				height={height}
+				annotations={annotations}
+				colors={colors}
+				fillHeight
+			/>
 		);
 	}
 	return (
@@ -344,7 +388,12 @@ export function TrafficChart({
 					No data yet
 				</div>
 			) : (
-				<ChartCanvas series={series} height={height} annotations={annotations} />
+				<ChartCanvas
+					series={series}
+					height={height}
+					annotations={annotations}
+					colors={colors}
+				/>
 			)}
 		</Card>
 	);

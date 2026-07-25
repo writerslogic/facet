@@ -6,18 +6,30 @@ import type { CountRow } from '@facet/shared';
 import { type ReactElement, useMemo, useState } from 'react';
 import { formatNumber } from '../lib/format.js';
 import { WORLD, WORLD_VIEWBOX } from '../lib/worldGeo.js';
+import { useThemeColors } from '../theme.js';
 
-// Two-stop prism ramp (indigo → violet → fuchsia) with opacity rising by intensity, so a hot country
-// glows and a cold one only tints. `t` is 0–1 (log-scaled share).
-function ramp(t: number): string {
+type Rgb = [number, number, number];
+
+function hexToRgb(hex: string): Rgb {
+	const h = hex.replace('#', '').trim();
+	const full =
+		h.length === 3
+			? h
+					.split('')
+					.map((c) => c + c)
+					.join('')
+			: h;
+	const n = Number.parseInt(full || '818cf8', 16);
+	return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+// Intensity ramp between the active palette's low (`lo`) and hot (`hi`) data colours; opacity rises with
+// intensity so a hot country glows and a cold one only tints. `t` is 0–1 (log-scaled share).
+function ramp(t: number, lo: Rgb, hi: Rgb): string {
 	const clamp = Math.max(0, Math.min(1, t));
-	const low = clamp < 0.5;
-	const [ar, ag, ab] = low ? [99, 102, 241] : [139, 92, 246];
-	const [br, bg, bb] = low ? [139, 92, 246] : [217, 70, 239];
-	const f = low ? clamp / 0.5 : (clamp - 0.5) / 0.5;
-	const mix = (x: number, y: number): number => Math.round(x + (y - x) * f);
+	const mix = (a: number, b: number): number => Math.round(a + (b - a) * clamp);
 	const op = (0.32 + 0.6 * clamp).toFixed(2);
-	return `rgba(${mix(ar, br)},${mix(ag, bg)},${mix(ab, bb)},${op})`;
+	return `rgba(${mix(lo[0], hi[0])},${mix(lo[1], hi[1])},${mix(lo[2], hi[2])},${op})`;
 }
 
 export function WorldMap({
@@ -30,6 +42,11 @@ export function WorldMap({
 	activeKey?: string;
 }): ReactElement {
 	const [hover, setHover] = useState<string | null>(null);
+	const colors = useThemeColors();
+	const lo = hexToRgb(colors.d1);
+	const hi = hexToRgb(colors.d3);
+	const [ir, ig, ib] = hexToRgb(colors.ink);
+	const noData = `rgba(${ir},${ig},${ib},0.06)`;
 	const { byIso, total, logMax } = useMemo(() => {
 		const m = new Map<string, number>();
 		let tot = 0;
@@ -67,8 +84,8 @@ export function WorldMap({
 						<path
 							key={c.iso}
 							d={c.d}
-							fill={has ? ramp(t) : 'rgba(255,255,255,0.035)'}
-							stroke={isActive ? '#e879f9' : 'rgba(5,4,12,0.55)'}
+							fill={has ? ramp(t, lo, hi) : noData}
+							stroke={isActive ? colors.d3 : 'rgb(var(--bg))'}
 							strokeWidth={isActive ? 0.8 : 0.3}
 							className={has && onSelect ? 'cursor-pointer' : undefined}
 							style={{
@@ -86,18 +103,18 @@ export function WorldMap({
 			<div className="pointer-events-none absolute top-1 left-1 flex items-baseline gap-1.5 rounded-md bg-black/40 px-2 py-1 backdrop-blur-sm">
 				{readIso && readCount > 0 ? (
 					<>
-						<span className="font-mono font-semibold text-[12px] text-neutral-100">
+						<span className="font-mono font-semibold text-[12px] text-[color:var(--ink)]">
 							{readIso}
 						</span>
-						<span className="tabular font-semibold text-[13px] text-neutral-50">
+						<span className="tabular font-semibold text-[13px] text-[color:var(--ink)]">
 							{formatNumber(readCount)}
 						</span>
-						<span className="text-[11px] text-neutral-400 tabular-nums">
+						<span className="text-[11px] text-[color:var(--muted)] tabular-nums">
 							{total > 0 ? Math.round((readCount / total) * 100) : 0}%
 						</span>
 					</>
 				) : (
-					<span className="text-[11px] text-neutral-400 uppercase tracking-[0.1em]">
+					<span className="text-[11px] text-[color:var(--muted)] uppercase tracking-[0.1em]">
 						{byIso.size} regions
 					</span>
 				)}

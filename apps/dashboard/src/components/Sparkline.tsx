@@ -60,9 +60,9 @@ export function Sparkline({
 			{prism ? (
 				<defs>
 					<linearGradient id={strokeId} x1="0" y1="0" x2="1" y2="0">
-						<stop offset="0%" stopColor="#6366f1" />
-						<stop offset="50%" stopColor="#8b5cf6" />
-						<stop offset="100%" stopColor="#d946ef" />
+						<stop offset="0%" stopColor="var(--c1)" />
+						<stop offset="50%" stopColor="var(--c2)" />
+						<stop offset="100%" stopColor="var(--c3)" />
 					</linearGradient>
 				</defs>
 			) : null}

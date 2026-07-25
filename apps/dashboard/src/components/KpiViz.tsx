@@ -5,7 +5,7 @@
 import { type ReactElement, useId } from 'react';
 import { cn } from '../lib/cn.js';
 
-const PRISM = ['#6366f1', '#8b5cf6', '#d946ef'] as const;
+const PRISM = ['var(--c1)', 'var(--c2)', 'var(--c3)'] as const;
 
 /** A filled step-area silhouette (a cut skyline) — a deliberately blockier language than the smooth
  * sparkline so Pageviews reads as its own chart. */
@@ -25,7 +25,7 @@ export function HorizonSpark({
 	const span = max - min || 1;
 	const step = w / values.length;
 	// Build a stepped top edge (one flat tread per bucket), then close to the baseline for the fill.
-	const pts: string[] = ['0,' + h];
+	const pts: string[] = [`0,${h}`];
 	values.forEach((v, i) => {
 		const y = h - ((v - min) / span) * (h - 2) - 1;
 		const x0 = i * step;
@@ -53,7 +53,7 @@ export function HorizonSpark({
 			<polyline
 				points={top}
 				fill="none"
-				stroke="#c7d2fe"
+				stroke="var(--d2)"
 				strokeWidth="1.25"
 				strokeLinejoin="miter"
 				vectorEffect="non-scaling-stroke"
@@ -96,7 +96,7 @@ export function RadialGauge({
 					cy={c}
 					r={r}
 					fill="none"
-					stroke="rgb(196 181 253 / 0.14)"
+					stroke="rgb(var(--border))"
 					strokeWidth="6"
 					strokeLinecap="round"
 					strokeDasharray={`${dash} ${circ}`}
@@ -177,7 +177,7 @@ export function ColumnSpark({
 						width={bw * (1 - gap)}
 						height={bh}
 						rx="0.6"
-						fill={last ? '#f5f3ff' : `url(#${gid})`}
+						fill={last ? 'var(--ink)' : `url(#${gid})`}
 						opacity={last ? 1 : 0.85}
 					/>
 				);

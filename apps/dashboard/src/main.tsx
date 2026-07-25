@@ -8,6 +8,10 @@ import { App } from './App.js';
 import { AdminProvider } from './admin.js';
 import './index.css';
 import { DashboardProvider } from './state.js';
+import { initTheme } from './theme.js';
+
+// Apply the persisted palette + mode to <html> before first paint so there's no flash of the default theme.
+initTheme();
 
 const queryClient = new QueryClient({
 	defaultOptions: {

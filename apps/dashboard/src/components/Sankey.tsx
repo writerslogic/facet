@@ -288,9 +288,9 @@ export function Sankey({
 		>
 			<defs>
 				<linearGradient id={gid} x1="0" y1="0" x2="1" y2="0">
-					<stop offset="0%" stopColor="#6366f1" stopOpacity="0.5" />
-					<stop offset="55%" stopColor="#8b5cf6" stopOpacity="0.32" />
-					<stop offset="100%" stopColor="#d946ef" stopOpacity="0.22" />
+					<stop offset="0%" stopColor="var(--c1)" stopOpacity="0.5" />
+					<stop offset="55%" stopColor="var(--c2)" stopOpacity="0.32" />
+					<stop offset="100%" stopColor="var(--c3)" stopOpacity="0.22" />
 				</linearGradient>
 			</defs>
 			{display.ribbons.map((r) => (
@@ -343,7 +343,7 @@ export function Sankey({
 							width={NODE_W}
 							height={n.h}
 							rx={2}
-							className="fill-accent-500"
+							style={{ fill: 'var(--d1)' }}
 						/>
 						{first || last ? (
 							<text

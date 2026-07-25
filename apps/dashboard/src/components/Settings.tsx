@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useAdmin } from '../admin.js';
 import { useDashboard } from '../state.js';
 import { AdminTokenGate } from './settings/AdminTokenGate.js';
+import { AppearancePanel } from './settings/AppearancePanel.js';
 import { ExperimentsPanel } from './settings/ExperimentsPanel.js';
 import { FlagsPanel } from './settings/FlagsPanel.js';
 import { FunnelsPanel } from './settings/FunnelsPanel.js';
@@ -21,11 +22,17 @@ export function Settings(): ReactElement {
 	const [siteId, setSiteId] = useState<string>(activeProfile?.siteId ?? '');
 
 	if (!hasToken) {
-		return <AdminTokenGate />;
+		return (
+			<div className="space-y-6">
+				<AppearancePanel />
+				<AdminTokenGate />
+			</div>
+		);
 	}
 
 	return (
 		<div className="space-y-6">
+			<AppearancePanel />
 			<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
 				<div>
 					<p className="text-sm font-medium text-neutral-800">Admin session active</p>

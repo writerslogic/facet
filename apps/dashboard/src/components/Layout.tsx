@@ -49,13 +49,15 @@ export function Layout({
 		<div
 			className={cn(
 				fill ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-screen',
-				dark ? 'facet-dark text-neutral-100' : 'text-neutral-900',
+				dark ? 'facet-dark text-[color:var(--ink)]' : 'text-neutral-900',
 			)}
 		>
 			<header
 				className={cn(
 					'z-10 border-b backdrop-blur-xl',
-					dark ? 'border-white/10 bg-[#05040c]/70' : 'border-neutral-200/70 bg-white/70',
+					dark
+						? 'border-[color:rgb(var(--border))] bg-[var(--bg)]'
+						: 'border-neutral-200/70 bg-white/70',
 					fill ? 'shrink-0' : 'sticky top-0',
 				)}
 			>
@@ -81,7 +83,7 @@ export function Layout({
 								settingsActive
 									? 'border-accent-500 bg-accent-50 text-accent-700'
 									: dark
-										? 'border-white/15 text-neutral-300 hover:bg-white/10 hover:text-white'
+										? 'border-[color:rgb(var(--border))] text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
 										: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
 							)}
 						>

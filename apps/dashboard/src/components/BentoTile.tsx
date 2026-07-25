@@ -135,8 +135,8 @@ export function BentoTile({
 					className={cn(
 						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
 						dark
-							? 'text-neutral-300 hover:bg-white/10 hover:text-white'
-							: 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700',
+							? 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
+							: 'text-[color:var(--muted)] hover:bg-neutral-100 hover:text-neutral-700',
 					)}
 				>
 					<X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -151,8 +151,8 @@ export function BentoTile({
 					className={cn(
 						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 opacity-40 transition focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 group-hover:opacity-100',
 						dark
-							? 'text-neutral-300 hover:bg-white/10 hover:text-white'
-							: 'text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700',
+							? 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
+							: 'text-[color:var(--muted)] hover:bg-neutral-100 hover:text-neutral-700',
 					)}
 				>
 					<Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -164,7 +164,7 @@ export function BentoTile({
 						<h3
 							className={cn(
 								'text-[11px] font-semibold uppercase tracking-[0.08em]',
-								dark ? 'text-neutral-400' : 'text-neutral-500',
+								dark ? 'text-[color:var(--muted)]' : 'text-[color:var(--ink)]0',
 							)}
 						>
 							{label}
@@ -192,10 +192,12 @@ function KpiStat({
 }): ReactElement {
 	return (
 		<div className="min-w-0">
-			<div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+			<div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted)]">
 				{label}
 			</div>
-			<div className="tabular truncate font-semibold text-neutral-100 text-sm">{value}</div>
+			<div className="tabular truncate font-semibold text-[color:var(--ink)] text-sm">
+				{value}
+			</div>
 		</div>
 	);
 }
@@ -235,7 +237,7 @@ export function KpiTile({
 			? 'bg-emerald-50 text-emerald-700 ring-emerald-600/15'
 			: deltaSense === 'regression'
 				? 'bg-rose-50 text-rose-700 ring-rose-600/15'
-				: 'bg-neutral-100 text-neutral-500 ring-neutral-600/10';
+				: 'bg-neutral-100 text-[color:var(--ink)]0 ring-neutral-600/10';
 	const hasSpark = Boolean(spark && spark.length > 1);
 	const hasBreakdown = Boolean(breakdown && breakdown.rows.length > 0);
 	const tint = `radial-gradient(120% 80% at 100% 0%, ${stroke}14, transparent 60%)`;
@@ -271,7 +273,7 @@ export function KpiTile({
 		return (
 			<div className="flex h-full items-stretch gap-5" style={{ background: tint }}>
 				<div className="flex min-w-0 flex-col justify-center">
-					<div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+					<div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted)]">
 						<span
 							className="inline-block size-1.5 rotate-45 rounded-[1px]"
 							style={{ background: stroke }}
@@ -280,7 +282,7 @@ export function KpiTile({
 						{label}
 					</div>
 					<div className="mt-1 flex items-baseline gap-2">
-						<span className="tabular font-semibold text-4xl text-neutral-50 leading-none tracking-[-0.02em]">
+						<span className="tabular font-semibold text-4xl text-[color:var(--ink)] leading-none tracking-[-0.02em]">
 							{formatNumber(Math.round(shown))}
 						</span>
 						{chip}
@@ -329,11 +331,11 @@ export function KpiTile({
 	return (
 		<div className="flex h-full items-center gap-3" style={{ background: tint }}>
 			<div className="flex min-w-0 flex-col justify-center">
-				<div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-neutral-400">
+				<div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted)]">
 					{label}
 				</div>
 				<div className="mt-0.5 flex items-baseline gap-1.5">
-					<span className="tabular text-[2rem] font-semibold leading-none tracking-[-0.02em] text-neutral-50 @max-[13rem]/tile:text-3xl @max-[9rem]/tile:text-2xl">
+					<span className="tabular text-[2rem] font-semibold leading-none tracking-[-0.02em] text-[color:var(--ink)] @max-[13rem]/tile:text-3xl @max-[9rem]/tile:text-2xl">
 						{formatNumber(Math.round(shown))}
 					</span>
 					{chip}

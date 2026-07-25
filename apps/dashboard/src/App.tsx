@@ -315,7 +315,7 @@ function Dashboard(): ReactElement {
 						aria-label="Analytics views"
 						className={cn(
 							'mb-4 flex shrink-0 gap-1 overflow-x-auto border-b',
-							fill ? 'border-white/10' : 'border-neutral-200',
+							fill ? 'border-[color:rgb(var(--border))]' : 'border-neutral-200',
 						)}
 					>
 						{TABS.map((tab) => (
@@ -329,10 +329,10 @@ function Dashboard(): ReactElement {
 									'-mb-px shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
 									view === tab.id
 										? fill
-											? 'border-accent-400 text-white'
+											? 'border-accent-400 text-[color:var(--ink)]'
 											: 'border-accent-500 text-neutral-900'
 										: fill
-											? 'border-transparent text-neutral-400 hover:text-neutral-100'
+											? 'border-transparent text-[color:var(--faint)] hover:text-[color:var(--ink)]'
 											: 'border-transparent text-neutral-500 hover:text-neutral-800',
 								)}
 							>
