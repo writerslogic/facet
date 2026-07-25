@@ -190,6 +190,22 @@ export function useRowFloor(
 	return floor;
 }
 
+/** True when the container is too narrow for the elastic grid to stay legible — below this the board
+ * switches to a full-size box carousel. */
+export function useNarrow(ref: RefObject<HTMLElement | null>, threshold = 680): boolean {
+	const [narrow, setNarrow] = useState(false);
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const measure = (): void => setNarrow(el.clientWidth > 0 && el.clientWidth < threshold);
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [ref, threshold]);
+	return narrow;
+}
+
 const GROW = 2.2; // fr weight of a focused tile's tracks
 const SHRINK = 0.5; // fr weight of every other track while a tile is focused
 

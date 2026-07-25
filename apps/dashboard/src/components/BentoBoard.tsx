@@ -22,6 +22,7 @@ import {
 	trackTemplate,
 	useColumns,
 	useElasticTracks,
+	useNarrow,
 	useRowFloor,
 } from '../lib/elasticGrid.js';
 import {
@@ -34,6 +35,7 @@ import {
 	type TileContext,
 	newSlotUid,
 } from '../lib/tiles.js';
+import { BentoCarousel } from './BentoCarousel.js';
 import { BentoTile } from './BentoTile.js';
 import { LivePill } from './LivePill.js';
 
@@ -68,6 +70,8 @@ export function BentoBoard({
 	const restoreUid = useRef<string | null>(null);
 	const tileRefs = useRef(new Map<string, HTMLDivElement>());
 	const gridRef = useRef<HTMLDivElement>(null);
+	const boardRef = useRef<HTMLDivElement>(null);
+	const narrow = useNarrow(boardRef);
 	const addWrapRef = useRef<HTMLDivElement>(null);
 	const addToggleRef = useRef<HTMLButtonElement>(null);
 	usePopoverDismiss(adding, () => setAdding(false), addWrapRef, addToggleRef);
@@ -157,195 +161,209 @@ export function BentoBoard({
 	const present = new Set(slots.map((s) => s.tileId));
 
 	return (
-		<div className="flex min-h-0 flex-1 flex-col gap-3">
-			<div className="flex shrink-0 items-center justify-end gap-2">
-				{editing ? null : <LivePill />}
-				{editing ? (
-					<>
-						<div className="relative" ref={addWrapRef}>
-							<button
-								ref={addToggleRef}
-								type="button"
-								onClick={() => setAdding((v) => !v)}
-								aria-haspopup="true"
-								aria-expanded={adding}
-								className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-[color:var(--ink)]"
-							>
-								<Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add tile
-							</button>
-							{adding ? (
-								<div className="absolute right-0 z-30 mt-1 max-h-72 w-52 overflow-y-auto rounded-xl border border-neutral-200/70 bg-white p-1 shadow-float ring-1 ring-neutral-900/5">
-									{Object.values(TILE_REGISTRY).map((def) => (
-										<button
-											key={def.id}
-											type="button"
-											onClick={() => add(def.id)}
-											className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-neutral-600 text-sm transition hover:bg-neutral-100 hover:text-[color:var(--ink)]"
-										>
-											{def.title}
-											{present.has(def.id) ? (
-												<Check
-													className="h-3.5 w-3.5 text-accent-500"
-													aria-label="on board"
-												/>
-											) : null}
-										</button>
-									))}
+		<div ref={boardRef} className="flex min-h-0 flex-1 flex-col gap-3">
+			{narrow && !editing ? (
+				<BentoCarousel slots={slots} ctx={ctx} />
+			) : (
+				<>
+					<div className="flex shrink-0 items-center justify-end gap-2">
+						{editing ? null : <LivePill />}
+						{editing ? (
+							<>
+								<div className="relative" ref={addWrapRef}>
+									<button
+										ref={addToggleRef}
+										type="button"
+										onClick={() => setAdding((v) => !v)}
+										aria-haspopup="true"
+										aria-expanded={adding}
+										className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-[color:var(--ink)]"
+									>
+										<Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add tile
+									</button>
+									{adding ? (
+										<div className="absolute right-0 z-30 mt-1 max-h-72 w-52 overflow-y-auto rounded-xl border border-neutral-200/70 bg-white p-1 shadow-float ring-1 ring-neutral-900/5">
+											{Object.values(TILE_REGISTRY).map((def) => (
+												<button
+													key={def.id}
+													type="button"
+													onClick={() => add(def.id)}
+													className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-neutral-600 text-sm transition hover:bg-neutral-100 hover:text-[color:var(--ink)]"
+												>
+													{def.title}
+													{present.has(def.id) ? (
+														<Check
+															className="h-3.5 w-3.5 text-accent-500"
+															aria-label="on board"
+														/>
+													) : null}
+												</button>
+											))}
+										</div>
+									) : null}
 								</div>
-							) : null}
-						</div>
-						<button
-							type="button"
-							onClick={reset}
-							className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-[color:var(--ink)]"
-						>
-							<RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reset
-						</button>
-						<button
-							type="button"
-							onClick={() => {
-								setEditing(false);
-								setAdding(false);
-							}}
-							className="inline-flex items-center rounded-lg bg-accent-600 px-3 py-1.5 font-medium text-white text-xs shadow-card transition hover:bg-accent-700"
-						>
-							Done
-						</button>
-					</>
-				) : (
-					<button
-						type="button"
-						onClick={startEditing}
-						className="inline-flex items-center gap-1.5 rounded-lg border border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] px-2.5 py-1.5 font-medium text-[color:var(--muted)] text-xs shadow-card transition hover:text-[color:var(--ink)]"
-					>
-						<Settings2 className="h-3.5 w-3.5" aria-hidden="true" /> Customize
-					</button>
-				)}
-			</div>
-
-			<div
-				ref={gridRef}
-				// Rows divide the viewport as fr tracks with a per-row floor so every tile stays big enough to
-				// show its content; once those floors exceed the height the board scrolls INTERNALLY (the page
-				// never scrolls). A focused tile drops the floor to 0 so its neighbours can collapse for a
-				// dramatic in-place expand.
-				className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
-				style={{
-					gridTemplateColumns: trackTemplate(colFr),
-					gridTemplateRows: trackTemplate(rowFr, activeFocus ? '0' : rowFloor),
-				}}
-				role={editing ? 'list' : undefined}
-				aria-label={editing ? 'Board tiles — use arrow keys to reorder' : undefined}
-			>
-				{slots.map((slot, i) => {
-					const def = TILE_REGISTRY[slot.tileId];
-					const p = placements[i];
-					if (!def || !p) return null;
-					const isFocused = slot.uid === activeFocus;
-					const dim = activeFocus !== null && !isFocused;
-					const isOver =
-						editing && overIndex === i && dragIndex !== null && dragIndex !== i;
-					return (
-						<div
-							key={slot.uid}
-							ref={(el) => {
-								if (el) tileRefs.current.set(slot.uid, el);
-								else tileRefs.current.delete(slot.uid);
-							}}
-							role={editing ? 'listitem' : undefined}
-							aria-label={
-								editing
-									? `${def.title}, position ${i + 1} of ${slots.length}. Use arrow keys to move.`
-									: undefined
-							}
-							tabIndex={editing ? 0 : undefined}
-							style={{
-								gridColumn: `${p.colStart} / span ${p.colSpan}`,
-								gridRow: `${p.rowStart} / span ${p.rowSpan}`,
-							}}
-							className={cn(
-								'min-h-0 rounded-2xl transition-[opacity,filter] duration-300',
-								isFocused && 'relative z-20',
-								editing &&
-									'cursor-grab focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
-								dragIndex === i && 'opacity-40',
-								isOver && 'ring-2 ring-accent-400 ring-offset-2',
-								dim && 'pointer-events-none opacity-40',
-							)}
-							draggable={editing}
-							onDragStart={() => setDragIndex(i)}
-							onDragEnd={() => {
-								setDragIndex(null);
-								setOverIndex(null);
-							}}
-							onDragOver={(e) => {
-								if (!editing) return;
-								e.preventDefault();
-								setOverIndex(i);
-							}}
-							onDrop={(e) => {
-								e.preventDefault();
-								if (dragIndex !== null) move(dragIndex, i);
-								setDragIndex(null);
-								setOverIndex(null);
-							}}
-							onKeyDown={(e) => {
-								if (!editing) return;
-								if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-									e.preventDefault();
-									move(i, i - 1);
-								} else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-									e.preventDefault();
-									move(i, i + 1);
-								}
-							}}
-						>
-							<BentoTile
-								label={def.selfLabeled ? undefined : def.title}
-								emphasis={def.emphasis}
-								focused={isFocused}
-								action={
-									editing ? (
-										<TileControls
-											slot={slot}
-											title={def.title}
-											canEarlier={i > 0}
-											canLater={i < slots.length - 1}
-											onMove={(dir) => move(i, i + dir)}
-											onResize={() => resize(i)}
-											onReplace={(id) => replace(i, id)}
-											onRemove={() => remove(i)}
-										/>
-									) : (
-										def.action?.(ctx)
-									)
-								}
-								onExpand={
-									!editing && def.expandable && activeFocus === null
-										? () => openFocus(slot.uid)
-										: undefined
-								}
-								onClose={isFocused ? () => setFocused(null) : undefined}
-								className="h-full"
-								bodyClassName={
-									def.expandable || isFocused ? 'overflow-y-auto' : undefined
-								}
+								<button
+									type="button"
+									onClick={reset}
+									className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-[color:var(--ink)]"
+								>
+									<RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reset
+								</button>
+								<button
+									type="button"
+									onClick={() => {
+										setEditing(false);
+										setAdding(false);
+									}}
+									className="inline-flex items-center rounded-lg bg-accent-600 px-3 py-1.5 font-medium text-white text-xs shadow-card transition hover:bg-accent-700"
+								>
+									Done
+								</button>
+							</>
+						) : (
+							<button
+								type="button"
+								onClick={startEditing}
+								className="inline-flex items-center gap-1.5 rounded-lg border border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] px-2.5 py-1.5 font-medium text-[color:var(--muted)] text-xs shadow-card transition hover:text-[color:var(--ink)]"
 							>
-								{editing ? (
-									<div className="pointer-events-none flex h-full items-center justify-center gap-2 text-[color:var(--muted)]">
-										<GripVertical className="h-5 w-5" aria-hidden="true" />
-										<span className="font-medium text-[color:var(--faint)] text-xs uppercase tracking-wide">
-											{def.title}
-										</span>
-									</div>
-								) : (
-									def.render(ctx, isFocused)
-								)}
-							</BentoTile>
-						</div>
-					);
-				})}
-			</div>
+								<Settings2 className="h-3.5 w-3.5" aria-hidden="true" /> Customize
+							</button>
+						)}
+					</div>
+
+					<div
+						ref={gridRef}
+						// Rows divide the viewport as fr tracks with a per-row floor so every tile stays big enough to
+						// show its content; once those floors exceed the height the board scrolls INTERNALLY (the page
+						// never scrolls). A focused tile drops the floor to 0 so its neighbours can collapse for a
+						// dramatic in-place expand.
+						className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
+						style={{
+							gridTemplateColumns: trackTemplate(colFr),
+							gridTemplateRows: trackTemplate(rowFr, activeFocus ? '0' : rowFloor),
+						}}
+						role={editing ? 'list' : undefined}
+						aria-label={editing ? 'Board tiles — use arrow keys to reorder' : undefined}
+					>
+						{slots.map((slot, i) => {
+							const def = TILE_REGISTRY[slot.tileId];
+							const p = placements[i];
+							if (!def || !p) return null;
+							const isFocused = slot.uid === activeFocus;
+							const dim = activeFocus !== null && !isFocused;
+							const isOver =
+								editing && overIndex === i && dragIndex !== null && dragIndex !== i;
+							return (
+								<div
+									key={slot.uid}
+									ref={(el) => {
+										if (el) tileRefs.current.set(slot.uid, el);
+										else tileRefs.current.delete(slot.uid);
+									}}
+									role={editing ? 'listitem' : undefined}
+									aria-label={
+										editing
+											? `${def.title}, position ${i + 1} of ${slots.length}. Use arrow keys to move.`
+											: undefined
+									}
+									tabIndex={editing ? 0 : undefined}
+									style={{
+										gridColumn: `${p.colStart} / span ${p.colSpan}`,
+										gridRow: `${p.rowStart} / span ${p.rowSpan}`,
+									}}
+									className={cn(
+										'min-h-0 rounded-2xl transition-[opacity,filter] duration-300',
+										isFocused && 'relative z-20',
+										editing &&
+											'cursor-grab focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
+										dragIndex === i && 'opacity-40',
+										isOver && 'ring-2 ring-accent-400 ring-offset-2',
+										dim && 'pointer-events-none opacity-40',
+									)}
+									draggable={editing}
+									onDragStart={() => setDragIndex(i)}
+									onDragEnd={() => {
+										setDragIndex(null);
+										setOverIndex(null);
+									}}
+									onDragOver={(e) => {
+										if (!editing) return;
+										e.preventDefault();
+										setOverIndex(i);
+									}}
+									onDrop={(e) => {
+										e.preventDefault();
+										if (dragIndex !== null) move(dragIndex, i);
+										setDragIndex(null);
+										setOverIndex(null);
+									}}
+									onKeyDown={(e) => {
+										if (!editing) return;
+										if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+											e.preventDefault();
+											move(i, i - 1);
+										} else if (
+											e.key === 'ArrowRight' ||
+											e.key === 'ArrowDown'
+										) {
+											e.preventDefault();
+											move(i, i + 1);
+										}
+									}}
+								>
+									<BentoTile
+										label={def.selfLabeled ? undefined : def.title}
+										emphasis={def.emphasis}
+										focused={isFocused}
+										action={
+											editing ? (
+												<TileControls
+													slot={slot}
+													title={def.title}
+													canEarlier={i > 0}
+													canLater={i < slots.length - 1}
+													onMove={(dir) => move(i, i + dir)}
+													onResize={() => resize(i)}
+													onReplace={(id) => replace(i, id)}
+													onRemove={() => remove(i)}
+												/>
+											) : (
+												def.action?.(ctx)
+											)
+										}
+										onExpand={
+											!editing && def.expandable && activeFocus === null
+												? () => openFocus(slot.uid)
+												: undefined
+										}
+										onClose={isFocused ? () => setFocused(null) : undefined}
+										className="h-full"
+										bodyClassName={
+											def.expandable || isFocused
+												? 'overflow-y-auto'
+												: undefined
+										}
+									>
+										{editing ? (
+											<div className="pointer-events-none flex h-full items-center justify-center gap-2 text-[color:var(--muted)]">
+												<GripVertical
+													className="h-5 w-5"
+													aria-hidden="true"
+												/>
+												<span className="font-medium text-[color:var(--faint)] text-xs uppercase tracking-wide">
+													{def.title}
+												</span>
+											</div>
+										) : (
+											def.render(ctx, isFocused)
+										)}
+									</BentoTile>
+								</div>
+							);
+						})}
+					</div>
+				</>
+			)}
 
 			{footer}
 
