@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [main]
 
+# Least privilege: CI only needs to read the repo to install/lint/typecheck/test.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

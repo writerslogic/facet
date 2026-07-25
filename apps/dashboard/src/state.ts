@@ -13,6 +13,7 @@ import {
 	useMemo,
 	useState,
 } from 'react';
+import { randomId } from './lib/id.js';
 
 export type RangePreset = '24h' | '7d' | '30d' | '90d';
 
@@ -95,9 +96,7 @@ export function formatDateInput(ms: number): string {
 }
 
 function newId(): string {
-	return typeof crypto !== 'undefined' && crypto.randomUUID
-		? crypto.randomUUID()
-		: `p-${Math.random().toString(36).slice(2)}`;
+	return `p-${randomId()}`;
 }
 
 function readProfiles(): Profile[] {

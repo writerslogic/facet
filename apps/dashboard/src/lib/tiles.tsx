@@ -5,6 +5,7 @@
 
 import { BOXES } from '../components/boxes/index.js';
 import type { SizeKey, TileDef } from '../components/boxes/types.js';
+import { randomId } from './id.js';
 
 export type {
 	SizeKey,
@@ -57,8 +58,7 @@ export interface Slot {
 
 /** A fresh unique slot id. Prefixed with the box id purely to stay debuggable. */
 export function newSlotUid(tileId: string): string {
-	const rand = globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2);
-	return `${tileId}-${rand}`;
+	return `${tileId}-${randomId()}`;
 }
 
 /** The out-of-the-box board — reproduces the shipped layout. Users mutate a copy in localStorage.
