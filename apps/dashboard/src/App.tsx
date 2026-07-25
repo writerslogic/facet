@@ -312,7 +312,7 @@ function Dashboard(): ReactElement {
 					<div
 						role="tablist"
 						aria-label="Analytics views"
-						className="mb-4 flex shrink-0 gap-1 overflow-x-auto border-[color:rgb(var(--border))] border-b"
+						className="mb-2 flex shrink-0 gap-1 overflow-x-auto border-[color:rgb(var(--border))] border-b"
 					>
 						{TABS.map((tab) => (
 							<button
@@ -322,7 +322,7 @@ function Dashboard(): ReactElement {
 								aria-selected={view === tab.id}
 								onClick={() => setView(tab.id)}
 								className={cn(
-									'-mb-px shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
+									'-mb-px shrink-0 border-b-2 px-4 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
 									view === tab.id
 										? 'border-accent-400 text-[color:var(--ink)]'
 										: 'border-transparent text-[color:var(--faint)] hover:text-[color:var(--ink)]',

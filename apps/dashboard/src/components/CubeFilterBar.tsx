@@ -65,7 +65,7 @@ export function CubeFilterBar({
 	const active = isFilterActive(filter) || serverActive;
 
 	return (
-		<div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-[color:rgb(var(--border))] bg-white/[0.03] px-4 py-2.5 text-sm shadow-card ring-1 ring-white/5">
+		<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-[color:rgb(var(--border))] bg-white/[0.03] px-3.5 py-1.5 text-sm shadow-card ring-1 ring-white/5">
 			<span className="text-[13px] font-medium text-[color:var(--muted)]">Slice</span>
 			{cells.length > 0
 				? AXES.map(({ key, label }) => (

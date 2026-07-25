@@ -61,7 +61,7 @@ export function Layout({
 					fill ? 'shrink-0' : 'sticky top-0',
 				)}
 			>
-				<div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-6 py-3">
+				<div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-6 py-2">
 					<div className="flex items-center gap-3">
 						<span className="flex items-center gap-2">
 							<BrandMark />
@@ -96,7 +96,7 @@ export function Layout({
 			<main
 				className={cn(
 					'mx-auto w-full max-w-[1600px] px-6',
-					fill ? 'flex min-h-0 flex-1 flex-col overflow-hidden py-4' : 'py-6',
+					fill ? 'flex min-h-0 flex-1 flex-col overflow-hidden py-2.5' : 'py-6',
 				)}
 			>
 				{children}
