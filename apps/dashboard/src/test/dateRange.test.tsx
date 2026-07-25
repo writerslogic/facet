@@ -1,5 +1,5 @@
 // an invalid custom range shows an inline error and does not apply; a valid one applies
-// and updates the store; the compare toggle flips state.
+// and updates the store.
 
 import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
@@ -8,11 +8,10 @@ import { DateRange } from '../components/DateRange.js';
 import { DashboardProvider, useDashboard } from '../state.js';
 
 function Probe(): ReactElement {
-	const { selection, compare } = useDashboard();
+	const { selection } = useDashboard();
 	return (
 		<div>
 			<span data-testid="kind">{selection.kind}</span>
-			<span data-testid="compare">{String(compare)}</span>
 		</div>
 	);
 }
@@ -63,12 +62,5 @@ describe('DateRange custom + compare', () => {
 		fireEvent.click(screen.getByRole('button', { name: 'Apply' }));
 
 		expect(screen.getByTestId('kind')).toHaveTextContent('custom');
-	});
-
-	it('toggles compare', () => {
-		renderControl();
-		expect(screen.getByTestId('compare')).toHaveTextContent('false');
-		fireEvent.click(screen.getByRole('checkbox', { name: /Compare/ }));
-		expect(screen.getByTestId('compare')).toHaveTextContent('true');
 	});
 });

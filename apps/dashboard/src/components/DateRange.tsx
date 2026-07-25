@@ -91,7 +91,7 @@ function CustomPopover({ onClose }: { onClose: () => void }): ReactElement {
 }
 
 export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
-	const { preset, setPreset, selection, compare, setCompare } = useDashboard();
+	const { preset, setPreset, selection } = useDashboard();
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement>(null);
 	const isCustom = selection.kind === 'custom';
@@ -161,23 +161,6 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 				</button>
 				{open ? <CustomPopover onClose={() => setOpen(false)} /> : null}
 			</div>
-
-			<label
-				className={cn(
-					'inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50 has-[:checked]:text-accent-700',
-					dark
-						? 'border-[color:rgb(var(--border))] text-[color:var(--faint)]'
-						: 'border-[color:rgb(var(--border))] text-[color:var(--ink)]',
-				)}
-			>
-				<input
-					type="checkbox"
-					checked={compare}
-					onChange={(ev) => setCompare(ev.target.checked)}
-					className="h-3.5 w-3.5 rounded border-[color:rgb(var(--border))] text-accent-600 focus:ring-accent-500"
-				/>
-				Compare
-			</label>
 		</div>
 	);
 }

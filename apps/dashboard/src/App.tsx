@@ -78,7 +78,7 @@ function Overview({
 	serverFilter: ServerFilter;
 	onServerFilterChange: (f: ServerFilter) => void;
 }): ReactElement {
-	const { apiKey, siteId, preset, range, compare, compareRange } = useDashboard();
+	const { apiKey, siteId, preset, range } = useDashboard();
 	const interval = preset === '24h' ? 'hour' : 'day';
 
 	// Server-filter mode: a high-cardinality path/referrer filter is active, so the whole Overview is
@@ -98,17 +98,16 @@ function Overview({
 	};
 
 	const { data, isLoading, error } = useStats(apiKey, query);
+	// Always fetch the equal-length preceding period so KPI deltas are always on (no "Compare" toggle
+	// needed); skipped only while filtering, where the comparison window isn't sliced to match.
+	const prevSpan = range.end - range.start;
 	const compareQuery: StatsQuery = {
 		site_id: siteId,
-		start: compareRange?.start ?? 0,
-		end: compareRange?.end ?? 0,
+		start: range.start - prevSpan,
+		end: range.start,
 		interval,
 	};
-	const compareStats = useCompareStats(
-		apiKey,
-		compareQuery,
-		Boolean(compare && compareRange) && !anyFilter,
-	);
+	const compareStats = useCompareStats(apiKey, compareQuery, !anyFilter);
 	const cube = useCube(apiKey, siteId, range, interval);
 	// Anomalies are layered onto the traffic chart as timeline markers (shared cache with the tab).
 	const anomalies = useAnomalies(apiKey, siteId, range);
@@ -136,7 +135,7 @@ function Overview({
 
 	const summary = data.summary;
 	const isEmpty = summary.pageviews === 0 && summary.visitors === 0 && summary.events === 0;
-	const cmp = compare ? (compareStats.data ?? null) : null;
+	const cmp = compareStats.data ?? null;
 
 	// Instant client-side slicing over the in-memory cube. When a filter is active, the KPIs and chart
 	// render from the sliced cube (no server round-trip); pageviews/events are exact, visitors is an
