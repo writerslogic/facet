@@ -164,7 +164,7 @@ export function BentoTile({
 						<h3
 							className={cn(
 								'text-[11px] font-semibold uppercase tracking-[0.08em]',
-								dark ? 'text-[color:var(--muted)]' : 'text-[color:var(--ink)]0',
+								dark ? 'text-[color:var(--muted)]' : 'text-[color:var(--faint)]',
 							)}
 						>
 							{label}
@@ -237,7 +237,7 @@ export function KpiTile({
 			? 'bg-emerald-50 text-emerald-700 ring-emerald-600/15'
 			: deltaSense === 'regression'
 				? 'bg-rose-50 text-rose-700 ring-rose-600/15'
-				: 'bg-neutral-100 text-[color:var(--ink)]0 ring-neutral-600/10';
+				: 'bg-neutral-100 text-[color:var(--faint)] ring-neutral-600/10';
 	const hasSpark = Boolean(spark && spark.length > 1);
 	const hasBreakdown = Boolean(breakdown && breakdown.rows.length > 0);
 	const tint = `radial-gradient(120% 80% at 100% 0%, ${stroke}14, transparent 60%)`;

@@ -440,7 +440,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 							))}
 						</div>
 						<div className="mt-auto">
-							<div className="mb-1 flex justify-between text-[11px] text-[color:var(--ink)]0">
+							<div className="mb-1 flex justify-between text-[11px] text-[color:var(--faint)]">
 								<span>Bounce rate</span>
 								<span className="tabular">{formatPercent(e.bounce_rate)}</span>
 							</div>

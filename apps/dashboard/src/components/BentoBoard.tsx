@@ -169,7 +169,7 @@ export function BentoBoard({
 								onClick={() => setAdding((v) => !v)}
 								aria-haspopup="true"
 								aria-expanded={adding}
-								className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-neutral-900"
+								className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-[color:var(--ink)]"
 							>
 								<Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add tile
 							</button>
@@ -180,7 +180,7 @@ export function BentoBoard({
 											key={def.id}
 											type="button"
 											onClick={() => add(def.id)}
-											className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-neutral-600 text-sm transition hover:bg-neutral-100 hover:text-neutral-900"
+											className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-neutral-600 text-sm transition hover:bg-neutral-100 hover:text-[color:var(--ink)]"
 										>
 											{def.title}
 											{present.has(def.id) ? (
@@ -197,7 +197,7 @@ export function BentoBoard({
 						<button
 							type="button"
 							onClick={reset}
-							className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-neutral-900"
+							className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-[color:var(--ink)]"
 						>
 							<RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reset
 						</button>
@@ -334,7 +334,7 @@ export function BentoBoard({
 								{editing ? (
 									<div className="pointer-events-none flex h-full items-center justify-center gap-2 text-[color:var(--muted)]">
 										<GripVertical className="h-5 w-5" aria-hidden="true" />
-										<span className="font-medium text-[color:var(--ink)]0 text-xs uppercase tracking-wide">
+										<span className="font-medium text-[color:var(--faint)] text-xs uppercase tracking-wide">
 											{def.title}
 										</span>
 									</div>
@@ -388,7 +388,7 @@ function TileControls({
 				onClick={() => onMove(-1)}
 				disabled={!canEarlier}
 				aria-label={`Move ${title} earlier`}
-				className="rounded p-0.5 text-[color:var(--ink)]0 transition hover:text-neutral-900 disabled:opacity-30"
+				className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-[color:var(--ink)] disabled:opacity-30"
 			>
 				<ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
 			</button>
@@ -397,7 +397,7 @@ function TileControls({
 				onClick={() => onMove(1)}
 				disabled={!canLater}
 				aria-label={`Move ${title} later`}
-				className="rounded p-0.5 text-[color:var(--ink)]0 transition hover:text-neutral-900 disabled:opacity-30"
+				className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-[color:var(--ink)] disabled:opacity-30"
 			>
 				<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
 			</button>
@@ -405,7 +405,7 @@ function TileControls({
 				type="button"
 				onClick={onResize}
 				aria-label={`Resize ${title}, currently ${SIZE_LABEL[slot.size]}`}
-				className="rounded px-1.5 py-0.5 font-semibold text-[10px] text-[color:var(--ink)]0 uppercase ring-1 ring-neutral-200 transition hover:text-neutral-900"
+				className="rounded px-1.5 py-0.5 font-semibold text-[10px] text-[color:var(--faint)] uppercase ring-1 ring-neutral-200 transition hover:text-[color:var(--ink)]"
 			>
 				{SIZE_LABEL[slot.size]}
 			</button>
@@ -417,7 +417,7 @@ function TileControls({
 					aria-label={`Replace ${title}`}
 					aria-haspopup="true"
 					aria-expanded={open}
-					className="rounded p-0.5 text-[color:var(--ink)]0 transition hover:text-neutral-900"
+					className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-[color:var(--ink)]"
 				>
 					<Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
 				</button>
@@ -437,7 +437,7 @@ function TileControls({
 									'block w-full rounded-md px-2.5 py-1.5 text-left text-sm transition hover:bg-neutral-100',
 									def.id === slot.tileId
 										? 'font-semibold text-accent-700'
-										: 'text-neutral-600 hover:text-neutral-900',
+										: 'text-neutral-600 hover:text-[color:var(--ink)]',
 								)}
 							>
 								{def.title}
@@ -450,7 +450,7 @@ function TileControls({
 				type="button"
 				onClick={onRemove}
 				aria-label={`Remove ${title}`}
-				className="rounded p-0.5 text-[color:var(--ink)]0 transition hover:text-rose-600"
+				className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-rose-600"
 			>
 				<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
 			</button>
