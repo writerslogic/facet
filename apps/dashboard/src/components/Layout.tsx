@@ -33,6 +33,7 @@ export function Layout({
 	settingsActive,
 	headerExtra,
 	fill = false,
+	dark = false,
 }: {
 	children: ReactNode;
 	onToggleSettings: () => void;
@@ -41,17 +42,20 @@ export function Layout({
 	/** Fill the viewport exactly with no page scroll (the bento board owns its own internal scroll).
 	 * Off for scrolling tabs (Settings, Retention, …), which keep normal page flow. */
 	fill?: boolean;
+	/** Dark "cut obsidian" shell for the Overview marketing surface — ink background + light chrome. */
+	dark?: boolean;
 }): ReactElement {
 	return (
 		<div
 			className={cn(
-				'text-neutral-900',
 				fill ? 'flex h-dvh flex-col overflow-hidden' : 'min-h-screen',
+				dark ? 'facet-dark text-neutral-100' : 'text-neutral-900',
 			)}
 		>
 			<header
 				className={cn(
-					'z-10 border-b border-neutral-200/70 bg-white/70 backdrop-blur-xl',
+					'z-10 border-b backdrop-blur-xl',
+					dark ? 'border-white/10 bg-[#05040c]/70' : 'border-neutral-200/70 bg-white/70',
 					fill ? 'shrink-0' : 'sticky top-0',
 				)}
 			>
@@ -76,7 +80,9 @@ export function Layout({
 								'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
 								settingsActive
 									? 'border-accent-500 bg-accent-50 text-accent-700'
-									: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
+									: dark
+										? 'border-white/15 text-neutral-300 hover:bg-white/10 hover:text-white'
+										: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
 							)}
 						>
 							<SettingsIcon className="h-4 w-4" aria-hidden="true" />

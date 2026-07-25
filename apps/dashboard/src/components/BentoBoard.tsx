@@ -216,7 +216,7 @@ export function BentoBoard({
 					<button
 						type="button"
 						onClick={startEditing}
-						className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-500 text-xs shadow-card transition hover:text-neutral-900"
+						className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 font-medium text-neutral-300 text-xs shadow-card transition hover:text-white"
 					>
 						<Settings2 className="h-3.5 w-3.5" aria-hidden="true" /> Customize
 					</button>

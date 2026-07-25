@@ -43,7 +43,7 @@ export function TopList({
 
 	const body =
 		shown.length === 0 ? (
-			<p className="py-6 text-center text-sm text-neutral-400">No data yet</p>
+			<p className="py-6 text-center text-sm text-neutral-500">No data yet</p>
 		) : (
 			<ul className="space-y-0.5">
 				{shown.map((row) => {
@@ -55,8 +55,8 @@ export function TopList({
 								className={cn(
 									'absolute inset-y-1 left-0 rounded-md transition-[width] duration-500 ease-out',
 									active
-										? 'bg-accent-300/60'
-										: 'bg-accent-100/70 group-hover:bg-accent-200/70',
+										? 'bg-accent-400/45'
+										: 'bg-accent-500/20 group-hover:bg-accent-500/30',
 								)}
 								style={{ width: `${width}%` }}
 								data-testid="toplist-bar"
@@ -65,7 +65,7 @@ export function TopList({
 							<span
 								className={cn(
 									'relative z-10 flex min-w-0 items-center gap-1.5 font-medium',
-									active ? 'text-accent-800' : 'text-neutral-700',
+									active ? 'text-accent-200' : 'text-neutral-200',
 								)}
 								title={row.key}
 							>
@@ -75,10 +75,10 @@ export function TopList({
 								<span className="truncate">{row.key}</span>
 							</span>
 							<span className="relative z-10 flex shrink-0 items-baseline gap-1.5">
-								<span className="text-[11px] text-neutral-400 tabular-nums">
+								<span className="text-[11px] text-neutral-500 tabular-nums">
 									{total > 0 ? Math.round((row.count / total) * 100) : 0}%
 								</span>
-								<span className="font-semibold text-neutral-900 tabular-nums">
+								<span className="font-semibold text-neutral-50 tabular-nums">
 									{formatNumber(row.count)}
 								</span>
 							</span>
@@ -93,14 +93,14 @@ export function TopList({
 									onClick={() => onSelect?.(row.key)}
 									className={cn(
 										cls,
-										'hover:bg-neutral-50/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
-										active && 'ring-1 ring-accent-300',
+										'hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
+										active && 'ring-1 ring-accent-400/40',
 									)}
 								>
 									{inner}
 								</button>
 							) : (
-								<div className={cn(cls, 'hover:bg-neutral-50/80')}>{inner}</div>
+								<div className={cn(cls, 'hover:bg-white/5')}>{inner}</div>
 							)}
 						</li>
 					);

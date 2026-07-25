@@ -93,6 +93,55 @@ body {
 	pointer-events: none;
 }
 
+/* --- Dark "cut obsidian" board (the marketing surface) --------------------------------------- */
+
+/* The Overview goes near-black blue-ink with a faceted prism bloom + a faint 30°/150° facet lattice, so
+   the prismatic charts glow on it. Scoped to `.facet-dark` (the Overview shell only) — the other tabs
+   stay light. Fixed so the bloom doesn't scroll under the board. */
+.facet-dark {
+	background-color: #05040c;
+	background-image:
+		radial-gradient(72rem 46rem at 28% -6%, rgb(99 102 241 / 0.2), transparent 60%),
+		radial-gradient(56rem 40rem at 104% 0%, rgb(217 70 239 / 0.12), transparent 55%),
+		conic-gradient(from 210deg at 36% 22%, rgb(99 102 241 / 0.13), rgb(217 70 239 / 0.06), transparent 42%),
+		repeating-linear-gradient(30deg, rgb(196 181 253 / 0.035) 0 1px, transparent 1px 48px),
+		repeating-linear-gradient(150deg, rgb(196 181 253 / 0.03) 0 1px, transparent 1px 48px);
+	background-attachment: fixed;
+	background-repeat: no-repeat;
+}
+
+/* A single dark tile: opaque ink face (blur fights the canvas charts), hairline lilac border, and a
+   bevel — top-left light, bottom-right dark — read as a cut facet rather than a floating card. */
+.tile-dark {
+	background-color: #0c0b16;
+	border: 1px solid rgb(196 181 253 / 0.14);
+	box-shadow:
+		inset 1px 1px 0 rgb(255 255 255 / 0.06),
+		inset -1px -1px 0 rgb(0 0 0 / 0.5),
+		0 12px 34px -14px rgb(0 0 0 / 0.7);
+}
+/* Hover/focus lights the perimeter with the prism gradient (border only — no floating shadow). */
+.tile-dark::before {
+	content: '';
+	position: absolute;
+	inset: -1px;
+	border-radius: inherit;
+	padding: 1px;
+	background: var(--gradient-prism);
+	-webkit-mask:
+		linear-gradient(#000 0 0) content-box,
+		linear-gradient(#000 0 0);
+	-webkit-mask-composite: xor;
+	mask-composite: exclude;
+	opacity: 0;
+	transition: opacity 0.3s ease;
+	pointer-events: none;
+}
+.tile-dark:hover::before,
+.tile-dark[data-focused='true']::before {
+	opacity: 0.9;
+}
+
 /* Metrics: consistent-width figures so numbers don't jitter as they update. */
 .tabular {
 	font-variant-numeric: tabular-nums;

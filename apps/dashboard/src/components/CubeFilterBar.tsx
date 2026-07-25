@@ -65,12 +65,12 @@ export function CubeFilterBar({
 	const active = isFilterActive(filter) || serverActive;
 
 	return (
-		<div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-neutral-200/70 bg-white px-4 py-2.5 text-sm shadow-card ring-1 ring-neutral-900/5">
-			<span className="text-[13px] font-medium text-neutral-500">Slice</span>
+		<div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-2.5 text-sm shadow-card ring-1 ring-white/5">
+			<span className="text-[13px] font-medium text-neutral-400">Slice</span>
 			{cells.length > 0
 				? AXES.map(({ key, label }) => (
 						<label key={key} className="flex items-center gap-1.5">
-							<span className="text-xs text-neutral-500">{label}</span>
+							<span className="text-xs text-neutral-400">{label}</span>
 							<select
 								value={filter[key] ?? ''}
 								onChange={(e) =>
@@ -79,7 +79,7 @@ export function CubeFilterBar({
 										[key]: e.target.value || undefined,
 									})
 								}
-								className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-sm text-neutral-800 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+								className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-sm text-neutral-200 focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400 [&>option]:text-neutral-800"
 							>
 								<option value="">All</option>
 								{dims[key].map((v) => (
@@ -122,7 +122,7 @@ export function CubeFilterBar({
 							onChange({});
 							onServerChange({});
 						}}
-						className="text-xs font-medium text-neutral-500 underline hover:text-neutral-800"
+						className="text-xs font-medium text-neutral-400 underline hover:text-neutral-100"
 					>
 						Clear all
 					</button>
