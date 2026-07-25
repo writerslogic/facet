@@ -169,7 +169,7 @@ export function FlagsPanel({
 					<div>
 						<label
 							htmlFor="flag-type"
-							className="block text-xs font-medium text-neutral-600"
+							className="block text-xs font-medium text-[color:var(--ink)]"
 						>
 							Type
 						</label>
@@ -177,7 +177,7 @@ export function FlagsPanel({
 							id="flag-type"
 							value={draft.type}
 							onChange={(e) => onType(e.target.value as 'boolean' | 'multivariate')}
-							className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+							className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 						>
 							<option value="boolean">boolean</option>
 							<option value="multivariate">multivariate</option>
@@ -186,7 +186,7 @@ export function FlagsPanel({
 					<div>
 						<label
 							htmlFor="flag-default"
-							className="block text-xs font-medium text-neutral-600"
+							className="block text-xs font-medium text-[color:var(--ink)]"
 						>
 							Default variant
 						</label>
@@ -199,7 +199,7 @@ export function FlagsPanel({
 									defaultVariant: e.target.value,
 								}))
 							}
-							className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+							className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 						>
 							{keys.length === 0 ? <option value="">(define variants)</option> : null}
 							{keys.map((k) => (
@@ -212,7 +212,7 @@ export function FlagsPanel({
 				</div>
 
 				<fieldset className="space-y-2">
-					<legend className="text-xs font-medium text-neutral-600">
+					<legend className="text-xs font-medium text-[color:var(--ink)]">
 						Variants (weights are basis points, must sum to 10000)
 					</legend>
 					{draft.variants.map((variant, index) => (
@@ -231,7 +231,7 @@ export function FlagsPanel({
 									})
 								}
 								placeholder={`variant ${index + 1}`}
-								className="flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+								className="flex-1 rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 							/>
 							<label className="sr-only" htmlFor={`flag-variant-weight-${index}`}>
 								Variant {index + 1} weight
@@ -248,7 +248,7 @@ export function FlagsPanel({
 										weight: Number(e.target.value),
 									})
 								}
-								className="w-24 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+								className="w-24 rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 							/>
 							{draft.variants.length > 2 ? (
 								<button
@@ -260,7 +260,7 @@ export function FlagsPanel({
 										}))
 									}
 									aria-label={`Remove variant ${index + 1}`}
-									className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+									className="rounded-md p-1 text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
 								>
 									<X className="h-4 w-4" aria-hidden="true" />
 								</button>
@@ -309,7 +309,7 @@ export function FlagsPanel({
 						<button
 							type="button"
 							onClick={resetDraft}
-							className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100"
+							className="rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm font-medium text-[color:var(--ink)] transition hover:bg-[color:rgb(var(--hover))]"
 						>
 							Cancel
 						</button>
@@ -331,20 +331,20 @@ export function FlagsPanel({
 						detail={flags.error instanceof Error ? flags.error.message : null}
 					/>
 				) : flags.data && flags.data.flags.length > 0 ? (
-					<ul className="divide-y divide-neutral-100">
+					<ul className="divide-y divide-[color:rgb(var(--border))]">
 						{flags.data.flags.map((flag) => (
 							<li
 								key={flag.id}
 								className="flex items-center justify-between gap-3 py-2 text-sm"
 							>
 								<div className="min-w-0">
-									<p className="truncate font-medium text-neutral-800">
+									<p className="truncate font-medium text-[color:var(--ink)]">
 										{flag.name}{' '}
-										<span className="font-normal text-neutral-400">
+										<span className="font-normal text-[color:var(--muted)]">
 											v{flag.version}
 										</span>
 									</p>
-									<p className="truncate text-xs text-neutral-400">
+									<p className="truncate text-xs text-[color:var(--muted)]">
 										{flag.flag_key} · {flag.type} ·{' '}
 										{flag.variants
 											.map((v) => `${v.key} ${v.weight}`)
@@ -355,7 +355,7 @@ export function FlagsPanel({
 									</p>
 								</div>
 								<div className="flex shrink-0 items-center gap-2">
-									<label className="flex items-center gap-1.5 text-xs text-neutral-500">
+									<label className="flex items-center gap-1.5 text-xs text-[color:var(--muted)]">
 										<input
 											type="checkbox"
 											checked={flag.enabled}
@@ -367,7 +367,7 @@ export function FlagsPanel({
 									<button
 										type="button"
 										onClick={() => startEdit(flag)}
-										className="rounded-md border border-neutral-200 px-2 py-1 text-xs font-medium text-neutral-500 transition hover:bg-neutral-100 hover:text-neutral-800"
+										className="rounded-md border border-[color:rgb(var(--border))] px-2 py-1 text-xs font-medium text-[color:var(--muted)] transition hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
 									>
 										Edit
 									</button>

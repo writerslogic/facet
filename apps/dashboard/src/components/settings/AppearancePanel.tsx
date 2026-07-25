@@ -11,9 +11,9 @@ const MODES: Mode[] = ['dark', 'light'];
 export function AppearancePanel(): ReactElement {
 	const { palette, mode, setPalette, setMode } = useTheme();
 	return (
-		<div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-			<h2 className="font-semibold text-neutral-800 text-sm">Appearance</h2>
-			<p className="mt-1 text-neutral-500 text-xs">
+		<div className="rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-4 shadow-sm">
+			<h2 className="font-semibold text-[color:var(--ink)] text-sm">Appearance</h2>
+			<p className="mt-1 text-[color:var(--muted)] text-xs">
 				The interface stays neutral; the palette colours are used only for data — charts,
 				bars, the map, and active filters.
 			</p>
@@ -27,8 +27,8 @@ export function AppearancePanel(): ReactElement {
 						className={cn(
 							'flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition',
 							palette === p
-								? 'border-accent-500 bg-accent-50 text-accent-800 ring-1 ring-accent-300'
-								: 'border-neutral-200 text-neutral-700 hover:bg-neutral-50',
+								? 'border-accent-400 bg-accent-500/15 text-accent-200 ring-1 ring-accent-400/30'
+								: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
 						)}
 					>
 						<span className="flex shrink-0 gap-0.5">
@@ -45,8 +45,8 @@ export function AppearancePanel(): ReactElement {
 				))}
 			</div>
 			<div className="mt-3 flex items-center gap-2">
-				<span className="font-medium text-neutral-500 text-xs">Mode</span>
-				<div className="inline-flex rounded-lg border border-neutral-200 bg-neutral-100 p-0.5">
+				<span className="font-medium text-[color:var(--muted)] text-xs">Mode</span>
+				<div className="inline-flex rounded-lg border border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] p-0.5">
 					{MODES.map((m) => (
 						<button
 							key={m}
@@ -56,8 +56,8 @@ export function AppearancePanel(): ReactElement {
 							className={cn(
 								'rounded-md px-3 py-1 font-medium text-sm capitalize transition',
 								mode === m
-									? 'bg-white text-accent-700 shadow-sm'
-									: 'text-neutral-500 hover:text-neutral-800',
+									? 'bg-accent-500/20 text-accent-200 ring-1 ring-accent-400/30'
+									: 'text-[color:var(--muted)] hover:text-[color:var(--ink)]',
 							)}
 						>
 							{m}

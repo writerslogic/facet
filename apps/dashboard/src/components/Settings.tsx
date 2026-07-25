@@ -33,10 +33,12 @@ export function Settings(): ReactElement {
 	return (
 		<div className="space-y-6">
 			<AppearancePanel />
-			<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
+			<div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-4 shadow-sm">
 				<div>
-					<p className="text-sm font-medium text-neutral-800">Admin session active</p>
-					<p className="text-xs text-neutral-500">
+					<p className="text-sm font-medium text-[color:var(--ink)]">
+						Admin session active
+					</p>
+					<p className="text-xs text-[color:var(--muted)]">
 						This token grants deployment-wide admin access. It is stored for this
 						browser tab only.
 					</p>
@@ -44,7 +46,7 @@ export function Settings(): ReactElement {
 				<button
 					type="button"
 					onClick={forgetToken}
-					className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900"
+					className="rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm font-medium text-[color:var(--ink)] transition hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
 				>
 					Forget admin token
 				</button>
@@ -62,7 +64,7 @@ export function Settings(): ReactElement {
 					<IdentityPanel token={token} siteId={siteId} />
 				</div>
 			) : (
-				<p className="rounded-xl border border-neutral-200 bg-white p-5 text-center text-sm text-neutral-500 shadow-sm">
+				<p className="rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-5 text-center text-sm text-[color:var(--muted)] shadow-sm">
 					Create or select a site above to manage its keys, goals, funnels, experiments,
 					and flags.
 				</p>

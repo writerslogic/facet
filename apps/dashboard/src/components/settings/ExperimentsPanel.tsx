@@ -86,7 +86,7 @@ export function ExperimentsPanel({
 				</div>
 
 				<fieldset className="space-y-2">
-					<legend className="text-xs font-medium text-neutral-600">
+					<legend className="text-xs font-medium text-[color:var(--ink)]">
 						Variants (2–8, first is control)
 					</legend>
 					{variants.map((variant, index) => (
@@ -105,7 +105,7 @@ export function ExperimentsPanel({
 									})
 								}
 								placeholder={index === 0 ? 'control' : `variant ${index + 1}`}
-								className="flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+								className="flex-1 rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 							/>
 							<label className="sr-only" htmlFor={`exp-variant-weight-${index}`}>
 								Variant {index + 1} weight
@@ -121,7 +121,7 @@ export function ExperimentsPanel({
 										weight: Number(e.target.value),
 									})
 								}
-								className="w-24 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+								className="w-24 rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 							/>
 							{variants.length > 2 ? (
 								<button
@@ -130,7 +130,7 @@ export function ExperimentsPanel({
 										setVariants((prev) => prev.filter((_, i) => i !== index))
 									}
 									aria-label={`Remove variant ${index + 1}`}
-									className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+									className="rounded-md p-1 text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
 								>
 									<X className="h-4 w-4" aria-hidden="true" />
 								</button>
@@ -174,17 +174,17 @@ export function ExperimentsPanel({
 						}
 					/>
 				) : experiments.data && experiments.data.experiments.length > 0 ? (
-					<ul className="divide-y divide-neutral-100">
+					<ul className="divide-y divide-[color:rgb(var(--border))]">
 						{experiments.data.experiments.map((exp) => (
 							<li
 								key={exp.id}
 								className="flex items-center justify-between gap-3 py-2 text-sm"
 							>
 								<div className="min-w-0">
-									<p className="truncate font-medium text-neutral-800">
+									<p className="truncate font-medium text-[color:var(--ink)]">
 										{exp.name}
 									</p>
-									<p className="truncate text-xs text-neutral-400">
+									<p className="truncate text-xs text-[color:var(--muted)]">
 										flag: {exp.flag_key} · {exp.variants.length} variants
 									</p>
 								</div>

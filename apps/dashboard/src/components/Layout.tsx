@@ -57,7 +57,7 @@ export function Layout({
 					'z-10 border-b backdrop-blur-xl',
 					dark
 						? 'border-[color:rgb(var(--border))] bg-[var(--bg)]'
-						: 'border-neutral-200/70 bg-white/70',
+						: 'border-neutral-200/70 bg-[color:rgb(var(--hover))]',
 					fill ? 'shrink-0' : 'sticky top-0',
 				)}
 			>

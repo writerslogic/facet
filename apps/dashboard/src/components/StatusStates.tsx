@@ -89,12 +89,14 @@ export function EmptyState({
 	children?: ReactElement | string;
 }): ReactElement {
 	return (
-		<div className="rounded-2xl border border-neutral-200/70 bg-white p-10 text-center shadow-card ring-1 ring-neutral-900/5">
+		<div className="rounded-2xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-10 text-center shadow-card ring-1 ring-[color:rgb(var(--border))]">
 			<span className="mx-auto flex size-12 items-center justify-center rounded-full bg-accent-50 ring-1 ring-accent-100">
 				<Inbox className="h-6 w-6 text-accent-400" aria-hidden="true" />
 			</span>
-			<p className="mt-3 text-sm font-semibold text-neutral-700">{title}</p>
-			{children ? <div className="mt-1 text-sm text-neutral-500">{children}</div> : null}
+			<p className="mt-3 text-sm font-semibold text-[color:var(--ink)]">{title}</p>
+			{children ? (
+				<div className="mt-1 text-sm text-[color:var(--muted)]">{children}</div>
+			) : null}
 		</div>
 	);
 }

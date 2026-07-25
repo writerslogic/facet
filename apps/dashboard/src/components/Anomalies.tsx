@@ -74,7 +74,7 @@ function ProvenanceToggle({
 				'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition',
 				on
 					? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-					: 'border-neutral-200 bg-white text-neutral-500 hover:text-neutral-900',
+					: 'border-[color:rgb(var(--border))] bg-[var(--panel)] text-[color:var(--muted)] hover:text-[color:var(--ink)]',
 			)}
 		>
 			<ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
@@ -82,7 +82,7 @@ function ProvenanceToggle({
 			<span
 				className={cn(
 					'rounded px-1 text-[10px] font-semibold',
-					on ? 'bg-emerald-600 text-white' : 'bg-neutral-200 text-neutral-600',
+					on ? 'bg-emerald-600 text-white' : 'bg-neutral-200 text-[color:var(--ink)]',
 				)}
 			>
 				{on ? 'ON' : 'OFF'}
@@ -120,12 +120,12 @@ function AnomalyCard({
 						<Icon className="h-3.5 w-3.5" aria-hidden="true" />
 						{meta.label}
 					</span>
-					<span className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+					<span className="text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
 						{anomaly.metric} {anomaly.direction}
 					</span>
 				</div>
 				<div className="flex items-center gap-3">
-					<span className="text-sm font-semibold tabular-nums text-neutral-700">
+					<span className="text-sm font-semibold tabular-nums text-[color:var(--ink)]">
 						{drop ? '-' : '+'}
 						{pctChange(anomaly)}%
 					</span>
@@ -133,22 +133,22 @@ function AnomalyCard({
 						type="button"
 						onClick={() => onDismiss(id)}
 						aria-label="Dismiss anomaly"
-						className="rounded-md p-1 text-neutral-400 transition-colors hover:bg-white/60 hover:text-neutral-700"
+						className="rounded-md p-1 text-[color:var(--muted)] transition-colors hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
 					>
 						<X className="h-4 w-4" aria-hidden="true" />
 					</button>
 				</div>
 			</div>
-			<p className="text-sm text-neutral-800">{anomaly.summary}</p>
+			<p className="text-sm text-[color:var(--ink)]">{anomaly.summary}</p>
 			{anomaly.diagnosis ? (
-				<p className="mt-2 text-xs text-neutral-500">
+				<p className="mt-2 text-xs text-[color:var(--muted)]">
 					Why flagged: largest contributor {anomaly.diagnosis.dimension}=
 					{anomaly.diagnosis.value} ({anomaly.diagnosis.current} vs ~
 					{Math.round(anomaly.diagnosis.baseline_avg)} typical), z-score{' '}
 					{anomaly.z.toFixed(1)}.
 				</p>
 			) : (
-				<p className="mt-2 text-xs text-neutral-500">
+				<p className="mt-2 text-xs text-[color:var(--muted)]">
 					Why flagged: {anomaly.value} vs ~{Math.round(anomaly.baseline_mean)} typical,
 					z-score {anomaly.z.toFixed(1)}.
 				</p>
@@ -161,7 +161,7 @@ function AnomalyCard({
 							[anomaly.diagnosis?.dimension as string]: anomaly.diagnosis?.value,
 						})
 					}
-					className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white/70 px-2.5 py-1 text-xs font-medium text-neutral-700 transition hover:border-accent-400 hover:text-accent-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
+					className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-[color:rgb(var(--border))] bg-[var(--panel)] px-2.5 py-1 text-xs font-medium text-[color:var(--ink)] transition hover:border-accent-400 hover:text-accent-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40"
 				>
 					<Search className="h-3.5 w-3.5" aria-hidden="true" />
 					Investigate {anomaly.diagnosis.dimension} = {anomaly.diagnosis.value}
@@ -230,7 +230,7 @@ export function Anomalies({
 			</div>
 			{provenance ? (
 				checkpointLoading ? (
-					<p className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+					<p className="rounded-lg border border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] px-3 py-2 text-xs text-[color:var(--muted)]">
 						Checking for a transparency log…
 					</p>
 				) : checkpoint ? (
@@ -239,7 +239,7 @@ export function Anomalies({
 						Verified badge to inspect its current signed tree head.
 					</p>
 				) : (
-					<p className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-500">
+					<p className="rounded-lg border border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] px-3 py-2 text-xs text-[color:var(--muted)]">
 						This deployment doesn't publish a transparency log, so these anomalies can't
 						be cryptographically verified.
 					</p>

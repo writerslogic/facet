@@ -63,11 +63,13 @@ export function FunnelsPanel({
 				/>
 
 				<fieldset className="space-y-2">
-					<legend className="text-xs font-medium text-neutral-600">Steps (2–10)</legend>
+					<legend className="text-xs font-medium text-[color:var(--ink)]">
+						Steps (2–10)
+					</legend>
 					{steps.map((step, index) => (
 						// biome-ignore lint/suspicious/noArrayIndexKey: steps are positional and reorder as a unit
 						<div key={index} className="flex items-center gap-2">
-							<span className="w-5 text-xs text-neutral-400 tabular-nums">
+							<span className="w-5 text-xs text-[color:var(--muted)] tabular-nums">
 								{index + 1}.
 							</span>
 							<label className="sr-only" htmlFor={`funnel-step-type-${index}`}>
@@ -81,7 +83,7 @@ export function FunnelsPanel({
 										type: e.target.value as FunnelStep['type'],
 									})
 								}
-								className="rounded-lg border border-neutral-300 px-2 py-1.5 text-sm outline-none focus:border-neutral-900"
+								className="rounded-lg border border-[color:rgb(var(--border))] px-2 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))]"
 							>
 								<option value="path">path</option>
 								<option value="event">event</option>
@@ -99,7 +101,7 @@ export function FunnelsPanel({
 									})
 								}
 								placeholder={step.type === 'event' ? 'add_to_cart' : '/cart'}
-								className="flex-1 rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+								className="flex-1 rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 							/>
 							{steps.length > 2 ? (
 								<button
@@ -108,7 +110,7 @@ export function FunnelsPanel({
 										setSteps((prev) => prev.filter((_, i) => i !== index))
 									}
 									aria-label={`Remove step ${index + 1}`}
-									className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+									className="rounded-md p-1 text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
 								>
 									<X className="h-4 w-4" aria-hidden="true" />
 								</button>
@@ -150,17 +152,17 @@ export function FunnelsPanel({
 						detail={funnels.error instanceof Error ? funnels.error.message : null}
 					/>
 				) : funnels.data && funnels.data.funnels.length > 0 ? (
-					<ul className="divide-y divide-neutral-100">
+					<ul className="divide-y divide-[color:rgb(var(--border))]">
 						{funnels.data.funnels.map((f) => (
 							<li
 								key={f.id}
 								className="flex items-center justify-between gap-3 py-2 text-sm"
 							>
 								<div className="min-w-0">
-									<p className="truncate font-medium text-neutral-800">
+									<p className="truncate font-medium text-[color:var(--ink)]">
 										{f.name}
 									</p>
-									<p className="truncate text-xs text-neutral-400">
+									<p className="truncate text-xs text-[color:var(--muted)]">
 										{f.steps.length} steps
 									</p>
 								</div>

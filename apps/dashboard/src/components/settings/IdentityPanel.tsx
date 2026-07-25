@@ -78,7 +78,7 @@ export function IdentityPanel({
 
 	return (
 		<Panel title="Identity & tier">
-			<p className="mb-4 text-xs leading-relaxed text-neutral-500">
+			<p className="mb-4 text-xs leading-relaxed text-[color:var(--muted)]">
 				Controls how visitors are hashed. Anonymous is a daily-rotating hash with no linkage
 				and is recommended. Pseudonymous and identified widen the linkage window to enable
 				returning-visitor and retention analysis, but require a deployment signing key and
@@ -91,7 +91,7 @@ export function IdentityPanel({
 					<div>
 						<label
 							htmlFor="identity-tier"
-							className="block text-xs font-medium text-neutral-600"
+							className="block text-xs font-medium text-[color:var(--ink)]"
 						>
 							Tier
 						</label>
@@ -99,7 +99,7 @@ export function IdentityPanel({
 							id="identity-tier"
 							value={tier}
 							onChange={(e) => onTier(e.target.value as IdentityTier)}
-							className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+							className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 						>
 							{TIERS.map((t) => (
 								<option key={t.value} value={t.value}>
@@ -111,7 +111,7 @@ export function IdentityPanel({
 					<div>
 						<label
 							htmlFor="identity-salt-window"
-							className="block text-xs font-medium text-neutral-600"
+							className="block text-xs font-medium text-[color:var(--ink)]"
 						>
 							Salt window
 						</label>
@@ -120,7 +120,7 @@ export function IdentityPanel({
 							value={effectiveWindow}
 							disabled={anonymous}
 							onChange={(e) => setSaltWindow(e.target.value as SaltWindow)}
-							className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900 disabled:bg-neutral-50 disabled:text-neutral-400"
+							className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))] disabled:bg-[color:rgb(var(--hover))] disabled:text-[color:var(--muted)]"
 						>
 							{SALT_WINDOWS.map((w) => (
 								<option key={w} value={w}>
@@ -129,16 +129,16 @@ export function IdentityPanel({
 							))}
 						</select>
 						{anonymous ? (
-							<p className="mt-1 text-xs text-neutral-400">
+							<p className="mt-1 text-xs text-[color:var(--muted)]">
 								Anonymous forces the day window.
 							</p>
 						) : null}
 					</div>
 				</div>
 
-				<p className="flex items-start gap-1.5 text-xs text-neutral-500">
+				<p className="flex items-start gap-1.5 text-xs text-[color:var(--muted)]">
 					<ShieldCheck
-						className="mt-0.5 h-3.5 w-3.5 shrink-0 text-neutral-400"
+						className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--muted)]"
 						aria-hidden="true"
 					/>
 					<span>{activeBlurb}</span>
@@ -172,7 +172,7 @@ export function IdentityPanel({
 				</p>
 			) : null}
 
-			<p className="mt-3 text-xs text-neutral-400">
+			<p className="mt-3 text-xs text-[color:var(--muted)]">
 				There is no read-back of the current config, so this form sets the tier rather than
 				reflecting it. The confirmation above shows the config the server just applied.
 			</p>

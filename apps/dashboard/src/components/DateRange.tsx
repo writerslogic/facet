@@ -43,25 +43,25 @@ function CustomPopover({ onClose }: { onClose: () => void }): ReactElement {
 	}
 
 	return (
-		<div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-neutral-200 bg-white p-4 shadow-lg">
-			<p className="mb-2 text-xs font-medium text-neutral-500">Custom range (UTC)</p>
+		<div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-4 shadow-lg">
+			<p className="mb-2 text-xs font-medium text-[color:var(--muted)]">Custom range (UTC)</p>
 			<div className="flex flex-col gap-3">
-				<label className="text-xs font-medium text-neutral-600">
+				<label className="text-xs font-medium text-[color:var(--ink)]">
 					Start
 					<input
 						type="date"
 						value={start}
 						onChange={(ev) => setStart(ev.target.value)}
-						className="mt-1 block w-full rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900 outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+						className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-2.5 py-1.5 text-sm text-[color:var(--ink)] outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
 					/>
 				</label>
-				<label className="text-xs font-medium text-neutral-600">
+				<label className="text-xs font-medium text-[color:var(--ink)]">
 					End
 					<input
 						type="date"
 						value={end}
 						onChange={(ev) => setEnd(ev.target.value)}
-						className="mt-1 block w-full rounded-lg border border-neutral-300 px-2.5 py-1.5 text-sm text-neutral-900 outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+						className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-2.5 py-1.5 text-sm text-[color:var(--ink)] outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
 					/>
 				</label>
 			</div>
@@ -74,7 +74,7 @@ function CustomPopover({ onClose }: { onClose: () => void }): ReactElement {
 				<button
 					type="button"
 					onClick={onClose}
-					className="rounded-lg px-3 py-1.5 text-sm font-medium text-neutral-600 hover:bg-neutral-100"
+					className="rounded-lg px-3 py-1.5 text-sm font-medium text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]"
 				>
 					Cancel
 				</button>
@@ -114,7 +114,9 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 			<div
 				className={cn(
 					'inline-flex rounded-lg border p-0.5',
-					dark ? 'border-white/10 bg-white/5' : 'border-neutral-200/80 bg-neutral-100/70',
+					dark
+						? 'border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))]'
+						: 'border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))]',
 				)}
 			>
 				{RANGE_PRESETS.map((option) => (
@@ -128,10 +130,10 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 							preset === option
 								? dark
 									? 'bg-accent-500/25 text-accent-100 ring-1 ring-accent-400/30'
-									: 'bg-white text-accent-700 shadow-sm ring-1 ring-neutral-900/5'
+									: 'bg-[var(--panel)] text-accent-700 shadow-sm ring-1 ring-[color:rgb(var(--border))]'
 								: dark
-									? 'text-neutral-400 hover:text-white'
-									: 'text-neutral-500 hover:text-neutral-900',
+									? 'text-[color:var(--muted)] hover:text-[color:var(--ink)]'
+									: 'text-[color:var(--muted)] hover:text-[color:var(--ink)]',
 						)}
 					>
 						{LABELS[option]}
@@ -150,8 +152,8 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 						isCustom
 							? 'border-accent-500 bg-accent-50 text-accent-700'
 							: dark
-								? 'border-white/10 text-neutral-300 hover:bg-white/10 hover:text-white'
-								: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
+								? 'border-[color:rgb(var(--border))] text-[color:var(--faint)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
+								: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
 					)}
 				>
 					<CalendarRange className="h-4 w-4" aria-hidden="true" />
@@ -164,15 +166,15 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 				className={cn(
 					'inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50 has-[:checked]:text-accent-700',
 					dark
-						? 'border-white/10 text-neutral-300'
-						: 'border-neutral-200 text-neutral-600',
+						? 'border-[color:rgb(var(--border))] text-[color:var(--faint)]'
+						: 'border-[color:rgb(var(--border))] text-[color:var(--ink)]',
 				)}
 			>
 				<input
 					type="checkbox"
 					checked={compare}
 					onChange={(ev) => setCompare(ev.target.checked)}
-					className="h-3.5 w-3.5 rounded border-neutral-300 text-accent-600 focus:ring-accent-500"
+					className="h-3.5 w-3.5 rounded border-[color:rgb(var(--border))] text-accent-600 focus:ring-accent-500"
 				/>
 				Compare
 			</label>

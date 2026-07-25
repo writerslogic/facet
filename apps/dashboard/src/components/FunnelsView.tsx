@@ -86,7 +86,7 @@ export function FunnelsView({
 										'rounded-md border px-3 py-1.5 text-sm transition-colors',
 										funnel.id === activeFunnelId
 											? 'border-accent-500 bg-accent-50 text-accent-700'
-											: 'border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50',
+											: 'border-[color:rgb(var(--border))] bg-[var(--panel)] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
 									)}
 								>
 									{funnel.name}

@@ -331,7 +331,7 @@ function ChartCanvas({
 			{fillHeight ? (
 				<div
 					ref={tooltipRef}
-					className="pointer-events-none absolute top-0 left-0 z-20 rounded-lg border border-neutral-200/70 bg-white/95 px-2.5 py-2 opacity-0 shadow-float ring-1 ring-neutral-900/5 backdrop-blur transition-opacity duration-100"
+					className="pointer-events-none absolute top-0 left-0 z-20 rounded-lg border border-neutral-200/70 bg-[color:rgb(var(--hover))] px-2.5 py-2 opacity-0 shadow-float ring-1 ring-neutral-900/5 backdrop-blur transition-opacity duration-100"
 					aria-hidden="true"
 				/>
 			) : null}

@@ -17,7 +17,7 @@ export function AdminTokenGate(): ReactElement {
 	return (
 		<form
 			onSubmit={onSubmit}
-			className="mx-auto max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-sm"
+			className="mx-auto max-w-md rounded-2xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-6 shadow-sm"
 		>
 			<div className="flex items-start gap-3">
 				<ShieldAlert
@@ -25,8 +25,10 @@ export function AdminTokenGate(): ReactElement {
 					aria-hidden="true"
 				/>
 				<div>
-					<h2 className="text-lg font-semibold text-neutral-900">Admin token required</h2>
-					<p className="mt-1 text-sm text-neutral-500">
+					<h2 className="text-lg font-semibold text-[color:var(--ink)]">
+						Admin token required
+					</h2>
+					<p className="mt-1 text-sm text-[color:var(--muted)]">
 						Settings manages sites, keys, goals, funnels, and experiments. Enter your
 						deployment ADMIN_TOKEN to continue. It grants deployment-wide admin access
 						and is stored for this browser tab only.
@@ -36,7 +38,7 @@ export function AdminTokenGate(): ReactElement {
 
 			<label
 				htmlFor="admin-token"
-				className="mt-5 block text-sm font-medium text-neutral-700"
+				className="mt-5 block text-sm font-medium text-[color:var(--ink)]"
 			>
 				Admin token
 			</label>
@@ -46,7 +48,7 @@ export function AdminTokenGate(): ReactElement {
 				value={value}
 				onChange={(e) => setValue(e.target.value)}
 				autoComplete="off"
-				className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+				className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-2 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 			/>
 
 			<button

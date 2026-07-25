@@ -13,7 +13,7 @@ export function Card({
 	return (
 		<section
 			className={cn(
-				'rounded-2xl border border-neutral-200/70 bg-white p-5 shadow-card ring-1 ring-neutral-900/5',
+				'rounded-2xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-5 shadow-card ring-1 ring-[color:rgb(var(--border))]',
 				className,
 			)}
 		>
@@ -31,7 +31,7 @@ export function CardHeading({
 }): ReactElement {
 	return (
 		<div className="mb-4 flex items-center justify-between gap-3">
-			<h3 className="text-[13px] font-semibold uppercase tracking-wide text-neutral-500">
+			<h3 className="text-[13px] font-semibold uppercase tracking-wide text-[color:var(--muted)]">
 				{children}
 			</h3>
 			{action}

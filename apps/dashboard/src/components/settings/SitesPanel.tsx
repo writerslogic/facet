@@ -82,7 +82,7 @@ export function SitesPanel({
 						detail={sites.error instanceof Error ? sites.error.message : null}
 					/>
 				) : sites.data && sites.data.sites.length > 0 ? (
-					<ul className="divide-y divide-neutral-100">
+					<ul className="divide-y divide-[color:rgb(var(--border))]">
 						{sites.data.sites.map((site) => (
 							<SiteRow
 								key={site.id}
@@ -112,8 +112,8 @@ function SiteRow({
 	return (
 		<li className="flex items-center justify-between gap-3 py-2 text-sm">
 			<div className="min-w-0">
-				<p className="truncate font-medium text-neutral-800">{site.name}</p>
-				<p className="truncate text-xs text-neutral-400">
+				<p className="truncate font-medium text-[color:var(--ink)]">{site.name}</p>
+				<p className="truncate text-xs text-[color:var(--muted)]">
 					{site.domain} · {site.id}
 				</p>
 			</div>
@@ -125,7 +125,7 @@ function SiteRow({
 					'shrink-0 rounded-md border px-3 py-1 text-xs font-medium transition',
 					active
 						? 'border-accent-500 bg-accent-50 text-accent-700'
-						: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
+						: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
 				)}
 			>
 				{active ? 'Managing' : 'Manage'}

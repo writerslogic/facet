@@ -35,17 +35,20 @@ export function KeyGate(): ReactElement {
 			<form
 				onSubmit={onSubmit}
 				noValidate
-				className="w-full max-w-sm rounded-3xl border border-neutral-200/70 bg-white/90 p-8 shadow-float ring-1 ring-neutral-900/5 backdrop-blur"
+				className="w-full max-w-sm rounded-3xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-8 shadow-float ring-1 ring-[color:rgb(var(--border))] backdrop-blur"
 			>
 				<BrandMark className="size-11" />
-				<h1 className="mt-4 text-2xl font-semibold tracking-[-0.02em] text-neutral-900">
+				<h1 className="mt-4 text-2xl font-semibold tracking-[-0.02em] text-[color:var(--ink)]">
 					Welcome to <span className="text-brand-gradient">Facet</span>
 				</h1>
-				<p className="mt-1 text-sm text-neutral-500">
+				<p className="mt-1 text-sm text-[color:var(--muted)]">
 					Enter your API key and site to view analytics.
 				</p>
 
-				<label htmlFor="kg-key" className="mt-6 block text-sm font-medium text-neutral-700">
+				<label
+					htmlFor="kg-key"
+					className="mt-6 block text-sm font-medium text-[color:var(--ink)]"
+				>
 					API key
 				</label>
 				<input
@@ -57,7 +60,7 @@ export function KeyGate(): ReactElement {
 					placeholder="clk_…"
 					aria-invalid={Boolean(showKeyError)}
 					aria-describedby={showKeyError ? 'kg-key-err' : undefined}
-					className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25"
+					className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] bg-[var(--panel)] px-3 py-2 text-sm text-[color:var(--ink)] outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25"
 				/>
 				{showKeyError ? (
 					<p id="kg-key-err" role="alert" className="mt-1 text-xs text-red-600">
@@ -67,7 +70,7 @@ export function KeyGate(): ReactElement {
 
 				<label
 					htmlFor="kg-site"
-					className="mt-4 block text-sm font-medium text-neutral-700"
+					className="mt-4 block text-sm font-medium text-[color:var(--ink)]"
 				>
 					Site ID
 				</label>
@@ -80,7 +83,7 @@ export function KeyGate(): ReactElement {
 					placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx"
 					aria-invalid={Boolean(showSiteError)}
 					aria-describedby={showSiteError ? 'kg-site-err' : undefined}
-					className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25"
+					className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] bg-[var(--panel)] px-3 py-2 text-sm text-[color:var(--ink)] outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25"
 				/>
 				{showSiteError ? (
 					<p id="kg-site-err" role="alert" className="mt-1 text-xs text-red-600">
@@ -90,9 +93,9 @@ export function KeyGate(): ReactElement {
 
 				<label
 					htmlFor="kg-label"
-					className="mt-4 block text-sm font-medium text-neutral-700"
+					className="mt-4 block text-sm font-medium text-[color:var(--ink)]"
 				>
-					Label <span className="text-neutral-400">(optional)</span>
+					Label <span className="text-[color:var(--muted)]">(optional)</span>
 				</label>
 				<input
 					id="kg-label"
@@ -101,7 +104,7 @@ export function KeyGate(): ReactElement {
 					onChange={(e) => setLabel(e.target.value)}
 					autoComplete="off"
 					placeholder="Production"
-					className="mt-1 block w-full rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25"
+					className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] bg-[var(--panel)] px-3 py-2 text-sm text-[color:var(--ink)] outline-none transition focus:border-accent-500 focus:ring-2 focus:ring-accent-500/25"
 				/>
 
 				<button

@@ -75,24 +75,24 @@ export function ExportButton({
 				className={cn(
 					'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50',
 					dark
-						? 'border-white/10 text-neutral-300 hover:bg-white/10 hover:text-white'
-						: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
+						? 'border-[color:rgb(var(--border))] text-[color:var(--faint)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
+						: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]',
 				)}
 			>
 				<Download className="h-4 w-4" aria-hidden="true" />
 				{busy ? 'Exporting…' : 'Export CSV'}
 			</button>
 			{open ? (
-				<div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-neutral-200 bg-white p-1.5 shadow-lg">
+				<div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-1.5 shadow-lg">
 					<button
 						type="button"
 						onClick={() => run('series')}
-						className="block w-full rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100"
+						className="block w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]"
 					>
 						Time series
 					</button>
-					<div className="my-1 border-t border-neutral-100" />
-					<p className="px-3 py-1 text-xs font-medium uppercase tracking-wide text-neutral-400">
+					<div className="my-1 border-t border-[color:rgb(var(--border))]" />
+					<p className="px-3 py-1 text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
 						Breakdown
 					</p>
 					{BREAKDOWN_DIMENSIONS.map((d) => (
@@ -100,7 +100,7 @@ export function ExportButton({
 							key={d.value}
 							type="button"
 							onClick={() => run('breakdown', d.value)}
-							className="block w-full rounded-lg px-3 py-2 text-left text-sm text-neutral-700 hover:bg-neutral-100"
+							className="block w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]"
 						>
 							{d.label}
 						</button>

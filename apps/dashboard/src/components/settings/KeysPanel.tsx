@@ -87,13 +87,13 @@ export function KeysPanel({
 						Copy this key now — it will not be shown again.
 					</p>
 					<div className="mt-2 flex items-center gap-2">
-						<code className="flex-1 truncate rounded-md bg-white px-3 py-1.5 font-mono text-sm text-neutral-800">
+						<code className="flex-1 truncate rounded-md bg-[var(--panel)] px-3 py-1.5 font-mono text-sm text-[color:var(--ink)]">
 							{issued.key}
 						</code>
 						<button
 							type="button"
 							onClick={copyKey}
-							className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-white px-2 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+							className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-[var(--panel)] px-2 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
 						>
 							{copied ? (
 								<Check className="h-3.5 w-3.5" aria-hidden="true" />
@@ -118,7 +118,7 @@ export function KeysPanel({
 								});
 								setSavedProfile(true);
 							}}
-							className="mt-3 rounded-md border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-700 transition hover:bg-neutral-100"
+							className="mt-3 rounded-md border border-[color:rgb(var(--border))] bg-[var(--panel)] px-3 py-1 text-xs font-medium text-[color:var(--ink)] transition hover:bg-[color:rgb(var(--hover))]"
 						>
 							Save as site profile
 						</button>
@@ -135,17 +135,17 @@ export function KeysPanel({
 						detail={keys.error instanceof Error ? keys.error.message : null}
 					/>
 				) : keys.data && keys.data.keys.length > 0 ? (
-					<ul className="divide-y divide-neutral-100">
+					<ul className="divide-y divide-[color:rgb(var(--border))]">
 						{keys.data.keys.map((k) => (
 							<li
 								key={k.id}
 								className="flex items-center justify-between gap-3 py-2 text-sm"
 							>
 								<div className="min-w-0">
-									<p className="truncate font-medium text-neutral-800">
+									<p className="truncate font-medium text-[color:var(--ink)]">
 										{k.label ?? 'Unlabeled key'}
 									</p>
-									<p className="truncate text-xs text-neutral-400">
+									<p className="truncate text-xs text-[color:var(--muted)]">
 										{k.id}
 										{k.last_used
 											? ` · last used ${new Date(k.last_used).toLocaleDateString()}`

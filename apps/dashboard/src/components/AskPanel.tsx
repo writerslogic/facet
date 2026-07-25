@@ -61,7 +61,7 @@ export function AskPanel({
 					onChange={(e) => setQuestion(e.target.value)}
 					placeholder="Ask a question, e.g. top pages last week"
 					aria-label="Question"
-					className="flex-1 rounded-lg border border-neutral-200 px-3.5 py-2 text-sm text-neutral-800 shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+					className="flex-1 rounded-lg border border-[color:rgb(var(--border))] px-3.5 py-2 text-sm text-[color:var(--ink)] shadow-sm focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
 				/>
 				<button
 					type="submit"
@@ -75,14 +75,14 @@ export function AskPanel({
 			{history.length > 0 ? (
 				<div>
 					<div className="mb-2 flex items-center justify-between">
-						<span className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-neutral-500">
+						<span className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
 							<History className="h-3.5 w-3.5" aria-hidden="true" />
 							Recent questions
 						</span>
 						<button
 							type="button"
 							onClick={() => setHistory(clearAskHistory())}
-							className="text-xs font-medium text-neutral-500 underline hover:text-neutral-800"
+							className="text-xs font-medium text-[color:var(--muted)] underline hover:text-[color:var(--ink)]"
 						>
 							Clear history
 						</button>
@@ -93,7 +93,7 @@ export function AskPanel({
 								<button
 									type="button"
 									onClick={() => run(entry.question)}
-									className="inline-flex max-w-xs items-center gap-1 truncate rounded-full border border-neutral-200 bg-white px-3 py-1 text-xs text-neutral-700 transition-colors hover:border-accent-300 hover:bg-accent-50"
+									className="inline-flex max-w-xs items-center gap-1 truncate rounded-full border border-[color:rgb(var(--border))] bg-[var(--panel)] px-3 py-1 text-xs text-[color:var(--ink)] transition-colors hover:border-accent-300 hover:bg-accent-50"
 								>
 									{entry.question}
 								</button>
@@ -104,7 +104,7 @@ export function AskPanel({
 			) : null}
 
 			{mutation.isPending ? (
-				<p className="text-sm text-neutral-400" aria-live="polite">
+				<p className="text-sm text-[color:var(--muted)]" aria-live="polite">
 					Thinking…
 				</p>
 			) : mutation.error instanceof Error ? (
@@ -116,10 +116,10 @@ export function AskPanel({
 				</p>
 			) : result ? (
 				<section className="space-y-4">
-					<p className="text-sm font-medium text-neutral-700">{result.answer}</p>
+					<p className="text-sm font-medium text-[color:var(--ink)]">{result.answer}</p>
 					{result.result.kind === 'scalar' ? (
 						<Card>
-							<p className="text-3xl font-semibold tabular-nums text-neutral-900">
+							<p className="text-3xl font-semibold tabular-nums text-[color:var(--ink)]">
 								{formatNumber(result.result.value)}
 							</p>
 						</Card>
@@ -133,7 +133,7 @@ export function AskPanel({
 					)}
 				</section>
 			) : (
-				<p className="text-sm text-neutral-400">
+				<p className="text-sm text-[color:var(--muted)]">
 					Ask a question about your traffic to get started.
 				</p>
 			)}

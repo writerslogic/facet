@@ -25,10 +25,10 @@ import {
 // is always shown, and each cell carries a title).
 type Band = { bg: string; text: string };
 
-const EMPTY_BAND: Band = { bg: 'bg-neutral-50', text: 'text-neutral-300' };
+const EMPTY_BAND: Band = { bg: 'bg-[color:rgb(var(--hover))]', text: 'text-[color:var(--faint)]' };
 
 const BANDS: readonly Band[] = [
-	{ bg: 'bg-accent-50', text: 'text-neutral-500' },
+	{ bg: 'bg-accent-50', text: 'text-[color:var(--muted)]' },
 	{ bg: 'bg-accent-100', text: 'text-accent-700' },
 	{ bg: 'bg-accent-200', text: 'text-accent-700' },
 	{ bg: 'bg-accent-400', text: 'text-white' },
@@ -47,7 +47,7 @@ function periodLabel(period: CohortPeriod): string {
 
 function Legend(): ReactElement {
 	return (
-		<div className="flex items-center gap-2 text-xs text-neutral-500">
+		<div className="flex items-center gap-2 text-xs text-[color:var(--muted)]">
 			<span>0%</span>
 			<div className="flex overflow-hidden rounded" aria-hidden="true">
 				{BANDS.map((band) => (
@@ -72,7 +72,7 @@ export function Retention({
 	const { data, error, isLoading } = useRetention(apiKey, siteId, range, period);
 
 	const toggle = (
-		<div className="inline-flex rounded-lg border border-neutral-200 p-0.5">
+		<div className="inline-flex rounded-lg border border-[color:rgb(var(--border))] p-0.5">
 			{(['week', 'day'] as CohortPeriod[]).map((p) => (
 				<button
 					key={p}
@@ -83,7 +83,7 @@ export function Retention({
 						'rounded-md px-3 py-1 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
 						period === p
 							? 'bg-neutral-900 text-white'
-							: 'text-neutral-500 hover:text-neutral-800',
+							: 'text-[color:var(--muted)] hover:text-[color:var(--ink)]',
 					)}
 				>
 					{p === 'week' ? 'Weekly' : 'Daily'}
@@ -95,8 +95,8 @@ export function Retention({
 	const header = (
 		<div className="flex flex-wrap items-center justify-between gap-3">
 			<div>
-				<h2 className="text-sm font-semibold text-neutral-700">Cohort retention</h2>
-				<p className="text-xs text-neutral-500">
+				<h2 className="text-sm font-semibold text-[color:var(--ink)]">Cohort retention</h2>
+				<p className="text-xs text-[color:var(--muted)]">
 					Visitors grouped by the period of their first activity, then the share returning
 					later.
 				</p>
@@ -164,13 +164,13 @@ export function Retention({
 								<tr>
 									<th
 										scope="col"
-										className="px-2 py-1 text-left text-xs font-medium text-neutral-500"
+										className="px-2 py-1 text-left text-xs font-medium text-[color:var(--muted)]"
 									>
 										Cohort
 									</th>
 									<th
 										scope="col"
-										className="px-2 py-1 text-right text-xs font-medium text-neutral-500"
+										className="px-2 py-1 text-right text-xs font-medium text-[color:var(--muted)]"
 									>
 										Size
 									</th>
@@ -179,7 +179,7 @@ export function Retention({
 											// biome-ignore lint/suspicious/noArrayIndexKey: fixed positional period columns
 											key={i}
 											scope="col"
-											className="px-2 py-1 text-center text-xs font-medium text-neutral-500 tabular-nums"
+											className="px-2 py-1 text-center text-xs font-medium text-[color:var(--muted)] tabular-nums"
 										>
 											{periodLabel(period)} {i}
 										</th>
@@ -191,11 +191,11 @@ export function Retention({
 									<tr key={row.cohort}>
 										<th
 											scope="row"
-											className="whitespace-nowrap px-2 py-1 text-left font-medium text-neutral-700"
+											className="whitespace-nowrap px-2 py-1 text-left font-medium text-[color:var(--ink)]"
 										>
 											{row.cohort}
 										</th>
-										<td className="px-2 py-1 text-right text-xs tabular-nums text-neutral-500">
+										<td className="px-2 py-1 text-right text-xs tabular-nums text-[color:var(--muted)]">
 											{formatNumber(row.size)}
 										</td>
 										{Array.from({ length: maxPeriods }, (_, i) => {

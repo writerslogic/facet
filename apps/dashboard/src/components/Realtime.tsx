@@ -19,11 +19,11 @@ function Metric({
 	hint?: string;
 }): ReactElement {
 	return (
-		<div className="rounded-2xl border border-neutral-200/80 bg-white p-6 shadow-sm ring-1 ring-neutral-900/[0.02]">
-			<div className="text-[13px] font-medium text-neutral-500" title={hint}>
+		<div className="rounded-2xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-6 shadow-sm ring-1 ring-[color:rgb(var(--border))]/[0.02]">
+			<div className="text-[13px] font-medium text-[color:var(--muted)]" title={hint}>
 				{label}
 			</div>
-			<div className="mt-2 text-4xl font-semibold tracking-tight text-neutral-900 tabular-nums">
+			<div className="mt-2 text-4xl font-semibold tracking-tight text-[color:var(--ink)] tabular-nums">
 				{value}
 			</div>
 		</div>
@@ -60,18 +60,18 @@ export function Realtime({
 	return (
 		<div className="space-y-4">
 			<div className="flex items-center justify-between">
-				<span className="inline-flex items-center gap-2 text-sm font-medium text-neutral-700">
+				<span className="inline-flex items-center gap-2 text-sm font-medium text-[color:var(--ink)]">
 					<Radio
 						className={
 							isFetching
 								? 'h-4 w-4 animate-pulse text-emerald-500'
-								: 'h-4 w-4 text-neutral-400'
+								: 'h-4 w-4 text-[color:var(--muted)]'
 						}
 						aria-hidden="true"
 					/>
 					Live
 				</span>
-				<span className="text-xs text-neutral-400" aria-live="polite">
+				<span className="text-xs text-[color:var(--muted)]" aria-live="polite">
 					Last updated {updated}
 				</span>
 			</div>
@@ -91,7 +91,7 @@ export function Realtime({
 				</div>
 			)}
 
-			<p className="text-xs text-neutral-400">
+			<p className="text-xs text-[color:var(--muted)]">
 				Active visitors is a privacy-safe distinct-hash proxy, deduped within a 5-minute
 				window — not a precise count. Auto-refreshes every 15s and pauses while this tab is
 				hidden.

@@ -72,7 +72,7 @@ export function TopList({
 				key: 'text-neutral-200',
 				pct: 'text-neutral-500',
 				value: 'text-neutral-50',
-				rowHover: 'hover:bg-white/5',
+				rowHover: 'hover:bg-[color:rgb(var(--hover))]',
 				ring: 'ring-accent-400/40',
 			}
 		: {

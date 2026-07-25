@@ -37,10 +37,10 @@ export function SiteSwitcher({
 				value={activeProfileId}
 				onChange={(e) => setActiveProfile(e.target.value)}
 				className={cn(
-					'rounded-lg border px-2 py-1.5 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400 [&>option]:text-neutral-800',
+					'rounded-lg border px-2 py-1.5 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400 [&>option]:text-[color:var(--ink)]',
 					dark
-						? 'border-white/10 bg-white/5 text-neutral-100'
-						: 'border-neutral-200 bg-white text-neutral-800',
+						? 'border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] text-[color:var(--faint)]'
+						: 'border-[color:rgb(var(--border))] bg-[var(--panel)] text-[color:var(--ink)]',
 				)}
 			>
 				{profiles.map((p) => (
@@ -60,8 +60,8 @@ export function SiteSwitcher({
 				className={cn(
 					'rounded-lg border px-2 py-1.5 text-xs font-medium transition disabled:opacity-40',
 					dark
-						? 'border-white/10 text-neutral-300 hover:bg-white/10'
-						: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
+						? 'border-[color:rgb(var(--border))] text-[color:var(--faint)] hover:bg-[color:rgb(var(--hover))]'
+						: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
 				)}
 			>
 				Edit
@@ -77,8 +77,8 @@ export function SiteSwitcher({
 				className={cn(
 					'inline-flex items-center rounded-lg border px-2 py-1.5 transition',
 					dark
-						? 'border-white/10 text-neutral-300 hover:bg-white/10'
-						: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
+						? 'border-[color:rgb(var(--border))] text-[color:var(--faint)] hover:bg-[color:rgb(var(--hover))]'
+						: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
 				)}
 			>
 				<Plus className="h-4 w-4" aria-hidden="true" />
@@ -158,23 +158,26 @@ function ProfileDialog({
 			<form
 				onSubmit={onSubmit}
 				noValidate
-				className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-lg"
+				className="w-full max-w-sm rounded-2xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-6 shadow-lg"
 			>
 				<div className="mb-4 flex items-center justify-between">
-					<h2 className="text-lg font-semibold text-neutral-900">
+					<h2 className="text-lg font-semibold text-[color:var(--ink)]">
 						{profile ? 'Edit site' : 'Add site'}
 					</h2>
 					<button
 						type="button"
 						onClick={onClose}
 						aria-label="Close"
-						className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
+						className="rounded-md p-1 text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
 					>
 						<X className="h-4 w-4" aria-hidden="true" />
 					</button>
 				</div>
 
-				<label htmlFor="ps-label" className="block text-sm font-medium text-neutral-700">
+				<label
+					htmlFor="ps-label"
+					className="block text-sm font-medium text-[color:var(--ink)]"
+				>
 					Label
 				</label>
 				<input
@@ -183,12 +186,12 @@ function ProfileDialog({
 					value={label}
 					onChange={(e) => setLabel(e.target.value)}
 					placeholder="Production"
-					className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+					className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-2 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 				/>
 
 				<label
 					htmlFor="ps-site"
-					className="mt-3 block text-sm font-medium text-neutral-700"
+					className="mt-3 block text-sm font-medium text-[color:var(--ink)]"
 				>
 					Site ID
 				</label>
@@ -200,7 +203,7 @@ function ProfileDialog({
 					placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx"
 					aria-invalid={Boolean(submitted && siteError)}
 					aria-describedby={submitted && siteError ? 'ps-site-err' : undefined}
-					className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+					className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-2 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 				/>
 				{submitted && siteError ? (
 					<p id="ps-site-err" role="alert" className="mt-1 text-xs text-red-600">
@@ -208,7 +211,10 @@ function ProfileDialog({
 					</p>
 				) : null}
 
-				<label htmlFor="ps-key" className="mt-3 block text-sm font-medium text-neutral-700">
+				<label
+					htmlFor="ps-key"
+					className="mt-3 block text-sm font-medium text-[color:var(--ink)]"
+				>
 					API key
 				</label>
 				<input
@@ -219,7 +225,7 @@ function ProfileDialog({
 					placeholder="clk_…"
 					aria-invalid={Boolean(submitted && keyError)}
 					aria-describedby={submitted && keyError ? 'ps-key-err' : undefined}
-					className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+					className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-2 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 				/>
 				{submitted && keyError ? (
 					<p id="ps-key-err" role="alert" className="mt-1 text-xs text-red-600">
@@ -236,7 +242,7 @@ function ProfileDialog({
 								'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
 								confirmRemove
 									? 'border-red-300 bg-red-50 text-red-700'
-									: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
+									: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
 							)}
 						>
 							<Trash2 className="h-4 w-4" aria-hidden="true" />

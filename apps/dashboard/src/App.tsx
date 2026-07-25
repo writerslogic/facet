@@ -291,7 +291,7 @@ function Dashboard(): ReactElement {
 	return (
 		<Layout
 			fill={fill}
-			dark={fill}
+			dark
 			settingsActive={showSettings}
 			onToggleSettings={() => setShowSettings((prev) => !prev)}
 			headerExtra={
@@ -313,10 +313,7 @@ function Dashboard(): ReactElement {
 					<div
 						role="tablist"
 						aria-label="Analytics views"
-						className={cn(
-							'mb-4 flex shrink-0 gap-1 overflow-x-auto border-b',
-							fill ? 'border-[color:rgb(var(--border))]' : 'border-neutral-200',
-						)}
+						className="mb-4 flex shrink-0 gap-1 overflow-x-auto border-[color:rgb(var(--border))] border-b"
 					>
 						{TABS.map((tab) => (
 							<button
@@ -328,12 +325,8 @@ function Dashboard(): ReactElement {
 								className={cn(
 									'-mb-px shrink-0 border-b-2 px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
 									view === tab.id
-										? fill
-											? 'border-accent-400 text-[color:var(--ink)]'
-											: 'border-accent-500 text-neutral-900'
-										: fill
-											? 'border-transparent text-[color:var(--faint)] hover:text-[color:var(--ink)]'
-											: 'border-transparent text-neutral-500 hover:text-neutral-800',
+										? 'border-accent-400 text-[color:var(--ink)]'
+										: 'border-transparent text-[color:var(--faint)] hover:text-[color:var(--ink)]',
 								)}
 							>
 								{tab.label}

@@ -55,7 +55,7 @@ export function GoalsPanel({
 				<div>
 					<label
 						htmlFor="goal-type"
-						className="block text-xs font-medium text-neutral-600"
+						className="block text-xs font-medium text-[color:var(--ink)]"
 					>
 						Type
 					</label>
@@ -63,7 +63,7 @@ export function GoalsPanel({
 						id="goal-type"
 						value={type}
 						onChange={(e) => setType(e.target.value as 'event' | 'path')}
-						className="mt-1 block w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-900 focus:ring-1 focus:ring-neutral-900"
+						className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
 					>
 						<option value="event">event</option>
 						<option value="path">path</option>
@@ -101,17 +101,17 @@ export function GoalsPanel({
 						detail={goals.error instanceof Error ? goals.error.message : null}
 					/>
 				) : goals.data && goals.data.goals.length > 0 ? (
-					<ul className="divide-y divide-neutral-100">
+					<ul className="divide-y divide-[color:rgb(var(--border))]">
 						{goals.data.goals.map((g) => (
 							<li
 								key={g.id}
 								className="flex items-center justify-between gap-3 py-2 text-sm"
 							>
 								<div className="min-w-0">
-									<p className="truncate font-medium text-neutral-800">
+									<p className="truncate font-medium text-[color:var(--ink)]">
 										{g.name}
 									</p>
-									<p className="truncate text-xs text-neutral-400">
+									<p className="truncate text-xs text-[color:var(--muted)]">
 										{g.type}: {g.match_value}
 									</p>
 								</div>

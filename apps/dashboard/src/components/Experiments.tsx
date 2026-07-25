@@ -111,7 +111,7 @@ export function Experiments({
 				<div>
 					<label
 						htmlFor="exp-select"
-						className="block text-xs font-medium text-neutral-600"
+						className="block text-xs font-medium text-[color:var(--ink)]"
 					>
 						Experiment
 					</label>
@@ -119,7 +119,7 @@ export function Experiments({
 						id="exp-select"
 						value={experimentId}
 						onChange={(e) => setSelectedExp(e.target.value)}
-						className="mt-1 block w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-neutral-800 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+						className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm text-[color:var(--ink)] focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
 					>
 						{expList.map((exp) => (
 							<option key={exp.id} value={exp.id}>
@@ -131,7 +131,7 @@ export function Experiments({
 				<div>
 					<label
 						htmlFor="goal-select"
-						className="block text-xs font-medium text-neutral-600"
+						className="block text-xs font-medium text-[color:var(--ink)]"
 					>
 						Conversion goal
 					</label>
@@ -139,7 +139,7 @@ export function Experiments({
 						id="goal-select"
 						value={goalId}
 						onChange={(e) => setSelectedGoal(e.target.value)}
-						className="mt-1 block w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm text-neutral-800 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+						className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm text-[color:var(--ink)] focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
 					>
 						{goalList.map((g) => (
 							<option key={g.id} value={g.id}>
@@ -152,14 +152,16 @@ export function Experiments({
 
 			{freshness.data?.pending ? <PendingNotice /> : null}
 
-			<section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
-				<h3 className="mb-3 text-sm font-medium text-neutral-500">Variant Results</h3>
+			<section className="rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-5 shadow-sm">
+				<h3 className="mb-3 text-sm font-medium text-[color:var(--muted)]">
+					Variant Results
+				</h3>
 				{result.isLoading || !result.data ? (
 					<CardSkeletons count={2} />
 				) : (
 					<table className="w-full text-sm">
 						<thead>
-							<tr className="text-left text-xs uppercase tracking-wide text-neutral-400">
+							<tr className="text-left text-xs uppercase tracking-wide text-[color:var(--muted)]">
 								<th className="py-2">Variant</th>
 								<th className="py-2 text-right">Exposures</th>
 								<th className="py-2 text-right">Conversions</th>
@@ -168,10 +170,12 @@ export function Experiments({
 								<th className="py-2 text-right">Significant</th>
 							</tr>
 						</thead>
-						<tbody className="divide-y divide-neutral-100">
+						<tbody className="divide-y divide-[color:rgb(var(--border))]">
 							{result.data.variants.map((row) => (
-								<tr key={row.key} className="text-neutral-700 tabular-nums">
-									<td className="py-2 font-medium text-neutral-900">{row.key}</td>
+								<tr key={row.key} className="text-[color:var(--ink)] tabular-nums">
+									<td className="py-2 font-medium text-[color:var(--ink)]">
+										{row.key}
+									</td>
 									<td className="py-2 text-right">
 										{formatNumber(row.exposures)}
 									</td>
@@ -188,7 +192,7 @@ export function Experiments({
 												significant
 											</span>
 										) : (
-											<span className="text-neutral-300">—</span>
+											<span className="text-[color:var(--faint)]">—</span>
 										)}
 									</td>
 								</tr>
