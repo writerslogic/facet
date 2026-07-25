@@ -4,7 +4,14 @@
 
 import type { CountRow } from '@facet/shared';
 import { ArrowDown, ArrowUp, Maximize2, X } from 'lucide-react';
-import { type ReactElement, type ReactNode, useEffect, useRef, useState } from 'react';
+import {
+	type ReactElement,
+	type MouseEvent as ReactMouseEvent,
+	type ReactNode,
+	useEffect,
+	useRef,
+	useState,
+} from 'react';
 import { cn } from '../lib/cn.js';
 import { formatNumber } from '../lib/format.js';
 import { ColumnSpark, HorizonSpark, RadialGauge } from './KpiViz.js';
@@ -92,13 +99,28 @@ export function BentoTile({
 }): ReactElement {
 	// The whole board is dark now, so every tile carries light header text + controls.
 	const dark = true;
+	// Expand on a click anywhere in the tile EXCEPT on its own interactive content (list rows cross-filter,
+	// flow nodes drill — those must not also expand). The corner Maximize button remains the keyboard path.
+	const onTileClick = onExpand
+		? (e: ReactMouseEvent<HTMLElement>): void => {
+				if (
+					!(e.target as HTMLElement).closest(
+						'button,a,input,select,textarea,[role="button"],[role="tab"]',
+					)
+				)
+					onExpand();
+			}
+		: undefined;
 	return (
+		// biome-ignore lint/a11y/useKeyWithClickEvents: pointer enhancement only; the corner Maximize button is the keyboard-accessible expand control
 		<section
 			data-focused={focused}
+			onClick={onTileClick}
 			className={cn(
 				'tile-dark facet-glint group relative flex min-h-0 flex-col overflow-hidden rounded-2xl p-4',
 				'transition-all duration-300 ease-out',
 				focused ? 'z-20' : 'hover:-translate-y-0.5',
+				onExpand && 'cursor-pointer',
 				EMPHASIS[emphasis],
 				className,
 			)}
