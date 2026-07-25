@@ -2,13 +2,13 @@
 // series with a hovering cursor, readable UTC date/number axes, and a subtle grid. Resizes with a
 // ResizeObserver. uPlot needs canvas; if the mount throws (e.g. under jsdom) it degrades gracefully.
 
-import type { SeriesPoint } from "@facet/shared";
-import { type ReactElement, useEffect, useMemo, useRef } from "react";
-import uPlot from "uplot";
-import "uplot/dist/uPlot.min.css";
-import { formatCompact, formatNumber } from "../lib/format.js";
-import { type ThemeColors, useThemeColors } from "../theme.js";
-import { Card } from "./Card.js";
+import type { SeriesPoint } from '@facet/shared';
+import { type ReactElement, useEffect, useMemo, useRef } from 'react';
+import uPlot from 'uplot';
+import 'uplot/dist/uPlot.min.css';
+import { formatCompact, formatNumber } from '../lib/format.js';
+import { type ThemeColors, useThemeColors } from '../theme.js';
+import { Card } from './Card.js';
 
 /** A vertical event marker on the time axis (e.g. a detected anomaly). */
 export interface ChartAnnotation {
@@ -44,10 +44,7 @@ interface Palette {
 /** uPlot plugin: draw a dashed vertical line + top caret at each annotation's time position. Positions
  * come from `valToPos(..., true)` (canvas pixels), matching `u.bbox`, so it aligns at any zoom/size.
  * Reads annotations through a getter so the chart never has to be rebuilt when only they change. */
-function annotationPlugin(
-	get: () => ChartAnnotation[],
-	mark: string,
-): uPlot.Plugin {
+function annotationPlugin(get: () => ChartAnnotation[], mark: string): uPlot.Plugin {
 	return {
 		hooks: {
 			draw: (u: uPlot) => {
@@ -57,7 +54,7 @@ function annotationPlugin(
 				const { left, top, width, height } = u.bbox;
 				ctx.save();
 				for (const a of annotations) {
-					const cx = Math.round(u.valToPos(a.t / 1000, "x", true));
+					const cx = Math.round(u.valToPos(a.t / 1000, 'x', true));
 					if (cx < left || cx > left + width) continue;
 					ctx.strokeStyle = mark;
 					ctx.globalAlpha = 0.5;
@@ -87,10 +84,10 @@ function annotationPlugin(
  * the bare bento chart is explorable without the legend. Reads the hovered index from `u.cursor.idx`. */
 function tooltipPlugin(getEl: () => HTMLDivElement | null): uPlot.Plugin {
 	const fmtDate = (s: number): string =>
-		new Date(s * 1000).toLocaleDateString("en-US", {
-			month: "short",
-			day: "numeric",
-			timeZone: "UTC",
+		new Date(s * 1000).toLocaleDateString('en-US', {
+			month: 'short',
+			day: 'numeric',
+			timeZone: 'UTC',
 		});
 	return {
 		hooks: {
@@ -99,18 +96,18 @@ function tooltipPlugin(getEl: () => HTMLDivElement | null): uPlot.Plugin {
 				if (!el) return;
 				const idx = u.cursor.idx;
 				if (idx == null || u.cursor.left == null || u.cursor.left < 0) {
-					el.style.opacity = "0";
+					el.style.opacity = '0';
 					return;
 				}
 				const t = u.data[0]?.[idx];
 				const pv = u.data[1]?.[idx];
 				const vis = u.data[2]?.[idx];
-				el.innerHTML = `<div class="mb-1 font-medium text-[11px] text-neutral-400">${t == null ? "" : fmtDate(t)}</div><div class="flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#f5f3ff"></span><span class="text-neutral-500">Pageviews</span><span class="tabular ml-auto font-semibold text-neutral-900">${pv == null ? "—" : formatNumber(pv)}</span></div><div class="mt-0.5 flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#818cf8"></span><span class="text-neutral-500">Visitors</span><span class="tabular ml-auto font-semibold text-neutral-900">${vis == null ? "—" : formatNumber(vis)}</span></div>`;
+				el.innerHTML = `<div class="mb-1 font-medium text-[11px] text-neutral-400">${t == null ? '' : fmtDate(t)}</div><div class="flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#f5f3ff"></span><span class="text-neutral-500">Pageviews</span><span class="tabular ml-auto font-semibold text-neutral-900">${pv == null ? '—' : formatNumber(pv)}</span></div><div class="mt-0.5 flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#818cf8"></span><span class="text-neutral-500">Visitors</span><span class="tabular ml-auto font-semibold text-neutral-900">${vis == null ? '—' : formatNumber(vis)}</span></div>`;
 				const left = u.cursor.left;
 				const flip = left > u.width / 2;
-				el.style.opacity = "1";
+				el.style.opacity = '1';
 				el.style.left = `${left}px`;
-				el.style.transform = `translate(${flip ? "calc(-100% - 14px)" : "14px"}, 8px)`;
+				el.style.transform = `translate(${flip ? 'calc(-100% - 14px)' : '14px'}, 8px)`;
 			},
 		},
 	};
@@ -142,15 +139,15 @@ function fill(
 
 /** Hex (#rrggbb) → rgba string with alpha, for the canvas area fills (which need concrete colours). */
 function hexA(hex: string, a: number): string {
-	const h = hex.replace("#", "").trim();
+	const h = hex.replace('#', '').trim();
 	const full =
 		h.length === 3
 			? h
-					.split("")
+					.split('')
 					.map((c) => c + c)
-					.join("")
+					.join('')
 			: h;
-	const n = Number.parseInt(full || "818cf8", 16);
+	const n = Number.parseInt(full || '818cf8', 16);
 	return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
@@ -173,14 +170,53 @@ function ChartCanvas({
 	const annotationsRef = useRef(annotations);
 	annotationsRef.current = annotations;
 	const data = useMemo(() => buildData(series), [series]);
+	// Latest data for the (rebuild-on-theme) mount effect; data *changes* tween via the effect below.
+	const dataRef = useRef(data);
+	dataRef.current = data;
 
 	// Annotations are read live via a ref, so changing them redraws in place rather than rebuilding the
 	// (canvas-allocating) chart — the mount effect below intentionally omits them from its deps.
 	// biome-ignore lint/correctness/useExhaustiveDependencies: redraw must fire when the array changes; the body reads it through the ref
 	useEffect(() => {
-		if (typeof chartRef.current?.redraw === "function")
-			chartRef.current.redraw();
+		if (typeof chartRef.current?.redraw === 'function') chartRef.current.redraw();
 	}, [annotations]);
+
+	// Cross-filter / range changes tween the series old→new instead of hard-swapping, so re-slicing the
+	// board reads as a smooth transformation rather than a jump. Snaps when the bucket count changes
+	// (a different x-axis can't be interpolated) or under reduced-motion.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: tween fires on data change; reads the live chart
+	useEffect(() => {
+		const chart = chartRef.current;
+		if (!chart || typeof chart.setData !== 'function') return;
+		const to = data;
+		const from = chart.data as uPlot.AlignedData;
+		const reduce =
+			typeof matchMedia !== 'undefined' &&
+			matchMedia('(prefers-reduced-motion: reduce)').matches;
+		if (from?.[0]?.length !== to[0]?.length || reduce) {
+			chart.setData(to);
+			return;
+		}
+		const start = performance.now();
+		const DUR = 380;
+		let raf = 0;
+		const step = (now: number): void => {
+			const p = Math.min(1, (now - start) / DUR);
+			const e = 1 - (1 - p) ** 3;
+			const interp = to.map((seriesArr, si) =>
+				si === 0
+					? seriesArr
+					: (seriesArr as number[]).map((v, i) => {
+							const f = (from[si] as number[] | undefined)?.[i] ?? v;
+							return f + (v - f) * e;
+						}),
+			) as uPlot.AlignedData;
+			chart.setData(interp);
+			if (p < 1) raf = requestAnimationFrame(step);
+		};
+		raf = requestAnimationFrame(step);
+		return () => cancelAnimationFrame(raf);
+	}, [data]);
 
 	useEffect(() => {
 		const container = containerRef.current;
@@ -197,9 +233,7 @@ function ChartCanvas({
 			visFill: [hexA(colors.d2, 0.3), hexA(colors.d2, 0)],
 		};
 		const chartHeight = (): number =>
-			fillHeight && container.clientHeight > 0
-				? container.clientHeight
-				: height;
+			fillHeight && container.clientHeight > 0 ? container.clientHeight : height;
 
 		const opts: uPlot.Options = {
 			width: container.clientWidth || 640,
@@ -207,9 +241,7 @@ function ChartCanvas({
 			padding: [12, 8, 0, 8],
 			plugins: [
 				annotationPlugin(() => annotationsRef.current, P.mark),
-				...(fillHeight
-					? [tooltipPlugin(() => tooltipRef.current)]
-					: []),
+				...(fillHeight ? [tooltipPlugin(() => tooltipRef.current)] : []),
 			],
 			cursor: {
 				y: false,
@@ -219,36 +251,24 @@ function ChartCanvas({
 			legend: { show: !fillHeight, live: true },
 			series: [
 				{
-					value: (_u, v) =>
-						v == null ? "—" : new Date(v * 1000).toUTCString(),
+					value: (_u, v) => (v == null ? '—' : new Date(v * 1000).toUTCString()),
 				},
 				{
-					label: "Pageviews",
+					label: 'Pageviews',
 					stroke: P.ink,
 					width: 2.25,
-					fill: (u) =>
-						fill(
-							u.ctx,
-							P.pvFill[0],
-							P.pvFill[1],
-							u.bbox.top + u.bbox.height,
-						),
+					fill: (u) => fill(u.ctx, P.pvFill[0], P.pvFill[1], u.bbox.top + u.bbox.height),
 					points: { show: false },
-					value: (_u, v) => (v == null ? "—" : formatNumber(v)),
+					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
 				},
 				{
-					label: "Visitors",
+					label: 'Visitors',
 					stroke: P.accent,
 					width: 2.25,
 					fill: (u) =>
-						fill(
-							u.ctx,
-							P.visFill[0],
-							P.visFill[1],
-							u.bbox.top + u.bbox.height,
-						),
+						fill(u.ctx, P.visFill[0], P.visFill[1], u.bbox.top + u.bbox.height),
 					points: { show: false },
-					value: (_u, v) => (v == null ? "—" : formatNumber(v)),
+					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
 				},
 			],
 			axes: [
@@ -256,14 +276,14 @@ function ChartCanvas({
 					stroke: P.axis,
 					grid: { show: false },
 					ticks: { stroke: P.grid, size: 4 },
-					font: "11px Inter, sans-serif",
+					font: '11px Inter, sans-serif',
 					space: 64,
 				},
 				{
 					stroke: P.axis,
 					grid: { stroke: P.grid, width: 1 },
 					ticks: { show: false },
-					font: "11px Inter, sans-serif",
+					font: '11px Inter, sans-serif',
 					size: 44,
 					values: (_u, splits) => splits.map((v) => formatCompact(v)),
 				},
@@ -273,7 +293,7 @@ function ChartCanvas({
 
 		let chart: uPlot | null = null;
 		try {
-			chart = new uPlot(opts, data, container);
+			chart = new uPlot(opts, dataRef.current, container);
 		} catch {
 			return;
 		}
@@ -294,24 +314,18 @@ function ChartCanvas({
 			chart?.destroy();
 			chartRef.current = null;
 		};
-	}, [
-		data,
-		height,
-		fillHeight,
-		colors.d1,
-		colors.d2,
-		colors.d3,
-		colors.grid,
-		colors.faint,
-	]);
+		// `data` is intentionally omitted: the chart is built once (from dataRef) and data *changes* tween
+		// via the effect above, rather than rebuilding the canvas on every filter/range change.
+		// biome-ignore lint/correctness/useExhaustiveDependencies: rebuild only on size/theme; data updates are tweened
+	}, [height, fillHeight, colors.d1, colors.d2, colors.d3, colors.grid, colors.faint]);
 
 	return (
 		<div
 			ref={containerRef}
 			className={
 				fillHeight
-					? "uplot-container chart-hero relative h-full w-full"
-					: "uplot-container w-full"
+					? 'uplot-container chart-hero relative h-full w-full'
+					: 'uplot-container w-full'
 			}
 		>
 			{fillHeight ? (
@@ -329,7 +343,7 @@ export function TrafficChart({
 	series,
 	loading,
 	error,
-	title = "Traffic over time",
+	title = 'Traffic over time',
 	height = 280,
 	annotations = [],
 	bare = false,

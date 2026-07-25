@@ -110,6 +110,9 @@ export function RadialGauge({
 					strokeWidth="6"
 					strokeLinecap="round"
 					strokeDasharray={`${dash * clamped} ${circ}`}
+					style={{
+						transition: 'stroke-dasharray 0.5s cubic-bezier(0.22, 1, 0.36, 1)',
+					}}
 				/>
 			</g>
 			<text
@@ -117,7 +120,7 @@ export function RadialGauge({
 				y={c - 1}
 				textAnchor="middle"
 				dominantBaseline="central"
-				className="tabular fill-neutral-100 font-semibold text-[15px]"
+				className="tabular fill-[var(--ink)] font-semibold text-[15px]"
 			>
 				{Math.round(clamped * 100)}%
 			</text>
@@ -127,7 +130,7 @@ export function RadialGauge({
 					y={c + 13}
 					textAnchor="middle"
 					dominantBaseline="central"
-					className="fill-neutral-500 text-[7px] uppercase tracking-[0.1em]"
+					className="fill-[var(--faint)] text-[7px] uppercase tracking-[0.1em]"
 				>
 					{label}
 				</text>
@@ -179,6 +182,10 @@ export function ColumnSpark({
 						rx="0.6"
 						fill={last ? 'var(--ink)' : `url(#${gid})`}
 						opacity={last ? 1 : 0.85}
+						style={{
+							transition:
+								'y 0.45s cubic-bezier(0.22, 1, 0.36, 1), height 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+						}}
 					/>
 				);
 			})}
