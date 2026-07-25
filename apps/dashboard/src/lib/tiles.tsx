@@ -12,6 +12,7 @@ import type {
 } from '@facet/shared';
 import type { ReactNode } from 'react';
 import { KpiTile, type TileEmphasis } from '../components/BentoTile.js';
+import { CountryDots } from '../components/CountryDots.js';
 import { FlowTile } from '../components/FlowTile.js';
 import { TopList } from '../components/TopList.js';
 import type { ChartAnnotation } from '../components/TrafficChart.js';
@@ -116,8 +117,8 @@ function ListBody({
 /** A tiny stat row for the engagement tile. */
 function Stat({ label, value }: { label: string; value: string }): ReactNode {
 	return (
-		<div className="flex items-baseline justify-between gap-2 border-neutral-100 border-b py-2 last:border-0">
-			<span className="text-neutral-500 text-xs">{label}</span>
+		<div className="flex items-baseline justify-between gap-2 border-white/10 border-b py-2 last:border-0">
+			<span className="text-neutral-400 text-xs">{label}</span>
 			<span className="tabular font-semibold text-neutral-900 text-sm">{value}</span>
 		</div>
 	);
@@ -137,7 +138,7 @@ function DetailStat({
 	stroke?: string;
 }): ReactNode {
 	return (
-		<div className="rounded-xl border border-neutral-100 bg-neutral-50/60 px-3 py-2">
+		<div className="rounded-xl border border-white/10 bg-white/5 px-3 py-2">
 			<div className="flex items-center gap-1.5 text-[10px] font-semibold text-neutral-400 uppercase tracking-[0.08em]">
 				{stroke ? (
 					<span
@@ -148,7 +149,7 @@ function DetailStat({
 				) : null}
 				{label}
 			</div>
-			<div className="tabular mt-0.5 font-semibold text-2xl text-neutral-900 leading-none">
+			<div className="tabular mt-0.5 font-semibold text-2xl text-neutral-50 leading-none">
 				{value}
 			</div>
 			{sub ? <div className="mt-0.5 text-[11px] text-neutral-400">{sub}</div> : null}
@@ -183,8 +184,8 @@ function TrafficDetail({
 	return (
 		<div className="flex h-full flex-col gap-3">
 			<div className="grid shrink-0 grid-cols-2 gap-2 sm:grid-cols-4">
-				<DetailStat label="Pageviews" value={formatNumber(totalPv)} stroke="#0f172a" />
-				<DetailStat label="Visitors" value={formatNumber(totalVis)} stroke="#6366f1" />
+				<DetailStat label="Pageviews" value={formatNumber(totalPv)} stroke="#f5f3ff" />
+				<DetailStat label="Visitors" value={formatNumber(totalVis)} stroke="#818cf8" />
 				<DetailStat
 					label="Peak / day"
 					value={formatNumber(peak.pageviews)}
@@ -351,14 +352,14 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 		title: 'Countries',
 		size: 'short',
 		expandable: true,
-		render: (ctx, expanded) =>
-			ListBody({
-				title: 'Countries',
-				rows: ctx.dimRows('country', ctx.data.top_countries),
-				onSelect: ctx.dimSelect('country'),
-				activeKey: ctx.cubeFilter.country,
-				expanded,
-			}),
+		render: (ctx, expanded) => (
+			<CountryDots
+				rows={ctx.dimRows('country', ctx.data.top_countries)}
+				onSelect={ctx.dimSelect('country')}
+				activeKey={ctx.cubeFilter.country}
+				limit={expanded ? 20 : 6}
+			/>
+		),
 	},
 	devices: {
 		id: 'devices',
