@@ -28,18 +28,40 @@ interface TrafficChartProps {
 	bare?: boolean;
 }
 
-// Dark "cut obsidian" board: the pageviews ridge reads white-hot, visitors a luminous indigo, over a
-// faint lux-band grid; anomalies punch in fuchsia.
-const ACCENT = '#818cf8';
-const INK = '#f5f3ff';
-const GRID = 'rgba(196,181,253,0.08)';
-const AXIS = '#6b7192';
-const MARK = '#d946ef';
+// Two palettes: DARK for the ink board (pageviews ridge white-hot, visitors luminous indigo, fuchsia
+// anomalies), LIGHT for the Ask tab's white cards. `bare` (the board's fill-height mode) selects dark.
+interface Palette {
+	accent: string;
+	ink: string;
+	grid: string;
+	axis: string;
+	mark: string;
+	pvFill: [string, string];
+	visFill: [string, string];
+}
+const DARK: Palette = {
+	accent: '#818cf8',
+	ink: '#f5f3ff',
+	grid: 'rgba(196,181,253,0.08)',
+	axis: '#6b7192',
+	mark: '#d946ef',
+	pvFill: ['rgba(245,243,255,0.22)', 'rgba(245,243,255,0.00)'],
+	visFill: ['rgba(129,140,248,0.30)', 'rgba(129,140,248,0.00)'],
+};
+const LIGHT: Palette = {
+	accent: '#6366f1',
+	ink: '#0f172a',
+	grid: '#f1f0ee',
+	axis: '#a3a3a3',
+	mark: '#e11d48',
+	pvFill: ['rgba(15,23,42,0.16)', 'rgba(15,23,42,0.00)'],
+	visFill: ['rgba(99,102,241,0.26)', 'rgba(99,102,241,0.00)'],
+};
 
 /** uPlot plugin: draw a dashed vertical line + top caret at each annotation's time position. Positions
  * come from `valToPos(..., true)` (canvas pixels), matching `u.bbox`, so it aligns at any zoom/size.
  * Reads annotations through a getter so the chart never has to be rebuilt when only they change. */
-function annotationPlugin(get: () => ChartAnnotation[]): uPlot.Plugin {
+function annotationPlugin(get: () => ChartAnnotation[], mark: string): uPlot.Plugin {
 	return {
 		hooks: {
 			draw: (u: uPlot) => {
@@ -51,7 +73,8 @@ function annotationPlugin(get: () => ChartAnnotation[]): uPlot.Plugin {
 				for (const a of annotations) {
 					const cx = Math.round(u.valToPos(a.t / 1000, 'x', true));
 					if (cx < left || cx > left + width) continue;
-					ctx.strokeStyle = 'rgba(225,29,72,0.45)';
+					ctx.strokeStyle = mark;
+					ctx.globalAlpha = 0.5;
 					ctx.lineWidth = 1;
 					ctx.setLineDash([4, 3]);
 					ctx.beginPath();
@@ -59,7 +82,8 @@ function annotationPlugin(get: () => ChartAnnotation[]): uPlot.Plugin {
 					ctx.lineTo(cx, top + height);
 					ctx.stroke();
 					ctx.setLineDash([]);
-					ctx.fillStyle = MARK;
+					ctx.globalAlpha = 1;
+					ctx.fillStyle = mark;
 					ctx.beginPath();
 					ctx.moveTo(cx - 4, top);
 					ctx.lineTo(cx + 4, top);
@@ -158,6 +182,8 @@ function ChartCanvas({
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
+		// The board (fill-height) renders on the ink surface; the Ask tab's card stays light.
+		const P = fillHeight ? DARK : LIGHT;
 		const chartHeight = (): number =>
 			fillHeight && container.clientHeight > 0 ? container.clientHeight : height;
 
@@ -166,7 +192,7 @@ function ChartCanvas({
 			height: chartHeight(),
 			padding: [12, 8, 0, 8],
 			plugins: [
-				annotationPlugin(() => annotationsRef.current),
+				annotationPlugin(() => annotationsRef.current, P.mark),
 				...(fillHeight ? [tooltipPlugin(() => tooltipRef.current)] : []),
 			],
 			cursor: {
@@ -181,44 +207,33 @@ function ChartCanvas({
 				},
 				{
 					label: 'Pageviews',
-					stroke: INK,
+					stroke: P.ink,
 					width: 2.25,
-					fill: (u) =>
-						fill(
-							u.ctx,
-							'rgba(245,243,255,0.22)',
-							'rgba(245,243,255,0.00)',
-							u.bbox.top + u.bbox.height,
-						),
+					fill: (u) => fill(u.ctx, P.pvFill[0], P.pvFill[1], u.bbox.top + u.bbox.height),
 					points: { show: false },
 					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
 				},
 				{
 					label: 'Visitors',
-					stroke: ACCENT,
+					stroke: P.accent,
 					width: 2.25,
 					fill: (u) =>
-						fill(
-							u.ctx,
-							'rgba(129,140,248,0.30)',
-							'rgba(129,140,248,0.00)',
-							u.bbox.top + u.bbox.height,
-						),
+						fill(u.ctx, P.visFill[0], P.visFill[1], u.bbox.top + u.bbox.height),
 					points: { show: false },
 					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
 				},
 			],
 			axes: [
 				{
-					stroke: AXIS,
+					stroke: P.axis,
 					grid: { show: false },
-					ticks: { stroke: GRID, size: 4 },
+					ticks: { stroke: P.grid, size: 4 },
 					font: '11px Inter, sans-serif',
 					space: 64,
 				},
 				{
-					stroke: AXIS,
-					grid: { stroke: GRID, width: 1 },
+					stroke: P.axis,
+					grid: { stroke: P.grid, width: 1 },
 					ticks: { show: false },
 					font: '11px Inter, sans-serif',
 					size: 44,

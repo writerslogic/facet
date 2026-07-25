@@ -21,6 +21,9 @@ interface TopListProps {
 	bare?: boolean;
 	/** Cap the number of rows shown. */
 	limit?: number;
+	/** Style for the dark "cut obsidian" board (light text + luminous bars). Default is the light theme
+	 * used by the other tabs. */
+	dark?: boolean;
 }
 
 export function TopList({
@@ -31,6 +34,7 @@ export function TopList({
 	activeKey,
 	bare = false,
 	limit,
+	dark = false,
 }: TopListProps): ReactElement {
 	const shown = limit ? rows.slice(0, limit) : rows;
 	const max = shown.reduce((acc, row) => Math.max(acc, row.count), 0);
@@ -38,12 +42,37 @@ export function TopList({
 	// true portion of traffic rather than its portion of the visible slice.
 	const total = rows.reduce((acc, row) => acc + row.count, 0);
 	const interactive = Boolean(onSelect);
+	// Per-theme colour tokens: the dark board wants light text + luminous bars; the light tabs keep the
+	// original ink-on-white treatment.
+	const c = dark
+		? {
+				empty: 'text-neutral-500',
+				barActive: 'bg-accent-400/45',
+				bar: 'bg-accent-500/20 group-hover:bg-accent-500/30',
+				keyActive: 'text-accent-200',
+				key: 'text-neutral-200',
+				pct: 'text-neutral-500',
+				value: 'text-neutral-50',
+				rowHover: 'hover:bg-white/5',
+				ring: 'ring-accent-400/40',
+			}
+		: {
+				empty: 'text-neutral-400',
+				barActive: 'bg-accent-300/60',
+				bar: 'bg-accent-100/70 group-hover:bg-accent-200/70',
+				keyActive: 'text-accent-800',
+				key: 'text-neutral-700',
+				pct: 'text-neutral-400',
+				value: 'text-neutral-900',
+				rowHover: 'hover:bg-neutral-50/80',
+				ring: 'ring-accent-300',
+			};
 	const cls =
 		'group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-lg px-2.5 py-2 text-left text-sm transition-colors';
 
 	const body =
 		shown.length === 0 ? (
-			<p className="py-6 text-center text-sm text-neutral-500">No data yet</p>
+			<p className={cn('py-6 text-center text-sm', c.empty)}>No data yet</p>
 		) : (
 			<ul className="space-y-0.5">
 				{shown.map((row) => {
@@ -54,9 +83,7 @@ export function TopList({
 							<span
 								className={cn(
 									'absolute inset-y-1 left-0 rounded-md transition-[width] duration-500 ease-out',
-									active
-										? 'bg-accent-400/45'
-										: 'bg-accent-500/20 group-hover:bg-accent-500/30',
+									active ? c.barActive : c.bar,
 								)}
 								style={{ width: `${width}%` }}
 								data-testid="toplist-bar"
@@ -65,7 +92,7 @@ export function TopList({
 							<span
 								className={cn(
 									'relative z-10 flex min-w-0 items-center gap-1.5 font-medium',
-									active ? 'text-accent-200' : 'text-neutral-200',
+									active ? c.keyActive : c.key,
 								)}
 								title={row.key}
 							>
@@ -75,10 +102,10 @@ export function TopList({
 								<span className="truncate">{row.key}</span>
 							</span>
 							<span className="relative z-10 flex shrink-0 items-baseline gap-1.5">
-								<span className="text-[11px] text-neutral-500 tabular-nums">
+								<span className={cn('text-[11px] tabular-nums', c.pct)}>
 									{total > 0 ? Math.round((row.count / total) * 100) : 0}%
 								</span>
-								<span className="font-semibold text-neutral-50 tabular-nums">
+								<span className={cn('font-semibold tabular-nums', c.value)}>
 									{formatNumber(row.count)}
 								</span>
 							</span>
@@ -93,14 +120,15 @@ export function TopList({
 									onClick={() => onSelect?.(row.key)}
 									className={cn(
 										cls,
-										'hover:bg-white/5 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
-										active && 'ring-1 ring-accent-400/40',
+										c.rowHover,
+										'focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
+										active && cn('ring-1', c.ring),
 									)}
 								>
 									{inner}
 								</button>
 							) : (
-								<div className={cn(cls, 'hover:bg-white/5')}>{inner}</div>
+								<div className={cn(cls, c.rowHover)}>{inner}</div>
 							)}
 						</li>
 					);

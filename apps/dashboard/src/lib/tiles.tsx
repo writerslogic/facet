@@ -105,6 +105,7 @@ function ListBody({
 	return (
 		<TopList
 			bare
+			dark
 			limit={expanded ? 25 : 6}
 			title={title}
 			rows={rows}

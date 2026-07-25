@@ -289,6 +289,7 @@ export function KpiTile({
 							<div className="min-h-0 flex-1 overflow-hidden">
 								<TopList
 									bare
+									dark
 									limit={5}
 									title={breakdown.title}
 									rows={breakdown.rows}
