@@ -12,11 +12,11 @@ import type {
 } from '@facet/shared';
 import type { ReactNode } from 'react';
 import { KpiTile, type TileEmphasis } from '../components/BentoTile.js';
-import { CountryDots } from '../components/CountryDots.js';
 import { FlowTile } from '../components/FlowTile.js';
 import { TopList } from '../components/TopList.js';
 import type { ChartAnnotation } from '../components/TrafficChart.js';
 import { TrafficChart } from '../components/TrafficChart.js';
+import { WorldMap } from '../components/WorldMap.js';
 import type { CubeAxis, CubeFilter, ServerFilter } from './cube.js';
 import { formatDuration, formatNumber, formatPercent } from './format.js';
 
@@ -351,14 +351,13 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 	countries: {
 		id: 'countries',
 		title: 'Countries',
-		size: 'short',
+		size: 'lg',
 		expandable: true,
 		render: (ctx, expanded) => (
-			<CountryDots
+			<WorldMap
 				rows={ctx.dimRows('country', ctx.data.top_countries)}
 				onSelect={ctx.dimSelect('country')}
 				activeKey={ctx.cubeFilter.country}
-				limit={expanded ? 20 : 6}
 			/>
 		),
 	},
@@ -490,5 +489,5 @@ export const DEFAULT_LAYOUT: Slot[] = [
 	{ uid: 'events', tileId: 'events', size: 'kpi' },
 	{ uid: 'flow', tileId: 'flow', size: 'tall' },
 	{ uid: 'pages', tileId: 'pages', size: 'lg' },
-	{ uid: 'countries', tileId: 'countries', size: 'short' },
+	{ uid: 'countries', tileId: 'countries', size: 'lg' },
 ];
