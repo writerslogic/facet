@@ -4,10 +4,14 @@
 
 import type { CountRow } from '@facet/shared';
 import { Check } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { type ReactElement, useRef } from 'react';
 import { cn } from '../lib/cn.js';
 import { formatNumber } from '../lib/format.js';
+import { useSize } from '../lib/useSize.js';
 import { Card, CardHeading } from './Card.js';
+
+// Approx height of one row (px) so the `fit` mode can show exactly as many rows as the tile is tall.
+const ROW_H = 34;
 
 interface TopListProps {
 	title: string;
@@ -24,6 +28,9 @@ interface TopListProps {
 	/** Style for the dark "cut obsidian" board (light text + luminous bars). Default is the light theme
 	 * used by the other tabs. */
 	dark?: boolean;
+	/** Show exactly as many rows as the tile is tall (min 1), so a squished tile never overflows or clips
+	 * a half-row — it degrades to its top entries. For the elastic board's bare list tiles. */
+	fit?: boolean;
 }
 
 export function TopList({
@@ -35,8 +42,20 @@ export function TopList({
 	bare = false,
 	limit,
 	dark = false,
+	fit = false,
 }: TopListProps): ReactElement {
-	const shown = limit ? rows.slice(0, limit) : rows;
+	const rootRef = useRef<HTMLDivElement>(null);
+	const { height } = useSize(rootRef);
+	// In fit mode, derive the visible count from the measured height (before first measure, fall back to
+	// `limit` — the overflow-hidden wrapper clips any brief overshoot).
+	const fitCount = fit
+		? height > 0
+			? Math.max(1, Math.floor(height / ROW_H))
+			: (limit ?? 6)
+		: undefined;
+	const effLimit =
+		fitCount != null ? Math.min(limit ?? Number.POSITIVE_INFINITY, fitCount) : limit;
+	const shown = effLimit ? rows.slice(0, effLimit) : rows;
 	const max = shown.reduce((acc, row) => Math.max(acc, row.count), 0);
 	// Share is of the WHOLE dataset (all rows), not just the shown top-N, so a row's % reads as its
 	// true portion of traffic rather than its portion of the visible slice.
@@ -137,7 +156,11 @@ export function TopList({
 		);
 
 	if (bare) {
-		return body;
+		return (
+			<div ref={rootRef} className="h-full overflow-hidden">
+				{body}
+			</div>
+		);
 	}
 	return (
 		<Card>
