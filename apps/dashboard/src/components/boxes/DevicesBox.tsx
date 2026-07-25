@@ -1,6 +1,6 @@
 // Devices box: ranked list, click a device to cross-filter the board (client-side cube dim).
 
-import { ListBody } from './shared.js';
+import { ListBody, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 export const devicesBox: TileDef = {
@@ -8,6 +8,7 @@ export const devicesBox: TileDef = {
 	title: 'Devices',
 	size: 'short',
 	expandable: true,
+	table: (ctx) => rowsTable('Device', ctx.dimRows('device', ctx.data.top_devices)),
 	render: (ctx, expanded) =>
 		ListBody({
 			title: 'Devices',

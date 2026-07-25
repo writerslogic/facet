@@ -93,6 +93,14 @@ export const trafficBox: TileDef = {
 	size: 'xl',
 	emphasis: 'hero',
 	expandable: true,
+	table: (ctx) => ({
+		columns: ['Date', 'Pageviews', 'Visitors'],
+		rows: ctx.series.map((p) => [
+			new Date(p.t).toISOString().slice(0, 10),
+			p.pageviews,
+			p.visitors,
+		]),
+	}),
 	action: (ctx) =>
 		ctx.annotations.length > 0 ? (
 			<span className="inline-flex items-center gap-1 text-[11px] text-[color:var(--muted)]">

@@ -37,6 +37,7 @@ import {
 } from '../lib/tiles.js';
 import { BentoCarousel } from './BentoCarousel.js';
 import { BentoTile } from './BentoTile.js';
+import { DataTable } from './DataTable.js';
 import { LivePill } from './LivePill.js';
 
 /** Step a slot to the next size in its kind's cycle (KPIs vs charts/lists have different cycles so a
@@ -61,6 +62,8 @@ export function BentoBoard({
 	const { slots, setSlots, reset } = useBoardLayout(siteId);
 	const [editing, setEditing] = useState(false);
 	const [focused, setFocused] = useState<string | null>(null);
+	// The slot currently showing its raw-data table (via the box's `table` toggle), if any.
+	const [tableUid, setTableUid] = useState<string | null>(null);
 	const [dragIndex, setDragIndex] = useState<number | null>(null);
 	const [overIndex, setOverIndex] = useState<number | null>(null);
 	const [adding, setAdding] = useState(false);
@@ -250,6 +253,8 @@ export function BentoBoard({
 							const p = placements[i];
 							if (!def || !p) return null;
 							const isFocused = slot.uid === activeFocus;
+							const showTable = tableUid === slot.uid && Boolean(def.table);
+							const tableData = showTable ? (def.table?.(ctx) ?? null) : null;
 							const dim = activeFocus !== null && !isFocused;
 							const isOver =
 								editing && overIndex === i && dragIndex !== null && dragIndex !== i;
@@ -337,9 +342,18 @@ export function BentoBoard({
 												: undefined
 										}
 										onClose={isFocused ? () => setFocused(null) : undefined}
+										onToggleTable={
+											def.table && !editing
+												? () =>
+														setTableUid((u) =>
+															u === slot.uid ? null : slot.uid,
+														)
+												: undefined
+										}
+										tableActive={showTable}
 										className="h-full"
 										bodyClassName={
-											def.expandable || isFocused
+											def.expandable || isFocused || showTable
 												? 'overflow-y-auto'
 												: undefined
 										}
@@ -354,6 +368,8 @@ export function BentoBoard({
 													{def.title}
 												</span>
 											</div>
+										) : tableData ? (
+											<DataTable data={tableData} />
 										) : (
 											def.render(ctx, isFocused)
 										)}

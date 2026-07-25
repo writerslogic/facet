@@ -2,6 +2,7 @@
 // the top countries that drove it.
 
 import { KpiTile } from '../BentoTile.js';
+import { rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 export const visitorsBox: TileDef = {
@@ -11,6 +12,7 @@ export const visitorsBox: TileDef = {
 	selfLabeled: true,
 	emphasis: 'kpi',
 	expandable: true,
+	table: (ctx) => rowsTable('Country', ctx.dimRows('country', ctx.data.top_countries)),
 	render: (ctx, expanded) => (
 		<KpiTile
 			label="Visitors"

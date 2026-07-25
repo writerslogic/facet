@@ -3,7 +3,7 @@
 // a count-up hook so metrics animate in "alive"; and a compact KPI readout for a tile.
 
 import type { CountRow } from '@facet/shared';
-import { ArrowDown, ArrowUp, Maximize2, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Maximize2, TableProperties, X } from 'lucide-react';
 import {
 	type ReactElement,
 	type MouseEvent as ReactMouseEvent,
@@ -81,6 +81,8 @@ export function BentoTile({
 	action,
 	onExpand,
 	onClose,
+	onToggleTable,
+	tableActive = false,
 	focused = false,
 	emphasis = 'default',
 	className,
@@ -91,6 +93,9 @@ export function BentoTile({
 	action?: ReactNode;
 	onExpand?: () => void;
 	onClose?: () => void;
+	/** Toggle the raw-data table view for boxes that expose one. */
+	onToggleTable?: () => void;
+	tableActive?: boolean;
 	focused?: boolean;
 	emphasis?: TileEmphasis;
 	className?: string;
@@ -126,6 +131,22 @@ export function BentoTile({
 			)}
 		>
 			{/* Controls float as an overlay (not a header row) so a short tile keeps its full height for content. */}
+			{onToggleTable ? (
+				<button
+					type="button"
+					onClick={onToggleTable}
+					aria-pressed={tableActive}
+					aria-label={`${tableActive ? 'Hide' : 'Show'} ${label ?? 'box'} data table`}
+					className={cn(
+						'absolute right-9 top-2.5 z-20 rounded-md p-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 group-hover:opacity-100',
+						tableActive
+							? 'text-accent-300 opacity-100'
+							: 'text-[color:var(--muted)] opacity-40 hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]',
+					)}
+				>
+					<TableProperties className="h-3.5 w-3.5" aria-hidden="true" />
+				</button>
+			) : null}
 			{onClose ? (
 				<button
 					type="button"

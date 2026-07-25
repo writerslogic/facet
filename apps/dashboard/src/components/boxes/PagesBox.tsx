@@ -1,6 +1,6 @@
 // Top pages box: ranked list, click a page to cross-filter the board (server-side path filter).
 
-import { ListBody } from './shared.js';
+import { ListBody, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 export const pagesBox: TileDef = {
@@ -8,6 +8,7 @@ export const pagesBox: TileDef = {
 	title: 'Top pages',
 	size: 'lg',
 	expandable: true,
+	table: (ctx) => rowsTable('Page', ctx.data.top_paths),
 	render: (ctx, expanded) =>
 		ListBody({
 			title: 'Top pages',

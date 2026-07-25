@@ -20,6 +20,18 @@ export const engagementBox: TileDef = {
 	title: 'Engagement',
 	size: 'md',
 	expandable: true,
+	table: (ctx) => {
+		const e = ctx.engagement;
+		return {
+			columns: ['Metric', 'Value'],
+			rows: [
+				['Sessions', e.sessions],
+				['Bounce rate', `${Math.round(e.bounce_rate * 100)}%`],
+				['Pages / session', e.pages_per_session.toFixed(1)],
+				['Avg. duration (ms)', e.avg_duration_ms],
+			],
+		};
+	},
 	render: (ctx, expanded) => {
 		const e = ctx.engagement;
 		const cells = [

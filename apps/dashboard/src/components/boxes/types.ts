@@ -38,6 +38,12 @@ export interface TileContext {
 	dimSelect: (axis: CubeAxis) => ((key: string) => void) | undefined;
 }
 
+/** A box's underlying data as a plain grid, for the "view as table" toggle (see + copy the raw numbers). */
+export interface TableData {
+	columns: string[];
+	rows: (string | number)[][];
+}
+
 /** A box definition. `render` receives the shared context and whether it is drawing inside the
  * drill-down overlay (so lists can show more rows, the chart can breathe, etc.). */
 export interface TileDef {
@@ -50,6 +56,8 @@ export interface TileDef {
 	action?: (ctx: TileContext) => ReactNode;
 	/** Whether the box offers an expand affordance to focus it in place and reveal `expanded` detail. */
 	expandable?: boolean;
+	/** The box's raw data as a grid — enables a "view as table" toggle so users can read/copy the numbers. */
+	table?: (ctx: TileContext) => TableData | null;
 	/** The body renders its own title (KPI boxes), so the surrounding tile omits its header. */
 	selfLabeled?: boolean;
 	/** Surface emphasis — draws the eye to the hero chart/flow and the KPI band. */
