@@ -177,18 +177,18 @@ export function BentoBoard({
 										onClick={() => setAdding((v) => !v)}
 										aria-haspopup="true"
 										aria-expanded={adding}
-										className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-[color:var(--ink)]"
+										className="inline-flex items-center gap-1.5 rounded-lg border border-[color:rgb(var(--border))] bg-[var(--panel)] px-2.5 py-1.5 font-medium text-[color:var(--ink)] text-xs shadow-card transition hover:text-[color:var(--ink)]"
 									>
 										<Plus className="h-3.5 w-3.5" aria-hidden="true" /> Add tile
 									</button>
 									{adding ? (
-										<div className="absolute right-0 z-30 mt-1 max-h-72 w-52 overflow-y-auto rounded-xl border border-neutral-200/70 bg-white p-1 shadow-float ring-1 ring-neutral-900/5">
+										<div className="absolute right-0 z-30 mt-1 max-h-72 w-52 overflow-y-auto rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-1 shadow-float ring-1 ring-[color:rgb(var(--border))]">
 											{Object.values(TILE_REGISTRY).map((def) => (
 												<button
 													key={def.id}
 													type="button"
 													onClick={() => add(def.id)}
-													className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-neutral-600 text-sm transition hover:bg-neutral-100 hover:text-[color:var(--ink)]"
+													className="flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-left text-[color:var(--ink)] text-sm transition hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
 												>
 													{def.title}
 													{present.has(def.id) ? (
@@ -205,7 +205,7 @@ export function BentoBoard({
 								<button
 									type="button"
 									onClick={reset}
-									className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 font-medium text-neutral-600 text-xs shadow-card transition hover:text-[color:var(--ink)]"
+									className="inline-flex items-center gap-1.5 rounded-lg border border-[color:rgb(var(--border))] bg-[var(--panel)] px-2.5 py-1.5 font-medium text-[color:var(--ink)] text-xs shadow-card transition hover:text-[color:var(--ink)]"
 								>
 									<RotateCcw className="h-3.5 w-3.5" aria-hidden="true" /> Reset
 								</button>
@@ -423,7 +423,7 @@ function TileControls({
 				type="button"
 				onClick={onResize}
 				aria-label={`Resize ${title}, currently ${SIZE_LABEL[slot.size]}`}
-				className="rounded px-1.5 py-0.5 font-semibold text-[10px] text-[color:var(--faint)] uppercase ring-1 ring-neutral-200 transition hover:text-[color:var(--ink)]"
+				className="rounded px-1.5 py-0.5 font-semibold text-[10px] text-[color:var(--faint)] uppercase ring-1 ring-[color:rgb(var(--border))] transition hover:text-[color:var(--ink)]"
 			>
 				{SIZE_LABEL[slot.size]}
 			</button>
@@ -440,7 +440,7 @@ function TileControls({
 					<Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
 				</button>
 				{open ? (
-					<div className="absolute right-0 z-30 mt-1 max-h-64 w-48 overflow-y-auto rounded-xl border border-neutral-200/70 bg-white p-1 shadow-float ring-1 ring-neutral-900/5">
+					<div className="absolute right-0 z-30 mt-1 max-h-64 w-48 overflow-y-auto rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-1 shadow-float ring-1 ring-[color:rgb(var(--border))]">
 						{Object.values(TILE_REGISTRY).map((def) => (
 							<button
 								key={def.id}
@@ -452,10 +452,10 @@ function TileControls({
 									toggleRef.current?.focus();
 								}}
 								className={cn(
-									'block w-full rounded-md px-2.5 py-1.5 text-left text-sm transition hover:bg-neutral-100',
+									'block w-full rounded-md px-2.5 py-1.5 text-left text-sm transition hover:bg-[color:rgb(var(--hover))]',
 									def.id === slot.tileId
 										? 'font-semibold text-accent-700'
-										: 'text-neutral-600 hover:text-[color:var(--ink)]',
+										: 'text-[color:var(--ink)] hover:text-[color:var(--ink)]',
 								)}
 							>
 								{def.title}
@@ -502,7 +502,7 @@ export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
 						gridColumn: `${p.colStart} / span ${p.colSpan}`,
 						gridRow: `${p.rowStart} / span ${p.rowSpan}`,
 					}}
-					className="animate-pulse rounded-2xl border border-neutral-200/70 bg-gradient-to-b from-white to-neutral-50/60 shadow-card ring-1 ring-neutral-900/5"
+					className="tile-dark animate-pulse rounded-2xl"
 					aria-hidden="true"
 				/>
 			))}
