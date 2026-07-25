@@ -248,6 +248,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 				deltaSense={ctx.sense(ctx.deltas.pv)}
 				spark={ctx.sparks.pv}
 				stroke="#0f172a"
+				viz="horizon"
 				expanded={expanded}
 				breakdown={{
 					title: 'Top pages',
@@ -273,6 +274,11 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 				deltaSense={ctx.sense(ctx.deltas.vis)}
 				spark={ctx.sparks.vis}
 				stroke="#6366f1"
+				viz="gauge"
+				gaugeRatio={
+					ctx.summary.pageviews > 0 ? ctx.summary.visitors / ctx.summary.pageviews : 0
+				}
+				gaugeLabel="of views"
 				expanded={expanded}
 				breakdown={{
 					title: 'Top countries',
@@ -298,6 +304,7 @@ export const TILE_REGISTRY: Record<string, TileDef> = {
 				deltaSense={ctx.sense(ctx.deltas.ev)}
 				spark={ctx.sparks.ev}
 				stroke="#8b5cf6"
+				viz="columns"
 				expanded={expanded}
 				breakdown={{ title: 'Top events', rows: ctx.data.top_events }}
 			/>

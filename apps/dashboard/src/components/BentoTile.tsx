@@ -7,6 +7,7 @@ import { ArrowDown, ArrowUp, Maximize2, X } from 'lucide-react';
 import { type ReactElement, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/cn.js';
 import { formatNumber } from '../lib/format.js';
+import { ColumnSpark, HorizonSpark, RadialGauge } from './KpiViz.js';
 import { Sparkline } from './Sparkline.js';
 import { TopList } from './TopList.js';
 
@@ -186,6 +187,9 @@ export function KpiTile({
 	stroke = '#6366f1',
 	expanded = false,
 	breakdown,
+	viz = 'spark',
+	gaugeRatio,
+	gaugeLabel,
 }: {
 	label: string;
 	value: number;
@@ -197,6 +201,11 @@ export function KpiTile({
 	expanded?: boolean;
 	/** Top contributors to this metric, shown beside the chart when expanded (click to cross-filter). */
 	breakdown?: KpiBreakdown;
+	/** The compact mini-viz, chosen per metric so no two KPI tiles look alike. */
+	viz?: 'spark' | 'horizon' | 'columns' | 'gauge';
+	/** 0–1 fill for the `gauge` viz (e.g. visitors ÷ pageviews). */
+	gaugeRatio?: number;
+	gaugeLabel?: string;
 }): ReactElement {
 	const shown = useCountUp(value);
 	const tone =
@@ -307,16 +316,30 @@ export function KpiTile({
 					{chip}
 				</div>
 			</div>
-			{hasSpark ? (
-				<div className="ml-auto h-full min-h-0 w-1/2 min-w-0 max-w-[10rem] self-stretch py-1 @max-[11rem]/tile:hidden">
-					<Sparkline
-						values={spark as number[]}
-						stroke={stroke}
-						fill
-						marker
-						prism
+			{viz === 'gauge' ? (
+				<div className="ml-auto aspect-square h-full min-h-0 self-stretch py-0.5 @max-[11rem]/tile:hidden">
+					<RadialGauge
+						ratio={gaugeRatio ?? 0}
+						label={gaugeLabel}
 						className="h-full w-full"
 					/>
+				</div>
+			) : hasSpark ? (
+				<div className="ml-auto h-full min-h-0 w-1/2 min-w-0 max-w-[10rem] self-stretch py-1 @max-[11rem]/tile:hidden">
+					{viz === 'horizon' ? (
+						<HorizonSpark values={spark as number[]} className="h-full w-full" />
+					) : viz === 'columns' ? (
+						<ColumnSpark values={spark as number[]} className="h-full w-full" />
+					) : (
+						<Sparkline
+							values={spark as number[]}
+							stroke={stroke}
+							fill
+							marker
+							prism
+							className="h-full w-full"
+						/>
+					)}
 				</div>
 			) : null}
 		</div>
