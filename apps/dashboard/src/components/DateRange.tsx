@@ -90,7 +90,7 @@ function CustomPopover({ onClose }: { onClose: () => void }): ReactElement {
 	);
 }
 
-export function DateRange(): ReactElement {
+export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 	const { preset, setPreset, selection, compare, setCompare } = useDashboard();
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement>(null);
@@ -111,7 +111,12 @@ export function DateRange(): ReactElement {
 
 	return (
 		<div className="flex flex-wrap items-center gap-2">
-			<div className="inline-flex rounded-lg border border-neutral-200/80 bg-neutral-100/70 p-0.5">
+			<div
+				className={cn(
+					'inline-flex rounded-lg border p-0.5',
+					dark ? 'border-white/10 bg-white/5' : 'border-neutral-200/80 bg-neutral-100/70',
+				)}
+			>
 				{RANGE_PRESETS.map((option) => (
 					<button
 						key={option}
@@ -121,8 +126,12 @@ export function DateRange(): ReactElement {
 						className={cn(
 							'tabular rounded-md px-3 py-1 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
 							preset === option
-								? 'bg-white text-accent-700 shadow-sm ring-1 ring-neutral-900/5'
-								: 'text-neutral-500 hover:text-neutral-900',
+								? dark
+									? 'bg-accent-500/25 text-accent-100 ring-1 ring-accent-400/30'
+									: 'bg-white text-accent-700 shadow-sm ring-1 ring-neutral-900/5'
+								: dark
+									? 'text-neutral-400 hover:text-white'
+									: 'text-neutral-500 hover:text-neutral-900',
 						)}
 					>
 						{LABELS[option]}
@@ -140,7 +149,9 @@ export function DateRange(): ReactElement {
 						'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
 						isCustom
 							? 'border-accent-500 bg-accent-50 text-accent-700'
-							: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
+							: dark
+								? 'border-white/10 text-neutral-300 hover:bg-white/10 hover:text-white'
+								: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
 					)}
 				>
 					<CalendarRange className="h-4 w-4" aria-hidden="true" />
@@ -149,7 +160,14 @@ export function DateRange(): ReactElement {
 				{open ? <CustomPopover onClose={() => setOpen(false)} /> : null}
 			</div>
 
-			<label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-600 has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50 has-[:checked]:text-accent-700">
+			<label
+				className={cn(
+					'inline-flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium has-[:checked]:border-accent-500 has-[:checked]:bg-accent-50 has-[:checked]:text-accent-700',
+					dark
+						? 'border-white/10 text-neutral-300'
+						: 'border-neutral-200 text-neutral-600',
+				)}
+			>
 				<input
 					type="checkbox"
 					checked={compare}

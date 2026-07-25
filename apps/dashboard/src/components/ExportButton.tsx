@@ -4,6 +4,7 @@
 import type { Interval } from '@facet/shared';
 import { Download } from 'lucide-react';
 import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { cn } from '../lib/cn.js';
 import { type ExportKind, downloadExport } from '../lib/download.js';
 import type { Range } from '../state.js';
 
@@ -20,12 +21,14 @@ export function ExportButton({
 	range,
 	interval,
 	hostname,
+	dark = false,
 }: {
 	apiKey: string;
 	siteId: string;
 	range: Range;
 	interval?: Interval;
 	hostname?: string;
+	dark?: boolean;
 }): ReactElement {
 	const [open, setOpen] = useState(false);
 	const [busy, setBusy] = useState(false);
@@ -69,7 +72,12 @@ export function ExportButton({
 				disabled={!siteId || busy}
 				aria-expanded={open}
 				onClick={() => setOpen((v) => !v)}
-				className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium text-neutral-600 transition hover:bg-neutral-100 hover:text-neutral-900 disabled:opacity-50"
+				className={cn(
+					'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50',
+					dark
+						? 'border-white/10 text-neutral-300 hover:bg-white/10 hover:text-white'
+						: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900',
+				)}
 			>
 				<Download className="h-4 w-4" aria-hidden="true" />
 				{busy ? 'Exporting…' : 'Export CSV'}

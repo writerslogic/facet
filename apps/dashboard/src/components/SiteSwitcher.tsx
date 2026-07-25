@@ -10,7 +10,11 @@ import { type Profile, useDashboard } from '../state.js';
 
 type Mode = 'idle' | 'add' | 'edit';
 
-export function SiteSwitcher(): ReactElement {
+export function SiteSwitcher({
+	dark = false,
+}: {
+	dark?: boolean;
+}): ReactElement {
 	const {
 		profiles,
 		activeProfile,
@@ -32,7 +36,12 @@ export function SiteSwitcher(): ReactElement {
 				id="site-switcher"
 				value={activeProfileId}
 				onChange={(e) => setActiveProfile(e.target.value)}
-				className="rounded-lg border border-neutral-200 bg-white px-2 py-1.5 text-sm text-neutral-800 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500"
+				className={cn(
+					'rounded-lg border px-2 py-1.5 text-sm focus:border-accent-400 focus:outline-none focus:ring-1 focus:ring-accent-400 [&>option]:text-neutral-800',
+					dark
+						? 'border-white/10 bg-white/5 text-neutral-100'
+						: 'border-neutral-200 bg-white text-neutral-800',
+				)}
 			>
 				{profiles.map((p) => (
 					<option key={p.id} value={p.id}>
@@ -48,7 +57,12 @@ export function SiteSwitcher(): ReactElement {
 					setConfirmRemove(false);
 				}}
 				disabled={!activeProfile}
-				className="rounded-lg border border-neutral-200 px-2 py-1.5 text-xs font-medium text-neutral-600 transition hover:bg-neutral-100 disabled:opacity-40"
+				className={cn(
+					'rounded-lg border px-2 py-1.5 text-xs font-medium transition disabled:opacity-40',
+					dark
+						? 'border-white/10 text-neutral-300 hover:bg-white/10'
+						: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
+				)}
 			>
 				Edit
 			</button>
@@ -60,7 +74,12 @@ export function SiteSwitcher(): ReactElement {
 				}}
 				title="Add site"
 				aria-label="Add site"
-				className="inline-flex items-center rounded-lg border border-neutral-200 px-2 py-1.5 text-neutral-600 transition hover:bg-neutral-100"
+				className={cn(
+					'inline-flex items-center rounded-lg border px-2 py-1.5 transition',
+					dark
+						? 'border-white/10 text-neutral-300 hover:bg-white/10'
+						: 'border-neutral-200 text-neutral-600 hover:bg-neutral-100',
+				)}
 			>
 				<Plus className="h-4 w-4" aria-hidden="true" />
 			</button>

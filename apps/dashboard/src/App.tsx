@@ -301,6 +301,7 @@ function Dashboard(): ReactElement {
 						siteId={siteId}
 						range={range}
 						interval={preset === '24h' ? 'hour' : 'day'}
+						dark={fill}
 					/>
 				)
 			}

@@ -67,10 +67,10 @@ export function Layout({
 								Facet
 							</span>
 						</span>
-						<SiteSwitcher />
+						<SiteSwitcher dark={dark} />
 					</div>
 					<div className="flex flex-wrap items-center gap-3">
-						{settingsActive ? null : <DateRange />}
+						{settingsActive ? null : <DateRange dark={dark} />}
 						{headerExtra}
 						<button
 							type="button"
