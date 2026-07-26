@@ -4,13 +4,16 @@
 // `boxes/index.ts` — no change here.
 
 import { BOXES } from '../components/boxes/index.js';
-import type { SizeKey, TileDef } from '../components/boxes/types.js';
+import type { SizeKey, TileConfig, TileDef } from '../components/boxes/types.js';
 import { randomId } from './id.js';
 
 export type {
 	SizeKey,
+	TileConfig,
 	TileContext,
 	TileDef,
+	TileOption,
+	TileVariant,
 } from '../components/boxes/types.js';
 
 /** Grid spans per size at the two column counts, expressed as a token so a slot persists a compact size
@@ -54,11 +57,32 @@ export interface Slot {
 	uid: string;
 	tileId: string;
 	size: SizeKey;
+	/** Per-instance chart-style + option overrides (see TileConfig); absent = the box's declared defaults. */
+	config?: TileConfig;
 }
 
 /** A fresh unique slot id. Prefixed with the box id purely to stay debuggable. */
 export function newSlotUid(tileId: string): string {
 	return `${tileId}-${randomId()}`;
+}
+
+/** Merge a slot's stored config over the box's declared defaults: `variant` defaults to the first
+ * declared variant, each option to its `default`. Always returns a fully-populated config a box can read
+ * without re-checking for undefined; an unknown stored variant falls back to the default. */
+export function resolveTileConfig(def: TileDef, config?: TileConfig): TileConfig {
+	const resolved: TileConfig = {};
+	if (def.variants && def.variants.length > 0) {
+		const chosen =
+			config?.variant && def.variants.some((v) => v.id === config.variant)
+				? config.variant
+				: def.variants[0]?.id;
+		if (chosen) resolved.variant = chosen;
+	}
+	for (const opt of def.options ?? []) {
+		const stored = config?.[opt.key];
+		resolved[opt.key] = stored !== undefined ? stored : opt.default;
+	}
+	return resolved;
 }
 
 /** The out-of-the-box board — reproduces the shipped layout. Users mutate a copy in localStorage.

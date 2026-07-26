@@ -5,7 +5,7 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { type ReactElement, useRef, useState } from 'react';
 import { cn } from '../lib/cn.js';
-import { type Slot, TILE_REGISTRY, type TileContext } from '../lib/tiles.js';
+import { type Slot, TILE_REGISTRY, type TileContext, resolveTileConfig } from '../lib/tiles.js';
 import { BentoTile } from './BentoTile.js';
 
 export function BentoCarousel({
@@ -53,7 +53,7 @@ export function BentoCarousel({
 								className="h-full"
 								bodyClassName="overflow-y-auto"
 							>
-								{def.render(ctx, true)}
+								{def.render(ctx, true, resolveTileConfig(def, slot.config))}
 							</BentoTile>
 						</div>
 					);

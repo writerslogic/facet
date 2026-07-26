@@ -4,8 +4,52 @@
 import type { SeriesPoint } from '@facet/shared';
 import type { ReactNode } from 'react';
 import { formatNumber } from '../../lib/format.js';
-import { type ChartAnnotation, TrafficChart } from '../TrafficChart.js';
-import type { TileDef } from './types.js';
+import {
+	type ChartAnnotation,
+	TrafficChart,
+	type TrafficScale,
+	type TrafficVariant,
+} from '../TrafficChart.js';
+import { ACCENT_OPTION, accentOf } from './shared.js';
+import type { TileConfig, TileDef, TileOption, TileVariant } from './types.js';
+
+/** Hero chart styles + options, chosen per-instance in Customize mode. */
+const TRAFFIC_VARIANTS: TileVariant[] = [
+	{ id: 'area', label: 'Area' },
+	{ id: 'line', label: 'Line' },
+	{ id: 'bars', label: 'Bars' },
+	{ id: 'smooth', label: 'Smooth' },
+];
+
+const TRAFFIC_OPTIONS: TileOption[] = [
+	{
+		key: 'scale',
+		label: 'Scale',
+		type: 'select',
+		choices: [
+			{ value: 'linear', label: 'Linear' },
+			{ value: 'log', label: 'Log' },
+		],
+		default: 'linear',
+	},
+	{ key: 'trend', label: 'Trend line', type: 'toggle', default: false },
+	ACCENT_OPTION,
+];
+
+/** Resolve a slot's config into the chart's style props (shared by the compact + expanded charts). */
+function chartStyle(config?: TileConfig): {
+	variant: TrafficVariant;
+	scale: TrafficScale;
+	trend: boolean;
+	accent: string | undefined;
+} {
+	return {
+		variant: (config?.variant as TrafficVariant) ?? 'area',
+		scale: (config?.scale as TrafficScale) ?? 'linear',
+		trend: Boolean(config?.trend),
+		accent: accentOf(config),
+	};
+}
 
 /** One headline figure in the expanded traffic view. The diamond keys the series colour, so the strip
  * doubles as the chart legend. */
@@ -43,9 +87,11 @@ function DetailStat({
 function TrafficDetail({
 	series,
 	annotations,
+	config,
 }: {
 	series: SeriesPoint[];
 	annotations: ChartAnnotation[];
+	config?: TileConfig;
 }): ReactNode {
 	const totalPv = series.reduce((s, p) => s + p.pageviews, 0);
 	const totalVis = series.reduce((s, p) => s + p.visitors, 0);
@@ -81,6 +127,8 @@ function TrafficDetail({
 					annotations={annotations}
 					loading={false}
 					error={null}
+					zoomable
+					{...chartStyle(config)}
 				/>
 			</div>
 		</div>
@@ -93,6 +141,8 @@ export const trafficBox: TileDef = {
 	size: 'xl',
 	emphasis: 'hero',
 	expandable: true,
+	variants: TRAFFIC_VARIANTS,
+	options: TRAFFIC_OPTIONS,
 	table: (ctx) => ({
 		columns: ['Date', 'Pageviews', 'Visitors'],
 		rows: ctx.series.map((p) => [
@@ -108,9 +158,9 @@ export const trafficBox: TileDef = {
 				Anomaly
 			</span>
 		) : null,
-	render: (ctx, expanded) =>
+	render: (ctx, expanded, config) =>
 		expanded ? (
-			<TrafficDetail series={ctx.series} annotations={ctx.annotations} />
+			<TrafficDetail series={ctx.series} annotations={ctx.annotations} config={config} />
 		) : (
 			<TrafficChart
 				bare
@@ -118,6 +168,7 @@ export const trafficBox: TileDef = {
 				annotations={ctx.annotations}
 				loading={false}
 				error={null}
+				{...chartStyle(config)}
 			/>
 		),
 };

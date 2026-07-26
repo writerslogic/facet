@@ -27,6 +27,13 @@ interface TrafficChartProps {
 	annotations?: ChartAnnotation[];
 	/** Render just the fill-height canvas (no Card/header) — for embedding inside a bento tile. */
 	bare?: boolean;
+	/** Chart style (area/line/bars/smooth), y-scale, a trailing-average overlay, and an accent colour —
+	 * the hero's per-instance customization. `zoomable` enables drag-to-zoom (used in the expanded hero). */
+	variant?: TrafficVariant;
+	scale?: TrafficScale;
+	trend?: boolean;
+	accent?: string;
+	zoomable?: boolean;
 }
 
 // The chart's resolved colours (from the active theme): pageviews on `ink`=primary, visitors on
@@ -113,7 +120,19 @@ function tooltipPlugin(getEl: () => HTMLDivElement | null): uPlot.Plugin {
 	};
 }
 
-function buildData(series: SeriesPoint[]): uPlot.AlignedData {
+/** Trailing moving average over `win` buckets — the optional trend overlay. */
+function rollingAvg(values: number[], win: number): number[] {
+	const out: number[] = [];
+	let sum = 0;
+	for (let i = 0; i < values.length; i++) {
+		sum += values[i] ?? 0;
+		if (i >= win) sum -= values[i - win] ?? 0;
+		out.push(sum / Math.min(i + 1, win));
+	}
+	return out;
+}
+
+function buildData(series: SeriesPoint[], trend: boolean): uPlot.AlignedData {
 	const x: number[] = [];
 	const pageviews: number[] = [];
 	const visitors: number[] = [];
@@ -121,6 +140,10 @@ function buildData(series: SeriesPoint[]): uPlot.AlignedData {
 		x.push(point.t / 1000);
 		pageviews.push(point.pageviews);
 		visitors.push(point.visitors);
+	}
+	if (trend && pageviews.length > 1) {
+		const win = Math.max(3, Math.round(pageviews.length / 8));
+		return [x, pageviews, visitors, rollingAvg(pageviews, win)];
 	}
 	return [x, pageviews, visitors];
 }
@@ -151,25 +174,49 @@ function hexA(hex: string, a: number): string {
 	return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
+/** Resolve a `var(--token)` accent to its computed colour — canvas fills/strokes need a concrete colour,
+ * not a CSS variable. Non-var inputs (and unresolved tokens) pass through unchanged. */
+function resolveVar(el: Element, value: string): string {
+	const m = /^var\((--[\w-]+)\)$/.exec(value.trim());
+	if (!m?.[1]) return value;
+	const resolved = getComputedStyle(el).getPropertyValue(m[1]).trim();
+	return resolved || value;
+}
+
+/** The hero's selectable chart style. */
+export type TrafficVariant = 'area' | 'line' | 'bars' | 'smooth';
+/** The hero's y-axis scale option. */
+export type TrafficScale = 'linear' | 'log';
+
 function ChartCanvas({
 	series,
 	height,
 	annotations,
 	colors,
 	fillHeight = false,
+	variant = 'area',
+	scale = 'linear',
+	trend = false,
+	accent,
+	zoomable = false,
 }: {
 	series: SeriesPoint[];
 	height: number;
 	annotations: ChartAnnotation[];
 	colors: ThemeColors;
 	fillHeight?: boolean;
+	variant?: TrafficVariant;
+	scale?: TrafficScale;
+	trend?: boolean;
+	accent?: string;
+	zoomable?: boolean;
 }): ReactElement {
 	const containerRef = useRef<HTMLDivElement>(null);
 	const tooltipRef = useRef<HTMLDivElement>(null);
 	const chartRef = useRef<uPlot | null>(null);
 	const annotationsRef = useRef(annotations);
 	annotationsRef.current = annotations;
-	const data = useMemo(() => buildData(series), [series]);
+	const data = useMemo(() => buildData(series, trend), [series, trend]);
 	// Latest data for the (rebuild-on-theme) mount effect; data *changes* tween via the effect below.
 	const dataRef = useRef(data);
 	dataRef.current = data;
@@ -223,17 +270,70 @@ function ChartCanvas({
 		if (!container) return;
 		// Colours come from the active theme: pageviews on the primary data hue, visitors on the secondary,
 		// anomalies on the accent, over a faint token grid.
+		// Pageviews take the chosen accent (resolved to a concrete colour — canvas can't read var()); the
+		// other series keep the theme's secondary/accent hues.
+		const accentHex = accent ? resolveVar(container, accent) : null;
+		const pvColor = accentHex ?? colors.d1;
 		const P: Palette = {
-			ink: colors.d1,
+			ink: pvColor,
 			accent: colors.d2,
 			mark: colors.d3,
 			axis: colors.faint,
 			grid: colors.grid,
-			pvFill: [hexA(colors.d1, 0.22), hexA(colors.d1, 0)],
+			pvFill: [hexA(pvColor, 0.22), hexA(pvColor, 0)],
 			visFill: [hexA(colors.d2, 0.3), hexA(colors.d2, 0)],
 		};
 		const chartHeight = (): number =>
 			fillHeight && container.clientHeight > 0 ? container.clientHeight : height;
+
+		// Per-variant path builders: bars → grouped bars, smooth → splines, area/line → default linear.
+		const bars = uPlot.paths?.bars?.({ size: [0.68, 60] });
+		const spline = uPlot.paths?.spline?.();
+		const filled = variant === 'area' || variant === 'smooth';
+		const areaFill =
+			(from: string, to: string) =>
+			(u: uPlot): CanvasGradient =>
+				fill(u.ctx, from, to, u.bbox.top + u.bbox.height);
+
+		const seriesCfg: uPlot.Series[] = [
+			{
+				value: (_u, v) => (v == null ? '—' : new Date(v * 1000).toUTCString()),
+			},
+			{
+				label: 'Pageviews',
+				stroke: P.ink,
+				width: variant === 'bars' ? 0 : 2.25,
+				fill:
+					variant === 'bars'
+						? areaFill(hexA(pvColor, 0.6), hexA(pvColor, 0.2))
+						: filled
+							? areaFill(P.pvFill[0], P.pvFill[1])
+							: undefined,
+				paths: variant === 'bars' ? bars : variant === 'smooth' ? spline : undefined,
+				points: { show: false },
+				value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+			},
+			{
+				label: 'Visitors',
+				stroke: P.accent,
+				width: 2.25,
+				fill: filled ? areaFill(P.visFill[0], P.visFill[1]) : undefined,
+				paths: variant === 'smooth' ? spline : undefined,
+				points: { show: false },
+				value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+			},
+		];
+		if (trend) {
+			// A dashed trailing-average overlay of pageviews, so the trend reads through day-to-day noise.
+			seriesCfg.push({
+				label: 'Trend',
+				stroke: 'rgba(255,255,255,0.5)',
+				width: 1.5,
+				dash: [5, 4],
+				points: { show: false },
+				value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+			});
+		}
 
 		const opts: uPlot.Options = {
 			width: container.clientWidth || 640,
@@ -247,30 +347,12 @@ function ChartCanvas({
 				y: false,
 				// A bold hover marker: a filled ring at the hovered value on each series.
 				points: { size: 9, width: 2 },
+				// Drag-to-zoom the time axis only in the expanded hero (compact click expands the tile);
+				// uPlot's built-in double-click resets the zoom.
+				drag: zoomable ? { x: true, y: false } : { x: false, y: false, setScale: false },
 			},
 			legend: { show: !fillHeight, live: true },
-			series: [
-				{
-					value: (_u, v) => (v == null ? '—' : new Date(v * 1000).toUTCString()),
-				},
-				{
-					label: 'Pageviews',
-					stroke: P.ink,
-					width: 2.25,
-					fill: (u) => fill(u.ctx, P.pvFill[0], P.pvFill[1], u.bbox.top + u.bbox.height),
-					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
-				},
-				{
-					label: 'Visitors',
-					stroke: P.accent,
-					width: 2.25,
-					fill: (u) =>
-						fill(u.ctx, P.visFill[0], P.visFill[1], u.bbox.top + u.bbox.height),
-					points: { show: false },
-					value: (_u, v) => (v == null ? '—' : formatNumber(v)),
-				},
-			],
+			series: seriesCfg,
 			axes: [
 				{
 					stroke: P.axis,
@@ -288,7 +370,11 @@ function ChartCanvas({
 					values: (_u, splits) => splits.map((v) => formatCompact(v)),
 				},
 			],
-			scales: { x: { time: true } },
+			// Log scale clamps to positive values (uPlot handles zero buckets by flooring them).
+			scales: {
+				x: { time: true },
+				y: { distr: scale === 'log' ? 3 : 1 },
+			},
 		};
 
 		let chart: uPlot | null = null;
@@ -317,7 +403,20 @@ function ChartCanvas({
 		// `data` is intentionally omitted: the chart is built once (from dataRef) and data *changes* tween
 		// via the effect above, rather than rebuilding the canvas on every filter/range change.
 		// biome-ignore lint/correctness/useExhaustiveDependencies: rebuild only on size/theme; data updates are tweened
-	}, [height, fillHeight, colors.d1, colors.d2, colors.d3, colors.grid, colors.faint]);
+	}, [
+		height,
+		fillHeight,
+		colors.d1,
+		colors.d2,
+		colors.d3,
+		colors.grid,
+		colors.faint,
+		variant,
+		scale,
+		trend,
+		accent,
+		zoomable,
+	]);
 
 	return (
 		<div
@@ -347,6 +446,11 @@ export function TrafficChart({
 	height = 280,
 	annotations = [],
 	bare = false,
+	variant = 'area',
+	scale = 'linear',
+	trend = false,
+	accent,
+	zoomable = false,
 }: TrafficChartProps): ReactElement {
 	const colors = useThemeColors();
 	if (bare) {
@@ -361,6 +465,11 @@ export function TrafficChart({
 				annotations={annotations}
 				colors={colors}
 				fillHeight
+				variant={variant}
+				scale={scale}
+				trend={trend}
+				accent={accent}
+				zoomable={zoomable}
 			/>
 		);
 	}

@@ -27,6 +27,9 @@ export interface KpiBreakdown {
 	activeKey?: string;
 }
 
+/** The compact KPI mini-viz styles a box can switch between (its selectable chart-style variants). */
+export type KpiVizName = 'spark' | 'horizon' | 'columns' | 'gauge';
+
 /** Ease-out count-up to `value`. Respects prefers-reduced-motion (jumps straight to the value). The
  * origin ref tracks the live displayed value every frame, so an animation interrupted mid-flight (the
  * common case under cross-filtering) resumes from where it visually is rather than rewinding. */
@@ -230,6 +233,7 @@ export function KpiTile({
 	deltaSense,
 	spark,
 	stroke = '#6366f1',
+	accent,
 	expanded = false,
 	breakdown,
 	viz = 'spark',
@@ -242,12 +246,14 @@ export function KpiTile({
 	deltaSense?: 'improvement' | 'regression' | 'neutral';
 	spark?: number[];
 	stroke?: string;
+	/** The user-chosen data-palette accent; recolours the mini-viz + line + tint. Unset = prism default. */
+	accent?: string;
 	/** Drill-down layout: a large value over a full area chart, plus an Avg/Peak/Low strip. */
 	expanded?: boolean;
 	/** Top contributors to this metric, shown beside the chart when expanded (click to cross-filter). */
 	breakdown?: KpiBreakdown;
 	/** The compact mini-viz, chosen per metric so no two KPI tiles look alike. */
-	viz?: 'spark' | 'horizon' | 'columns' | 'gauge';
+	viz?: KpiVizName;
 	/** 0–1 fill for the `gauge` viz (e.g. visitors ÷ pageviews). */
 	gaugeRatio?: number;
 	gaugeLabel?: string;
@@ -261,7 +267,10 @@ export function KpiTile({
 				: 'bg-neutral-100 text-[color:var(--faint)] ring-neutral-600/10';
 	const hasSpark = Boolean(spark && spark.length > 1);
 	const hasBreakdown = Boolean(breakdown && breakdown.rows.length > 0);
-	const tint = `radial-gradient(120% 80% at 100% 0%, ${stroke}14, transparent 60%)`;
+	// The accent (when the user picks one) drives the line + tint; otherwise the box's default stroke does.
+	const line = accent ?? stroke;
+	// color-mix (not a hex-alpha suffix) so the tint works whether `line` is a hex or a palette var().
+	const tint = `radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, ${line} 8%, transparent), transparent 60%)`;
 	const chip =
 		deltaPct != null ? (
 			<span
@@ -297,7 +306,7 @@ export function KpiTile({
 					<div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted)]">
 						<span
 							className="inline-block size-1.5 rotate-45 rounded-[1px]"
-							style={{ background: stroke }}
+							style={{ background: line }}
 							aria-hidden="true"
 						/>
 						{label}
@@ -322,7 +331,7 @@ export function KpiTile({
 							<div className={hasBreakdown ? 'h-12 shrink-0' : 'min-h-0 flex-1'}>
 								<Sparkline
 									values={spark as number[]}
-									stroke={stroke}
+									stroke={line}
 									fill
 									prominent
 									marker
@@ -367,22 +376,31 @@ export function KpiTile({
 					<RadialGauge
 						ratio={gaugeRatio ?? 0}
 						label={gaugeLabel}
+						accent={accent}
 						className="h-full w-full"
 					/>
 				</div>
 			) : hasSpark ? (
 				<div className="ml-auto h-full min-h-0 w-1/2 min-w-0 max-w-[10rem] self-stretch py-1 @max-[11rem]/tile:hidden">
 					{viz === 'horizon' ? (
-						<HorizonSpark values={spark as number[]} className="h-full w-full" />
+						<HorizonSpark
+							values={spark as number[]}
+							accent={accent}
+							className="h-full w-full"
+						/>
 					) : viz === 'columns' ? (
-						<ColumnSpark values={spark as number[]} className="h-full w-full" />
+						<ColumnSpark
+							values={spark as number[]}
+							accent={accent}
+							className="h-full w-full"
+						/>
 					) : (
 						<Sparkline
 							values={spark as number[]}
-							stroke={stroke}
+							stroke={line}
 							fill
 							marker
-							prism
+							prism={!accent}
 							className="h-full w-full"
 						/>
 					)}

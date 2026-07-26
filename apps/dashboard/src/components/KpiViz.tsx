@@ -12,9 +12,12 @@ const PRISM = ['var(--c1)', 'var(--c2)', 'var(--c3)'] as const;
 export function HorizonSpark({
 	values,
 	className,
+	accent,
 }: {
 	values: number[];
 	className?: string;
+	/** Recolour the fill + top edge to this colour; falls back to the prism ramp when unset. */
+	accent?: string;
 }): ReactElement | null {
 	const gid = useId();
 	if (values.length < 2) return null;
@@ -44,16 +47,16 @@ export function HorizonSpark({
 		>
 			<defs>
 				<linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-					<stop offset="0%" stopColor={PRISM[2]} stopOpacity="0.55" />
-					<stop offset="55%" stopColor={PRISM[1]} stopOpacity="0.3" />
-					<stop offset="100%" stopColor={PRISM[0]} stopOpacity="0.04" />
+					<stop offset="0%" stopColor={accent ?? PRISM[2]} stopOpacity="0.55" />
+					<stop offset="55%" stopColor={accent ?? PRISM[1]} stopOpacity="0.3" />
+					<stop offset="100%" stopColor={accent ?? PRISM[0]} stopOpacity="0.04" />
 				</linearGradient>
 			</defs>
 			<polygon points={area} fill={`url(#${gid})`} />
 			<polyline
 				points={top}
 				fill="none"
-				stroke="var(--d2)"
+				stroke={accent ?? 'var(--d2)'}
 				strokeWidth="1.25"
 				strokeLinejoin="miter"
 				vectorEffect="non-scaling-stroke"
@@ -68,10 +71,13 @@ export function RadialGauge({
 	ratio,
 	label,
 	className,
+	accent,
 }: {
 	ratio: number;
 	label?: string;
 	className?: string;
+	/** Recolour the filled arc; falls back to the prism ramp when unset. */
+	accent?: string;
 }): ReactElement {
 	const gid = useId();
 	const r = 26;
@@ -85,9 +91,18 @@ export function RadialGauge({
 		<svg viewBox="0 0 64 64" className={cn('overflow-visible', className)} aria-hidden="true">
 			<defs>
 				<linearGradient id={gid} x1="0" y1="0" x2="1" y2="1">
-					<stop offset="0%" stopColor={PRISM[0]} />
-					<stop offset="50%" stopColor={PRISM[1]} />
-					<stop offset="100%" stopColor={PRISM[2]} />
+					{accent ? (
+						<>
+							<stop offset="0%" stopColor={accent} stopOpacity="0.7" />
+							<stop offset="100%" stopColor={accent} />
+						</>
+					) : (
+						<>
+							<stop offset="0%" stopColor={PRISM[0]} />
+							<stop offset="50%" stopColor={PRISM[1]} />
+							<stop offset="100%" stopColor={PRISM[2]} />
+						</>
+					)}
 				</linearGradient>
 			</defs>
 			<g transform={`rotate(135 ${c} ${c})`}>
@@ -144,9 +159,12 @@ export function RadialGauge({
 export function ColumnSpark({
 	values,
 	className,
+	accent,
 }: {
 	values: number[];
 	className?: string;
+	/** Recolour the bars; falls back to the prism ramp when unset. */
+	accent?: string;
 }): ReactElement | null {
 	const gid = useId();
 	if (values.length < 2) return null;
@@ -163,9 +181,18 @@ export function ColumnSpark({
 		>
 			<defs>
 				<linearGradient id={gid} x1="0" y1="0" x2="1" y2="0">
-					<stop offset="0%" stopColor={PRISM[0]} />
-					<stop offset="55%" stopColor={PRISM[1]} />
-					<stop offset="100%" stopColor={PRISM[2]} />
+					{accent ? (
+						<>
+							<stop offset="0%" stopColor={accent} stopOpacity="0.5" />
+							<stop offset="100%" stopColor={accent} stopOpacity="1" />
+						</>
+					) : (
+						<>
+							<stop offset="0%" stopColor={PRISM[0]} />
+							<stop offset="55%" stopColor={PRISM[1]} />
+							<stop offset="100%" stopColor={PRISM[2]} />
+						</>
+					)}
 				</linearGradient>
 			</defs>
 			{values.map((v, i) => {

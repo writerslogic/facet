@@ -29,7 +29,12 @@ function sanitize(slots: unknown): Slot[] | null {
 			typeof s.uid === 'string' && s.uid && !seen.has(s.uid) ? s.uid : newSlotUid(s.tileId);
 		while (seen.has(uid)) uid = newSlotUid(s.tileId);
 		seen.add(uid);
-		return { ...s, uid };
+		// Keep a plain-object config (per-instance chart style + options); drop anything malformed.
+		const config =
+			s.config && typeof s.config === 'object' && !Array.isArray(s.config)
+				? s.config
+				: undefined;
+		return { ...s, uid, config };
 	});
 }
 

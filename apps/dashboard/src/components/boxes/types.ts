@@ -44,14 +44,41 @@ export interface TableData {
 	rows: (string | number)[][];
 }
 
-/** A box definition. `render` receives the shared context and whether it is drawing inside the
- * drill-down overlay (so lists can show more rows, the chart can breathe, etc.). */
+/** A per-instance box configuration: the chosen chart-style variant plus any option values. It rides on
+ * the placed Slot (persisted), so the same box wears a different look without becoming a different box. */
+export type TileConfigValue = string | boolean;
+export interface TileConfig {
+	variant?: string;
+	[key: string]: TileConfigValue | undefined;
+}
+
+/** A selectable chart style for a box; the first entry is the default. */
+export interface TileVariant {
+	id: string;
+	label: string;
+}
+
+/** A per-instance customization control surfaced in Customize mode: a `select` (one of `choices`), a
+ * `toggle` (boolean), or a `color` (a data-palette accent, `choices` are CSS colours). `key` is the
+ * config field it writes. */
+export interface TileOption {
+	key: string;
+	label: string;
+	type: 'select' | 'toggle' | 'color';
+	choices?: { value: string; label: string }[];
+	default: TileConfigValue;
+}
+
+/** A box definition. `render` receives the shared context, whether it is drawing inside the drill-down
+ * overlay (so lists can show more rows, the chart can breathe, etc.), and the resolved per-instance
+ * `config` (chart style + options). A box lists the `variants`/`options` it supports; the board persists
+ * the user's choices per slot and passes them back here. */
 export interface TileDef {
 	id: string;
 	title: string;
 	/** Default board size key (see SIZES). */
 	size: SizeKey;
-	render: (ctx: TileContext, expanded?: boolean) => ReactNode;
+	render: (ctx: TileContext, expanded?: boolean, config?: TileConfig) => ReactNode;
 	/** Optional header control (e.g. the anomaly legend on the traffic chart). */
 	action?: (ctx: TileContext) => ReactNode;
 	/** Whether the box offers an expand affordance to focus it in place and reveal `expanded` detail. */
@@ -62,4 +89,8 @@ export interface TileDef {
 	selfLabeled?: boolean;
 	/** Surface emphasis — draws the eye to the hero chart/flow and the KPI band. */
 	emphasis?: TileEmphasis;
+	/** Selectable chart styles for this box (first is the default). Chosen per-instance and persisted. */
+	variants?: TileVariant[];
+	/** Extra per-instance customization controls (format, scale, colour …) shown in Customize mode. */
+	options?: TileOption[];
 }

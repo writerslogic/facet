@@ -32,8 +32,11 @@ import {
 	type SizeKey,
 	type Slot,
 	TILE_REGISTRY,
+	type TileConfig,
 	type TileContext,
+	type TileDef,
 	newSlotUid,
+	resolveTileConfig,
 } from '../lib/tiles.js';
 import { BentoCarousel } from './BentoCarousel.js';
 import { BentoTile } from './BentoTile.js';
@@ -147,7 +150,10 @@ export function BentoBoard({
 	const resize = (i: number): void =>
 		setSlots(slots.map((s, j) => (j === i ? { ...s, size: nextSize(s.tileId, s.size) } : s)));
 	const replace = (i: number, tileId: string): void =>
-		setSlots(slots.map((s, j) => (j === i ? { ...s, tileId } : s)));
+		// Replacing the box clears its config — the old chart style/options may not fit the new box.
+		setSlots(slots.map((s, j) => (j === i ? { ...s, tileId, config: undefined } : s)));
+	const setConfig = (i: number, patch: TileConfig): void =>
+		setSlots(slots.map((s, j) => (j === i ? { ...s, config: { ...s.config, ...patch } } : s)));
 	const remove = (i: number): void => setSlots(slots.filter((_, j) => j !== i));
 	const add = (tileId: string): void => {
 		setSlots([
@@ -252,6 +258,7 @@ export function BentoBoard({
 							const def = TILE_REGISTRY[slot.tileId];
 							const p = placements[i];
 							if (!def || !p) return null;
+							const config = resolveTileConfig(def, slot.config);
 							const isFocused = slot.uid === activeFocus;
 							const showTable = tableUid === slot.uid && Boolean(def.table);
 							const tableData = showTable ? (def.table?.(ctx) ?? null) : null;
@@ -359,19 +366,15 @@ export function BentoBoard({
 										}
 									>
 										{editing ? (
-											<div className="pointer-events-none flex h-full items-center justify-center gap-2 text-[color:var(--muted)]">
-												<GripVertical
-													className="h-5 w-5"
-													aria-hidden="true"
-												/>
-												<span className="font-medium text-[color:var(--faint)] text-xs uppercase tracking-wide">
-													{def.title}
-												</span>
-											</div>
+											<TileConfigPanel
+												def={def}
+												config={config}
+												onConfig={(patch) => setConfig(i, patch)}
+											/>
 										) : tableData ? (
 											<DataTable data={tableData} />
 										) : (
-											def.render(ctx, isFocused)
+											def.render(ctx, isFocused, config)
 										)}
 									</BentoTile>
 								</div>
@@ -488,6 +491,145 @@ function TileControls({
 			>
 				<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
 			</button>
+		</div>
+	);
+}
+
+/** A labelled row in the config panel. */
+function ConfigField({
+	label,
+	children,
+}: {
+	label: string;
+	children: ReactElement;
+}): ReactElement {
+	return (
+		<div className="flex flex-col gap-1">
+			<span className="font-semibold text-[10px] text-[color:var(--muted)] uppercase tracking-[0.08em]">
+				{label}
+			</span>
+			{children}
+		</div>
+	);
+}
+
+/** A pill choice used for chart-style variants and `select` options. */
+function ConfigChoice({
+	active,
+	onClick,
+	children,
+}: {
+	active: boolean;
+	onClick: () => void;
+	children: ReactElement | string;
+}): ReactElement {
+	return (
+		<button
+			type="button"
+			aria-pressed={active}
+			onClick={onClick}
+			className={cn(
+				'rounded-lg border px-2 py-1 font-medium text-[11px] transition',
+				active
+					? 'border-accent-400 bg-accent-500/15 text-[color:var(--ink)]'
+					: 'border-[color:rgb(var(--border))] text-[color:var(--muted)] hover:text-[color:var(--ink)]',
+			)}
+		>
+			{children}
+		</button>
+	);
+}
+
+/** The per-box customization surface shown in a tile's body while customizing: its selectable chart
+ * styles (`variants`) and any `options` (select / toggle / colour). Boxes with neither fall back to the
+ * grip placeholder. Every change writes the slot's persisted config. */
+function TileConfigPanel({
+	def,
+	config,
+	onConfig,
+}: {
+	def: TileDef;
+	config: TileConfig;
+	onConfig: (patch: TileConfig) => void;
+}): ReactElement {
+	const hasControls = Boolean(def.variants?.length || def.options?.length);
+	if (!hasControls) {
+		return (
+			<div className="pointer-events-none flex h-full items-center justify-center gap-2 text-[color:var(--muted)]">
+				<GripVertical className="h-5 w-5" aria-hidden="true" />
+				<span className="font-medium text-[color:var(--faint)] text-xs uppercase tracking-wide">
+					{def.title}
+				</span>
+			</div>
+		);
+	}
+	return (
+		<div className="flex h-full flex-col gap-3 overflow-y-auto pr-1">
+			{def.variants && def.variants.length > 0 ? (
+				<ConfigField label="Chart style">
+					<div className="flex flex-wrap gap-1">
+						{def.variants.map((v) => (
+							<ConfigChoice
+								key={v.id}
+								active={config.variant === v.id}
+								onClick={() => onConfig({ variant: v.id })}
+							>
+								{v.label}
+							</ConfigChoice>
+						))}
+					</div>
+				</ConfigField>
+			) : null}
+			{(def.options ?? []).map((opt) => (
+				<ConfigField key={opt.key} label={opt.label}>
+					{opt.type === 'toggle' ? (
+						<div className="flex">
+							<ConfigChoice
+								active={Boolean(config[opt.key])}
+								onClick={() => onConfig({ [opt.key]: !config[opt.key] })}
+							>
+								{config[opt.key] ? 'On' : 'Off'}
+							</ConfigChoice>
+						</div>
+					) : opt.type === 'color' ? (
+						<div className="flex flex-wrap gap-1.5">
+							{(opt.choices ?? []).map((c) => (
+								<button
+									key={c.value}
+									type="button"
+									aria-label={c.label}
+									aria-pressed={config[opt.key] === c.value}
+									onClick={() => onConfig({ [opt.key]: c.value })}
+									className={cn(
+										'h-5 w-5 rounded-full ring-2 transition',
+										config[opt.key] === c.value
+											? 'ring-[color:var(--ink)]'
+											: 'ring-transparent hover:ring-[color:rgb(var(--border))]',
+									)}
+									style={{
+										background:
+											c.value === 'auto'
+												? 'conic-gradient(from 140deg, var(--c1), var(--c2), var(--c3), var(--c1))'
+												: c.value,
+									}}
+								/>
+							))}
+						</div>
+					) : (
+						<div className="flex flex-wrap gap-1">
+							{(opt.choices ?? []).map((c) => (
+								<ConfigChoice
+									key={c.value}
+									active={config[opt.key] === c.value}
+									onClick={() => onConfig({ [opt.key]: c.value })}
+								>
+									{c.label}
+								</ConfigChoice>
+							))}
+						</div>
+					)}
+				</ConfigField>
+			))}
 		</div>
 	);
 }
