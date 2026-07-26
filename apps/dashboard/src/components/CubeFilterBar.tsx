@@ -65,11 +65,15 @@ export function CubeFilterBar({
 	const active = isFilterActive(filter) || serverActive;
 
 	return (
-		<div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-[color:rgb(var(--border))] bg-white/[0.03] px-3.5 py-1.5 text-sm shadow-card ring-1 ring-white/5">
-			<span className="text-[13px] font-medium text-[color:var(--muted)]">Slice</span>
+		// Single fixed-height row (no wrap, horizontal scroll on overflow) so toggling a filter never
+		// changes the bar's height — otherwise the elastic board below reflows and every tile jumps.
+		<div className="flex flex-nowrap items-center gap-x-4 overflow-x-auto rounded-xl border border-[color:rgb(var(--border))] bg-white/[0.03] px-3.5 py-1.5 text-sm shadow-card ring-1 ring-white/5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+			<span className="shrink-0 text-[13px] font-medium text-[color:var(--muted)]">
+				Slice
+			</span>
 			{cells.length > 0
 				? AXES.map(({ key, label }) => (
-						<label key={key} className="flex items-center gap-1.5">
+						<label key={key} className="flex shrink-0 items-center gap-1.5">
 							<span className="text-xs text-[color:var(--muted)]">{label}</span>
 							<select
 								value={filter[key] ?? ''}
@@ -92,7 +96,7 @@ export function CubeFilterBar({
 					))
 				: null}
 			{active ? (
-				<span className="ml-auto flex flex-wrap items-center gap-1.5">
+				<span className="ml-auto flex shrink-0 flex-nowrap items-center gap-1.5">
 					{AXES.filter(({ key }) => filter[key] !== undefined).map(({ key, label }) => (
 						<Chip
 							key={key}
