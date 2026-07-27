@@ -53,19 +53,19 @@ html {
 	--ink: #f5f4fb;
 	--muted: #9ca3b8;
 	--faint: #6b7192;
-	--bloom1: 99 102 241 / 0.2;
-	--bloom2: 217 70 239 / 0.12;
-	--d1: #818cf8;
-	--d2: #c4b5fd;
-	--d3: #e879f9;
-	--pos: #34d399;
-	--neg: #fb7185;
-	--c1: #6366f1;
-	--c2: #8b5cf6;
-	--c3: #d946ef;
-	--c4: #22d3ee;
-	--c5: #f59e0b;
-	--c6: #34d399;
+	--bloom1: 124 92 255 / 0.3;
+	--bloom2: 232 92 255 / 0.2;
+	--d1: #8b8dff;
+	--d2: #c58bff;
+	--d3: #f45cff;
+	--pos: #2ee6a6;
+	--neg: #ff5c8a;
+	--c1: #6d5efc;
+	--c2: #9b5bff;
+	--c3: #e935ff;
+	--c4: #1fe0ef;
+	--c5: #ffb020;
+	--c6: #2ee6a6;
 }
 [data-palette='bio'] {
 	--bg: #0b0c10;
@@ -183,9 +183,9 @@ html {
 	--bloom2: 217 70 239 / 0.05;
 }
 [data-mode='light'][data-palette='prism'] {
-	--d1: #4f46e5;
-	--d2: #7c3aed;
-	--d3: #c026d3;
+	--d1: #5b4bff;
+	--d2: #8b2ff0;
+	--d3: #d61ee0;
 }
 [data-mode='light'][data-palette='bio'] {
 	--d1: #0891b2;
@@ -214,6 +214,18 @@ html {
 	--d3: #0f766e;
 	--bloom1: 246 130 31 / 0.08;
 	--bloom2: 37 99 235 / 0.05;
+}
+
+/* Brand logo (README faceted starburst): show the white mark on the dark UI, the black on light. Default
+   (no data-mode yet) is dark, so the white mark shows. */
+.facet-logo-on-light {
+	display: none;
+}
+[data-mode='light'] .facet-logo-on-dark {
+	display: none;
+}
+[data-mode='light'] .facet-logo-on-light {
+	display: block;
 }
 
 /* Themed base for the whole app: every page reads the active palette's surface + text so all tabs match

@@ -7,22 +7,24 @@ import { cn } from '../lib/cn.js';
 import { DateRange } from './DateRange.js';
 import { SiteSwitcher } from './SiteSwitcher.js';
 
-/** The Facet brand mark: a faceted gem on the indigo→violet gradient. Reused by the header and the
- * key gate so the identity is consistent. Sized by the caller via `className`. */
+/** The Facet brand mark — the same faceted-starburst logo as the README. The white variant shows on the
+ * dark UI, the black on light (swapped by `[data-mode]` via the `facet-logo-on-*` classes in index.css).
+ * Reused by the header and the key gate so the identity is consistent. Sized by the caller via `className`. */
 export function BrandMark({ className }: { className?: string }): ReactElement {
 	return (
-		<span
-			className={cn(
-				'inline-flex items-center justify-center rounded-[10px] bg-brand-gradient text-white shadow-card ring-1 ring-white/20',
-				className ?? 'size-8',
-			)}
-			aria-hidden="true"
-		>
-			<svg viewBox="0 0 24 24" className="size-1/2" fill="none" aria-hidden="true">
-				<path d="M12 3 20 9 12 21 4 9z" fill="currentColor" opacity="0.95" />
-				<path d="M12 3 12 21 4 9z" fill="currentColor" opacity="0.55" />
-				<path d="M4 9h16" stroke="rgb(30 27 75 / 0.35)" strokeWidth="0.75" />
-			</svg>
+		<span className={cn('inline-flex items-center justify-center', className ?? 'size-8')}>
+			<img
+				src="/logo-white.png"
+				alt=""
+				className="facet-logo-on-dark size-full object-contain"
+				aria-hidden="true"
+			/>
+			<img
+				src="/logo-black.png"
+				alt=""
+				className="facet-logo-on-light size-full object-contain"
+				aria-hidden="true"
+			/>
 		</span>
 	);
 }
