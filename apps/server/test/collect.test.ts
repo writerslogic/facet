@@ -11,6 +11,7 @@ const CHROME =
 const SITE_A = '11111111-1111-4111-8111-111111111111';
 const SITE_BOT = '22222222-2222-4222-8222-222222222222';
 const SITE_REP = '33333333-3333-4333-8333-333333333333';
+const SITE_SEG = '44444444-4444-4444-8444-444444444444';
 
 function post(body: string, headers: Record<string, string> = {}) {
 	return createApp().request(
@@ -66,6 +67,44 @@ describe('POST /api/collect', () => {
 			.bind(SITE_A)
 			.first<{ count: number }>();
 		expect(session?.count).toBe(1);
+	});
+
+	it('derives + stores segmentation from client hints and coarse body fields, and requests hints', async () => {
+		const res = await post(
+			JSON.stringify({
+				site_id: SITE_SEG,
+				hostname: 'example.com',
+				path: '/',
+				referrer: '',
+				screen: 'laptop',
+				orientation: 'landscape',
+				dpr: '2x',
+			}),
+			{
+				'sec-ch-ua': '"Chromium";v="120", "Not:A-Brand";v="24", "Google Chrome";v="120"',
+				'sec-ch-ua-platform': '"Windows"',
+				'sec-ch-ua-mobile': '?0',
+				'accept-language': 'en-US,en;q=0.9',
+			},
+		);
+		expect(res.status).toBe(202);
+		// The response advertises the low-entropy UA client hints for subsequent beacons.
+		expect(res.headers.get('Accept-CH')).toContain('Sec-CH-UA-Platform');
+
+		const row = await env.DB.prepare(
+			'SELECT browser, os, form_factor, language, screen_tier, orientation, dpr_class FROM events WHERE site_id = ?',
+		)
+			.bind(SITE_SEG)
+			.first<Record<string, string | null>>();
+		expect(row).toMatchObject({
+			browser: 'Chrome',
+			os: 'Windows',
+			form_factor: 'desktop',
+			language: 'en',
+			screen_tier: 'laptop',
+			orientation: 'landscape',
+			dpr_class: '2x',
+		});
 	});
 
 	it('drops bot traffic without inserting an event', async () => {

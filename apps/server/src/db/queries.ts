@@ -28,6 +28,18 @@ export interface NewEvent {
 	utmMedium?: string | null;
 	utmCampaign?: string | null;
 	channel?: string | null;
+	browser?: string | null;
+	os?: string | null;
+	formFactor?: string | null;
+	region?: string | null;
+	city?: string | null;
+	timezone?: string | null;
+	network?: string | null;
+	connection?: string | null;
+	language?: string | null;
+	screenTier?: string | null;
+	orientation?: string | null;
+	dprClass?: string | null;
 }
 
 /** Insert a raw event row. Returns the generated event id. */
@@ -55,4 +67,38 @@ export async function upsertSession(
 		.insert(schema.sessions)
 		.values({ siteId, visitorHash, dayKey, firstSeen })
 		.onConflictDoNothing();
+}
+
+/** A visitor session to upsert alongside an event. */
+export interface NewSession {
+	siteId: string;
+	visitorHash: string;
+	dayKey: string;
+	firstSeen: number;
+}
+
+/**
+ * Persist a batch of already-derived events + their sessions in a SINGLE D1 round-trip. Used by the
+ * queue consumer so the beacon hot path only enqueues (the writes move off it). Inserts carry the id
+ * minted at derive time and `onConflictDoNothing`, so an at-least-once redelivery re-inserts the same
+ * rows as no-ops (idempotent) — a retry can never duplicate an event.
+ */
+export async function persistEvents(
+	env: Env,
+	items: { id: string; row: NewEvent; session: NewSession }[],
+): Promise<void> {
+	if (items.length === 0) return;
+	const client = db(env);
+	const stmts = items.flatMap((it) => [
+		client
+			.insert(schema.events)
+			.values({
+				...it.row,
+				id: it.id,
+				props: it.row.props ? JSON.stringify(it.row.props) : null,
+			})
+			.onConflictDoNothing(),
+		client.insert(schema.sessions).values(it.session).onConflictDoNothing(),
+	]);
+	await client.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
 }

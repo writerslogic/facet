@@ -15,12 +15,39 @@ export function dayKey(nowMs: number): string {
 	return `${year}-${month}-${day}`;
 }
 
+// A UTC day's salt is immutable once created, so cache it per Worker isolate: after the first beacon of
+// a day, every subsequent one skips the `salts` read — the single hottest read on the ingest hot path
+// (the anonymous Tier-0 branch hits it for every event). Bounded to a few keys; a day rollover leaves at
+// most today plus a soon-evicted yesterday. Cleared by `resetDailySaltCache` so a test that seeds a
+// specific salt after a prior read is not served the stale one.
+const saltCache = new Map<string, string>();
+
+function cacheSalt(dayKey: string, salt: string): void {
+	saltCache.set(dayKey, salt);
+	if (saltCache.size > 3) {
+		for (const key of saltCache.keys()) {
+			if (key !== dayKey) {
+				saltCache.delete(key);
+				break;
+			}
+		}
+	}
+}
+
+/** Drop the in-memory salt cache (for tests that pre-seed a deterministic salt after a prior read). */
+export function resetDailySaltCache(): void {
+	saltCache.clear();
+}
+
 /** Return the salt for `dayKey` (UTC), creating it lazily and race-safely if absent. */
 export async function getDailySalt(env: Env, dayKey: string, now: number): Promise<string> {
+	const cached = saltCache.get(dayKey);
+	if (cached) return cached;
 	const existing = await env.DB.prepare('SELECT salt FROM salts WHERE day_key = ?')
 		.bind(dayKey)
 		.first<{ salt: string }>();
 	if (existing?.salt) {
+		cacheSalt(dayKey, existing.salt);
 		return existing.salt;
 	}
 	const salt = randomHex(SALT_BYTES);
@@ -31,5 +58,7 @@ export async function getDailySalt(env: Env, dayKey: string, now: number): Promi
 	const row = await env.DB.prepare('SELECT salt FROM salts WHERE day_key = ?')
 		.bind(dayKey)
 		.first<{ salt: string }>();
-	return row?.salt ?? salt;
+	const resolved = row?.salt ?? salt;
+	cacheSalt(dayKey, resolved);
+	return resolved;
 }

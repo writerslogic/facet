@@ -2,14 +2,21 @@ import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
 describe('migration 0002 — sessions & traffic columns', () => {
-	it('events table has 15 columns', async () => {
-		const result = await env.DB.prepare('PRAGMA table_info(events)').all<{ name: string }>();
-		expect(result.results).toHaveLength(15);
+	it('events table has 27 columns', async () => {
+		const result = await env.DB.prepare('PRAGMA table_info(events)').all<{
+			name: string;
+		}>();
+		expect(result.results).toHaveLength(27);
 		const names = result.results.map((r) => r.name);
 		expect(names).toContain('utm_source');
 		expect(names).toContain('utm_medium');
 		expect(names).toContain('utm_campaign');
 		expect(names).toContain('channel');
+		// Segmentation dimensions (migration 0009).
+		expect(names).toContain('browser');
+		expect(names).toContain('os');
+		expect(names).toContain('screen_tier');
+		expect(names).toContain('language');
 	});
 
 	it('event_sessions table exists with 13 columns', async () => {

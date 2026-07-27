@@ -1,8 +1,13 @@
 // Worker environment bindings (D1, static assets, rate-limiter, vars, secrets). Single source of truth for `Env`.
 
+import type { DerivedEvent } from './lib/ingest.js';
+
 export interface Env {
 	/** D1 database holding sites, events, rollups, salts, and API keys. */
 	DB: D1Database;
+	/** Ingest queue: the beacon enqueues a derived (IP-free) event and returns immediately, and a consumer
+	 * batches the D1 writes off the hot path. Optional — absent in tests, where ingest runs synchronously. */
+	INGEST_QUEUE?: Queue<DerivedEvent>;
 	/** Static-asset binding serving the built dashboard. */
 	ASSETS: Fetcher;
 	/** Cloudflare native rate-limit binding. */

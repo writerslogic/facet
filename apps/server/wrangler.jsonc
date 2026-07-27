@@ -47,6 +47,16 @@
         "simple": { "limit": 100, "period": 60 }
       }
     ]
+  },
+
+  // Ingest queue: the beacon enqueues a derived (IP-free) event and returns immediately; a consumer
+  // batches the D1 writes off the hot path. At-least-once with idempotent inserts (id minted at derive
+  // time + onConflictDoNothing), so a retried batch can never duplicate an event.
+  "queues": {
+    "producers": [{ "binding": "INGEST_QUEUE", "queue": "facet-ingest" }],
+    "consumers": [
+      { "queue": "facet-ingest", "max_batch_size": 100, "max_batch_timeout": 5, "max_retries": 3 }
+    ]
   }
 
   // ─────────────────────────────────────────────────────────────────────────

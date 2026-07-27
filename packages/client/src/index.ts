@@ -26,6 +26,31 @@ function parseUtmFromSearch(search: string): Record<string, string> | undefined 
 	return utm;
 }
 
+/** Coarse viewport buckets computed ON-DEVICE — the raw resolution and DPR never leave the browser, so
+ * no fingerprint-grade value is sent. The server allowlists exactly these tokens. */
+function viewport(): { screen?: string; orientation?: string; dpr?: string } {
+	if (typeof window === 'undefined') return {};
+	const w = window.innerWidth || 0;
+	const h = window.innerHeight || 0;
+	if (!w) return {};
+	const screen =
+		w < 640
+			? 'phone'
+			: w < 1024
+				? 'tablet'
+				: w < 1536
+					? 'laptop'
+					: w < 2560
+						? 'desktop'
+						: 'ultrawide';
+	const ratio = window.devicePixelRatio || 1;
+	return {
+		screen,
+		orientation: w >= h ? 'landscape' : 'portrait',
+		dpr: ratio >= 2.5 ? '3x' : ratio >= 1.5 ? '2x' : '1x',
+	};
+}
+
 /** Track a pageview (no name) or a named custom event. */
 export function track(_name?: string, _props?: EventProps): void {
 	// Only a DELIBERATE opt-out suppresses the anonymous, cookieless pageview/event — a passive GPC/DNT
@@ -46,6 +71,7 @@ export function track(_name?: string, _props?: EventProps): void {
 		...(_name ? { name: _name } : {}),
 		...(_props ? { props: _props } : {}),
 		...(utm ? { utm } : {}),
+		...viewport(),
 	};
 
 	const endpoint = `${host}/api/collect`;

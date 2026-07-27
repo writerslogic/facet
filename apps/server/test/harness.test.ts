@@ -13,10 +13,10 @@ describe('test harness', () => {
 		expect(result?.n).toBe(18);
 	});
 
-	it('events table has 15 columns', async () => {
+	it('events table has 27 columns', async () => {
 		const result = await env.DB.prepare('PRAGMA table_info(events)').all<{
 			name: string;
 		}>();
-		expect(result.results.length).toBe(15);
+		expect(result.results.length).toBe(27);
 	});
 });

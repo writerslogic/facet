@@ -8,9 +8,17 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { isGpcOptOut } from '../lib/gpc.js';
 import { validationErrorHook } from '../lib/http.js';
-import { ingestEvent } from '../lib/ingest.js';
+import { deriveEvent, ingestEvent } from '../lib/ingest.js';
 import { rateLimit } from '../lib/ratelimit.js';
-import { clientIp, country, device } from '../lib/request-meta.js';
+import {
+	clientIp,
+	country,
+	device,
+	dprClass,
+	orientation,
+	screenTier,
+	segmentation,
+} from '../lib/request-meta.js';
 
 export const collectRoute = new Hono<AppEnv>();
 
@@ -26,8 +34,11 @@ collectRoute.post(
 		const gpc = isGpcOptOut(c.req.raw);
 		const body = c.req.valid('json');
 		const ua = c.req.header('user-agent') ?? '';
+		// Segmentation dimensions: geo/network/browser/os/language from the edge + low-entropy UA client
+		// hints; screen tier / orientation / DPR arrive already bucketed on-device in the beacon body.
+		const seg = segmentation(c.req.raw);
 		// The public beacon carries no trusted identity, so it can only ever produce a Tier 0/1 hash.
-		await ingestEvent(c.env, {
+		const input = {
 			siteId: body.site_id,
 			ip: clientIp(c.req.raw),
 			ua,
@@ -39,12 +50,29 @@ collectRoute.post(
 			utm: body.utm ?? null,
 			country: country(c.req.raw),
 			device: device(ua),
+			segmentation: {
+				...seg,
+				screenTier: screenTier(body.screen),
+				orientation: orientation(body.orientation),
+				dprClass: dprClass(body.dpr),
+			},
 			now: Date.now(),
 			gpc,
 			url: new URL(c.req.url),
 			uid: null,
 			consent: false,
-		});
+		};
+		// Hot path: derive the IP-free event now (the raw IP goes into the hash and is discarded here) and
+		// enqueue it, so the beacon returns without waiting on any D1 write — a consumer batches the writes.
+		// Falls back to a synchronous write only when no queue is bound (tests / minimal deployments).
+		if (c.env.INGEST_QUEUE) {
+			const derived = await deriveEvent(c.env, input);
+			if (derived) await c.env.INGEST_QUEUE.send(derived);
+		} else {
+			await ingestEvent(c.env, input);
+		}
+		// Advertise the low-entropy UA client hints so browsers keep sending them to this endpoint.
+		c.header('Accept-CH', 'Sec-CH-UA, Sec-CH-UA-Platform, Sec-CH-UA-Mobile');
 		return c.body(null, 202);
 	},
 );

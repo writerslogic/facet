@@ -35,6 +35,22 @@ export const events = sqliteTable(
 		utmMedium: text('utm_medium'),
 		utmCampaign: text('utm_campaign'),
 		channel: text('channel'),
+		// Private-by-construction segmentation dimensions (all nullable + additive; a null is "unknown"):
+		// geo/network edge-derived from request.cf (IP never stored), browser/os/form-factor from UA client
+		// hints (UA fallback, families not versions), language from the primary Accept-Language subtag, and
+		// screen tier/orientation/DPR class coarsened ON-DEVICE by the tracker (raw resolution never sent).
+		browser: text('browser'),
+		os: text('os'),
+		formFactor: text('form_factor'),
+		region: text('region'),
+		city: text('city'),
+		timezone: text('timezone'),
+		network: text('network'),
+		connection: text('connection'),
+		language: text('language'),
+		screenTier: text('screen_tier'),
+		orientation: text('orientation'),
+		dprClass: text('dpr_class'),
 	},
 	(t) => [
 		index('idx_events_site_created_name').on(t.siteId, t.createdAt, t.name),

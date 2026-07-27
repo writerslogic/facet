@@ -3,13 +3,13 @@
 // privacy-safe visitor hash, classifies the traffic channel, and writes a raw event + session.
 // The raw IP is used only to derive the hash and is never stored, logged, or returned.
 
-import type { EventProps } from "@facet/shared";
-import { insertEvent, upsertSession } from "../db/queries.js";
-import type { Env } from "../env.js";
-import { isBot } from "./bots.js";
-import { classifyChannel } from "./channel.js";
-import { findActiveConsent } from "./consent.js";
-import { visitorHash } from "./hash.js";
+import type { EventProps } from '@facet/shared';
+import { type NewEvent, type NewSession, persistEvents } from '../db/queries.js';
+import type { Env } from '../env.js';
+import { isBot } from './bots.js';
+import { classifyChannel } from './channel.js';
+import { findActiveConsent } from './consent.js';
+import { visitorHash } from './hash.js';
 import {
 	type IdentityPolicy,
 	deriveVisitorHash,
@@ -17,8 +17,8 @@ import {
 	resolvePolicy,
 	windowEndMs,
 	windowKey,
-} from "./identity.js";
-import { dayKey, getDailySalt } from "./salt.js";
+} from './identity.js';
+import { dayKey, getDailySalt } from './salt.js';
 
 export interface IngestInput {
 	siteId: string;
@@ -34,6 +34,21 @@ export interface IngestInput {
 	utm: { source?: string; medium?: string; campaign?: string } | null;
 	country: string | null;
 	device: string | null;
+	/** Coarse segmentation dimensions (edge-derived + UA-CH + on-device-bucketed); all optional/null. */
+	segmentation?: {
+		browser?: string | null;
+		os?: string | null;
+		formFactor?: string | null;
+		region?: string | null;
+		city?: string | null;
+		timezone?: string | null;
+		network?: string | null;
+		connection?: string | null;
+		language?: string | null;
+		screenTier?: string | null;
+		orientation?: string | null;
+		dprClass?: string | null;
+	};
 	now: number;
 	/** The visitor's GPC signal. Enforced HERE (not only at the route) so every caller of ingestEvent
 	 * treats a GPC visitor the same by construction: still counted, but forced to the anonymous Tier-0
@@ -59,7 +74,7 @@ async function deriveForIngest(
 	policy: IdentityPolicy,
 	dk: string,
 ): Promise<string> {
-	if (policy.tier === "anonymous" || input.gpc) {
+	if (policy.tier === 'anonymous' || input.gpc) {
 		const salt = await getDailySalt(env, dk, input.now);
 		return visitorHash(input.ip, input.ua, salt, input.siteId);
 	}
@@ -72,10 +87,7 @@ async function deriveForIngest(
 		windowEndMs(policy.window, input.now),
 		input.now,
 	);
-	const uid =
-		policy.tier === "identified" && input.consent === true
-			? (input.uid ?? null)
-			: null;
+	const uid = policy.tier === 'identified' && input.consent === true ? (input.uid ?? null) : null;
 	const vh = await deriveVisitorHash(
 		policy.tier,
 		{ ip: input.ip, ua: input.ua, uid },
@@ -95,14 +107,21 @@ async function deriveForIngest(
 	return visitorHash(input.ip, input.ua, daySalt, input.siteId);
 }
 
-/** Run the ingest pipeline for one event. Returns whether a row was written. Bots are dropped; a GPC
- * visitor is still counted (anonymously — deriveForIngest forces the Tier-0 hash for them). */
-export async function ingestEvent(
-	env: Env,
-	input: IngestInput,
-): Promise<{ inserted: boolean }> {
+/** A fully-derived, IP-free event ready to persist — the queue message shape. The raw IP is consumed
+ * into `row.visitorHash` during derivation and never appears here, so it is never queued. */
+export interface DerivedEvent {
+	id: string;
+	row: NewEvent;
+	session: NewSession;
+}
+
+/** Derive a complete event row + session from a request-time input — bot drop, privacy-safe visitor
+ * hash, channel classification, segmentation — WITHOUT touching the database, so the result is safe to
+ * enqueue and persist later. Returns null for bots (dropped). This is the CPU/derivation half of ingest;
+ * the D1 writes live in `persistDerived`, which the beacon hot path defers to the queue consumer. */
+export async function deriveEvent(env: Env, input: IngestInput): Promise<DerivedEvent | null> {
 	if (isBot(input.ua)) {
-		return { inserted: false };
+		return null;
 	}
 	// Sessions always dedup on the calendar day, INDEPENDENT of the hash's salt window, so a wider
 	// window never collides the (site, hash, day) session key or freezes first_seen.
@@ -119,7 +138,7 @@ export async function ingestEvent(
 		utm,
 		siteHostname: input.hostname,
 	});
-	await insertEvent(env, {
+	const row: NewEvent = {
 		siteId: input.siteId,
 		hostname: input.hostname,
 		path: input.path,
@@ -134,7 +153,47 @@ export async function ingestEvent(
 		utmMedium: utm.medium,
 		utmCampaign: utm.campaign,
 		channel,
-	});
-	await upsertSession(env, input.siteId, vh, dk, input.now);
+		browser: input.segmentation?.browser ?? null,
+		os: input.segmentation?.os ?? null,
+		formFactor: input.segmentation?.formFactor ?? null,
+		region: input.segmentation?.region ?? null,
+		city: input.segmentation?.city ?? null,
+		timezone: input.segmentation?.timezone ?? null,
+		network: input.segmentation?.network ?? null,
+		connection: input.segmentation?.connection ?? null,
+		language: input.segmentation?.language ?? null,
+		screenTier: input.segmentation?.screenTier ?? null,
+		orientation: input.segmentation?.orientation ?? null,
+		dprClass: input.segmentation?.dprClass ?? null,
+	};
+	// The id is minted HERE (not at insert) so an at-least-once queue redelivery re-inserts the same id
+	// as a no-op — the persist path is idempotent, so a retry can never duplicate the event.
+	return {
+		id: crypto.randomUUID(),
+		row,
+		session: {
+			siteId: input.siteId,
+			visitorHash: vh,
+			dayKey: dk,
+			firstSeen: input.now,
+		},
+	};
+}
+
+/** Persist derived events + their sessions (batched, idempotent). The queue consumer calls this for a
+ * whole batch; the synchronous fallback calls it with a single event. */
+export async function persistDerived(env: Env, items: DerivedEvent[]): Promise<void> {
+	await persistEvents(env, items);
+}
+
+/** Run the ingest pipeline for one event synchronously (derive + persist). Returns whether a row was
+ * written. Used by the authenticated /api/event route and the beacon's fallback when no queue is bound;
+ * the high-volume beacon path instead enqueues `deriveEvent`'s result. */
+export async function ingestEvent(env: Env, input: IngestInput): Promise<{ inserted: boolean }> {
+	const derived = await deriveEvent(env, input);
+	if (!derived) {
+		return { inserted: false };
+	}
+	await persistDerived(env, [derived]);
 	return { inserted: true };
 }

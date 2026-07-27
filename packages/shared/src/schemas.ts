@@ -38,6 +38,11 @@ export const CollectPayloadSchema = v.object({
 			campaign: v.optional(v.pipe(v.string(), v.maxLength(200))),
 		}),
 	),
+	// Viewport signals the tracker buckets ON-DEVICE before sending — never the raw resolution/DPR, so no
+	// fingerprint-grade value ever leaves the browser. Anything off the allowlist is dropped server-side.
+	screen: v.optional(v.picklist(['phone', 'tablet', 'laptop', 'desktop', 'ultrawide'])),
+	orientation: v.optional(v.picklist(['portrait', 'landscape'])),
+	dpr: v.optional(v.picklist(['1x', '2x', '3x'])),
 });
 
 // First-party server-to-server event: beacon shape minus site_id (taken from the API key), plus
