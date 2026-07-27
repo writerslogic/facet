@@ -178,15 +178,32 @@ curl "http://localhost:8787/api/stats?site_id=11111111-1111-4111-8111-1111111111
 
 ## Public demo mode
 
-A deployment can be turned into a **no-login, read-only demo** (as at
-[facet.writerslogic.com](https://facet.writerslogic.com)) by baking a demo site + API key into the
-dashboard build. When both variables below are set at build time, the dashboard seeds a read-only
-demo profile in memory and skips the key gate; a "Live demo · Deploy your own" pill links back to the
-repo. Leave them unset (the default) and nothing changes — every self-hosted build keeps the normal
-key gate.
+Facet can be turned into a **no-login, read-only demo** in two ways. Both seed a demo profile in
+memory, skip the key gate, and show a "Live demo · Deploy your own" pill. Neither affects a normal
+self-hosted build — leave the variables unset (the default) and the usual key gate stays.
+
+### Static demo — no backend (GitHub Pages)
+
+This is what the canonical demo at <https://writerslogic.github.io/facet/> runs, and it needs **no
+Worker and no database**. The dashboard ships an in-browser mock API (`src/demo/`) that answers every
+`/api/*` request from a **fabricated** dataset, so a fictional site's analytics render entirely
+client-side — no real data is ever involved. Build it with:
 
 ```sh
-# Build the dashboard with a demo profile baked in (values from the admin API / CLI above):
+FACET_BASE=/facet/ VITE_FACET_STATIC_DEMO=1 pnpm --filter @facet/dashboard build
+```
+
+`FACET_BASE` sets the asset sub-path (`/facet/` for GitHub *project* Pages; use `/` for a user/org
+site or a custom domain). The mock, dataset, and demo profile are dynamically imported, so **none of
+this code ships in a normal build**. The `.github/workflows/demo.yml` workflow builds and publishes
+this to Pages on every push to `main`.
+
+### Worker-backed demo — real data from a throwaway site
+
+Alternatively, bake a real (throwaway) demo site + read-only key into the build so the demo reads live
+aggregates from a Worker:
+
+```sh
 VITE_FACET_DEMO_SITE_ID=<demo-site-uuid> \
 VITE_FACET_DEMO_API_KEY=clk_<demo-read-key> \
 VITE_FACET_DEMO_LABEL="Live demo" \
@@ -195,8 +212,8 @@ pnpm --filter @facet/dashboard build
 
 The key is **public** (it ships in client JS), so point it at a **throwaway demo site** whose data
 you don't mind exposing — never a real property. The key only reads aggregate stats; admin actions
-still require the `ADMIN_TOKEN`. The demo profile is never written to `localStorage`, so if a visitor
-adds their own site it cleanly supersedes the demo.
+still require the `ADMIN_TOKEN`. In both modes the demo profile is never written to `localStorage`, so
+a visitor's own site cleanly supersedes the demo.
 
 ## Retention
 

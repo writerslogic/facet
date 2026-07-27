@@ -13,6 +13,7 @@ import {
 	useMemo,
 	useState,
 } from 'react';
+import { DEMO_API_KEY, DEMO_LABEL, DEMO_SITE_ID, STATIC_DEMO } from './demo/constants.js';
 import { randomId } from './lib/id.js';
 
 export type RangePreset = '24h' | '7d' | '30d' | '90d';
@@ -103,18 +104,27 @@ function newId(): string {
 const DEMO_PROFILE_ID = 'p-demo';
 
 /**
- * The read-only demo profile, or null. Populated only when a build sets both `VITE_FACET_DEMO_SITE_ID`
- * and `VITE_FACET_DEMO_API_KEY` — i.e. the public demo deployment. Every self-hosted/AGPL build leaves
- * these unset, so this returns null and the normal KeyGate flow is untouched. The demo profile is never
- * persisted to localStorage: it's a first-load default that a visitor's own added profile supersedes.
+ * The read-only demo profile, or null. Populated in two cases: the fully-static demo build
+ * (`VITE_FACET_STATIC_DEMO=1`, backed by the in-browser mock — see `demo/mockApi.ts`), or a
+ * Worker-backed demo build that sets `VITE_FACET_DEMO_SITE_ID` + `VITE_FACET_DEMO_API_KEY`. Every
+ * self-hosted/AGPL build leaves all of these unset → null → the normal KeyGate flow is untouched. The
+ * demo profile is never persisted to localStorage: it's a first-load default a visitor's own profile supersedes.
  */
 function demoProfile(): Profile | null {
+	if (STATIC_DEMO) {
+		return {
+			id: DEMO_PROFILE_ID,
+			label: DEMO_LABEL,
+			siteId: DEMO_SITE_ID,
+			apiKey: DEMO_API_KEY,
+		};
+	}
 	const siteId = import.meta.env.VITE_FACET_DEMO_SITE_ID;
 	const apiKey = import.meta.env.VITE_FACET_DEMO_API_KEY;
 	if (!siteId || !apiKey) return null;
 	return {
 		id: DEMO_PROFILE_ID,
-		label: import.meta.env.VITE_FACET_DEMO_LABEL || 'Live demo',
+		label: import.meta.env.VITE_FACET_DEMO_LABEL || DEMO_LABEL,
 		siteId,
 		apiKey,
 	};

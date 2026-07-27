@@ -4,7 +4,7 @@ Drafts for the one-shot launch. **Sequence:** land the funnel first (working one
 demo, README hero) — then post. You get one clean Show HN; don't spend it on a rough first-run.
 Post Show HN in the morning US-Eastern on a weekday; reply to early comments fast.
 
-Links: repo `https://github.com/writerslogic/facet` · demo `https://facet.writerslogic.com`
+Links: repo `https://github.com/writerslogic/facet` · demo `https://writerslogic.github.io/facet/`
 
 ---
 
@@ -31,7 +31,7 @@ Links: repo `https://github.com/writerslogic/facet` · demo `https://facet.write
 > - **Multi-touch attribution without cross-session IDs** (aggregate Markov/heuristic over day-scoped
 >   channel paths), revenue reporting, funnels, retention, experiments, and a natural-language "Ask" tab.
 >
-> AGPL-3.0, self-host free. Live demo (no login): https://facet.writerslogic.com — repo:
+> AGPL-3.0, self-host free. Live demo (no login): https://writerslogic.github.io/facet/ — repo:
 > https://github.com/writerslogic/facet . Happy to answer anything about the privacy model or the
 > edge architecture.
 

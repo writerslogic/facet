@@ -25,13 +25,13 @@ and no cross-session identity to leak.
 </p>
 
 <p align="center">
-  <a href="https://facet.writerslogic.com"><img alt="Facet dashboard — live demo" src="./assets/facet-preview.gif" width="820"></a>
+  <a href="https://writerslogic.github.io/facet/"><img alt="Facet dashboard — live demo" src="./assets/facet-preview.gif" width="820"></a>
 </p>
 
 <p align="center">
   <b>The drop-in Umami alternative that's private by <i>math</i>, not policy.</b><br>
   Cookieless, verifiable, and one click on <i>your own</i> Cloudflare account — free tier, no database to run.<br>
-  <a href="https://facet.writerslogic.com"><b>Live demo →</b></a>
+  <a href="https://writerslogic.github.io/facet/"><b>Live demo →</b></a> <sub>(no login — fabricated data)</sub>
 </p>
 
 Facet is a self-hosted analytics platform that runs 100% on Cloudflare Workers + D1 — no external

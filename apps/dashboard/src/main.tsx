@@ -19,17 +19,28 @@ const queryClient = new QueryClient({
 	},
 });
 
-const root = document.getElementById('root');
-if (root) {
-	createRoot(root).render(
-		<StrictMode>
-			<QueryClientProvider client={queryClient}>
-				<DashboardProvider>
-					<AdminProvider>
-						<App />
-					</AdminProvider>
-				</DashboardProvider>
-			</QueryClientProvider>
-		</StrictMode>,
-	);
+async function bootstrap(): Promise<void> {
+	// Public static-demo build only: install the in-browser mock API before anything renders, so the very
+	// first data fetch is intercepted. Dynamically imported so the demo dataset never enters a normal build.
+	if (import.meta.env.VITE_FACET_STATIC_DEMO === '1') {
+		const { installDemoApi } = await import('./demo/mockApi.js');
+		installDemoApi();
+	}
+
+	const root = document.getElementById('root');
+	if (root) {
+		createRoot(root).render(
+			<StrictMode>
+				<QueryClientProvider client={queryClient}>
+					<DashboardProvider>
+						<AdminProvider>
+							<App />
+						</AdminProvider>
+					</DashboardProvider>
+				</QueryClientProvider>
+			</StrictMode>,
+		);
+	}
 }
+
+void bootstrap();

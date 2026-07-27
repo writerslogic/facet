@@ -7,6 +7,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
 	plugins: [react(), tailwindcss()],
+	// Served from the domain root by the Worker (default). The static GitHub Pages demo is served from a
+	// sub-path, so its build sets FACET_BASE=/facet/ to rewrite asset URLs accordingly.
+	base: process.env.FACET_BASE || '/',
 	build: {
 		outDir: 'dist',
 	},
