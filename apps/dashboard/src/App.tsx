@@ -286,8 +286,27 @@ function Overview({
 	);
 }
 
+/** Header pill shown only on the public demo deployment: signals the data is a live demo and links to
+ * the repo so a visitor can deploy their own. Rendered via `isDemo` from the store. */
+function DemoBadge(): ReactElement {
+	return (
+		<a
+			href="https://github.com/writerslogic/facet"
+			target="_blank"
+			rel="noopener noreferrer"
+			className="inline-flex items-center gap-1.5 rounded-lg border border-accent-500/40 bg-accent-500/10 px-3 py-1.5 text-sm font-medium text-accent-200 transition hover:bg-accent-500/20"
+		>
+			<span
+				className="size-1.5 animate-pulse rounded-full bg-accent-400"
+				aria-hidden="true"
+			/>
+			Live demo · Deploy your own →
+		</a>
+	);
+}
+
 function Dashboard(): ReactElement {
-	const { apiKey, siteId, preset, range } = useDashboard();
+	const { apiKey, siteId, preset, range, isDemo } = useDashboard();
 	const [view, setView] = useState<View>('overview');
 	const [showSettings, setShowSettings] = useState(false);
 	// The cube cross-filter lives here (not inside Overview) so it survives tab switches and can be set
@@ -326,13 +345,16 @@ function Dashboard(): ReactElement {
 			onToggleSettings={() => setShowSettings((prev) => !prev)}
 			headerExtra={
 				showSettings ? null : (
-					<ExportButton
-						apiKey={apiKey}
-						siteId={siteId}
-						range={range}
-						interval={preset === '24h' ? 'hour' : 'day'}
-						dark={fill}
-					/>
+					<>
+						{isDemo ? <DemoBadge /> : null}
+						<ExportButton
+							apiKey={apiKey}
+							siteId={siteId}
+							range={range}
+							interval={preset === '24h' ? 'hour' : 'day'}
+							dark={fill}
+						/>
+					</>
 				)
 			}
 		>

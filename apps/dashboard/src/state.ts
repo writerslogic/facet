@@ -99,6 +99,37 @@ function newId(): string {
 	return `p-${randomId()}`;
 }
 
+/** The synthetic profile id for the public no-login demo. Stable so it's easy to detect (`isDemo`). */
+const DEMO_PROFILE_ID = 'p-demo';
+
+/**
+ * The read-only demo profile, or null. Populated only when a build sets both `VITE_FACET_DEMO_SITE_ID`
+ * and `VITE_FACET_DEMO_API_KEY` — i.e. the public demo deployment. Every self-hosted/AGPL build leaves
+ * these unset, so this returns null and the normal KeyGate flow is untouched. The demo profile is never
+ * persisted to localStorage: it's a first-load default that a visitor's own added profile supersedes.
+ */
+function demoProfile(): Profile | null {
+	const siteId = import.meta.env.VITE_FACET_DEMO_SITE_ID;
+	const apiKey = import.meta.env.VITE_FACET_DEMO_API_KEY;
+	if (!siteId || !apiKey) return null;
+	return {
+		id: DEMO_PROFILE_ID,
+		label: import.meta.env.VITE_FACET_DEMO_LABEL || 'Live demo',
+		siteId,
+		apiKey,
+	};
+}
+
+/** Initial profiles + active id: stored profiles if any, else the demo profile when this is the demo
+ * build, else empty (→ KeyGate). Reads storage once so the provider's two initializers stay in sync. */
+function initialProfileState(): { profiles: Profile[]; activeId: string } {
+	const stored = readProfiles();
+	if (stored.length > 0) return { profiles: stored, activeId: readActiveId(stored) };
+	const demo = demoProfile();
+	if (demo) return { profiles: [demo], activeId: demo.id };
+	return { profiles: [], activeId: '' };
+}
+
 function readProfiles(): Profile[] {
 	try {
 		const raw = localStorage.getItem(PROFILES_STORAGE);
@@ -190,6 +221,8 @@ export interface DashboardStore {
 	profiles: Profile[];
 	activeProfileId: string;
 	activeProfile: Profile | null;
+	/** True when the active profile is the public no-login demo (read-only; drives the demo banner). */
+	isDemo: boolean;
 	/** The active range selection (preset or custom). */
 	selection: RangeSelection;
 	/** Convenience: the active preset id, or null when a custom range is active. */
@@ -220,9 +253,9 @@ export function DashboardProvider({
 }: {
 	children: ReactNode;
 }): ReactElement {
-	const [profiles, setProfiles] = useState<Profile[]>(readProfiles);
-	const [activeProfileId, setActiveProfileId] = useState<string>(() =>
-		readActiveId(readProfiles()),
+	const [profiles, setProfiles] = useState<Profile[]>(() => initialProfileState().profiles);
+	const [activeProfileId, setActiveProfileId] = useState<string>(
+		() => initialProfileState().activeId,
 	);
 	const [selection, setSelectionState] = useState<RangeSelection>(readSelectionFromUrl);
 	const [compare, setCompareState] = useState<boolean>(readCompareFromUrl);
@@ -310,6 +343,7 @@ export function DashboardProvider({
 		profiles,
 		activeProfileId,
 		activeProfile,
+		isDemo: activeProfile?.id === DEMO_PROFILE_ID,
 		selection,
 		preset: selection.kind === 'preset' ? selection.preset : null,
 		range,

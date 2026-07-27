@@ -176,6 +176,28 @@ curl "http://localhost:8787/api/stats?site_id=11111111-1111-4111-8111-1111111111
   -H "Authorization: Bearer clk_localdevkey"
 ```
 
+## Public demo mode
+
+A deployment can be turned into a **no-login, read-only demo** (as at
+[facet.writerslogic.com](https://facet.writerslogic.com)) by baking a demo site + API key into the
+dashboard build. When both variables below are set at build time, the dashboard seeds a read-only
+demo profile in memory and skips the key gate; a "Live demo · Deploy your own" pill links back to the
+repo. Leave them unset (the default) and nothing changes — every self-hosted build keeps the normal
+key gate.
+
+```sh
+# Build the dashboard with a demo profile baked in (values from the admin API / CLI above):
+VITE_FACET_DEMO_SITE_ID=<demo-site-uuid> \
+VITE_FACET_DEMO_API_KEY=clk_<demo-read-key> \
+VITE_FACET_DEMO_LABEL="Live demo" \
+pnpm --filter @facet/dashboard build
+```
+
+The key is **public** (it ships in client JS), so point it at a **throwaway demo site** whose data
+you don't mind exposing — never a real property. The key only reads aggregate stats; admin actions
+still require the `ADMIN_TOKEN`. The demo profile is never written to `localStorage`, so if a visitor
+adds their own site it cleanly supersedes the demo.
+
 ## Retention
 
 Raw events, sessions, and daily salts are purged past a rolling window controlled by the
