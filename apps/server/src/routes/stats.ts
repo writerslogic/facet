@@ -35,12 +35,19 @@ import {
 	series,
 	sessionFreshness,
 	summary,
+	topBrowsers,
+	topConnections,
 	topCountries,
 	topDevices,
 	topEvents,
 	topInteractions,
+	topLanguages,
+	topNetworks,
+	topOperatingSystems,
 	topPaths,
 	topReferrers,
+	topRegions,
+	topScreens,
 } from '../db/stats.js';
 import type { AppEnv } from '../env.js';
 import { aiRunner, answerQuestion } from '../lib/ai.js';
@@ -113,6 +120,13 @@ statsRoutes.get(
 			engagementResult,
 			channelsResult,
 			freshness,
+			browsers,
+			operatingSystems,
+			screens,
+			languages,
+			regions,
+			networks,
+			connections,
 		] = await Promise.all([
 			summary(c.env, f),
 			series(c.env, f, interval),
@@ -124,6 +138,13 @@ statsRoutes.get(
 			engagement(c.env, f),
 			channels(c.env, f),
 			sessionFreshness(c.env, f),
+			topBrowsers(c.env, f),
+			topOperatingSystems(c.env, f),
+			topScreens(c.env, f),
+			topLanguages(c.env, f),
+			topRegions(c.env, f),
+			topNetworks(c.env, f),
+			topConnections(c.env, f),
 		]);
 		const body: StatsResponse = {
 			summary: summaryResult,
@@ -135,6 +156,13 @@ statsRoutes.get(
 			top_devices: devices,
 			engagement: engagementResult,
 			channels: channelsResult,
+			top_browsers: browsers,
+			top_os: operatingSystems,
+			top_screens: screens,
+			top_languages: languages,
+			top_regions: regions,
+			top_networks: networks,
+			top_connections: connections,
 			meta: freshness,
 		};
 		return c.json(body);

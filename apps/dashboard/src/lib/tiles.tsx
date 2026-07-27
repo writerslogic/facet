@@ -95,4 +95,6 @@ export const DEFAULT_LAYOUT: Slot[] = [
 	{ uid: 'flow', tileId: 'flow', size: 'tall' },
 	{ uid: 'pages', tileId: 'pages', size: 'lg' },
 	{ uid: 'countries', tileId: 'countries', size: 'lg' },
+	{ uid: 'browsers', tileId: 'browsers', size: 'lg' },
+	{ uid: 'networks', tileId: 'networks', size: 'lg' },
 ];

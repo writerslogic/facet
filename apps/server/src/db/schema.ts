@@ -55,6 +55,12 @@ export const events = sqliteTable(
 	(t) => [
 		index('idx_events_site_created_name').on(t.siteId, t.createdAt, t.name),
 		index('idx_events_site_host_created').on(t.siteId, t.hostname, t.createdAt),
+		// Covering indexes for the higher-cardinality segmentation breakdowns: the (site, time-range,
+		// dimension) shape lets each top-N read range-scan + group from the index rather than the table.
+		index('idx_events_site_created_browser').on(t.siteId, t.createdAt, t.browser),
+		index('idx_events_site_created_os').on(t.siteId, t.createdAt, t.os),
+		index('idx_events_site_created_region').on(t.siteId, t.createdAt, t.region),
+		index('idx_events_site_created_network').on(t.siteId, t.createdAt, t.network),
 	],
 );
 

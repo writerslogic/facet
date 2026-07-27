@@ -194,6 +194,15 @@ export interface StatsResponse {
 	top_devices: CountRow[];
 	engagement: EngagementSummary;
 	channels: CountRow[];
+	/** Private-by-construction segmentation breakdowns (k-anonymity floor applied server-side). Optional
+	 * for backward compatibility; absent on older responses. */
+	top_browsers?: CountRow[];
+	top_os?: CountRow[];
+	top_screens?: CountRow[];
+	top_languages?: CountRow[];
+	top_regions?: CountRow[];
+	top_networks?: CountRow[];
+	top_connections?: CountRow[];
 	/** Session-data freshness. Optional for backward compatibility. */
 	meta?: Freshness;
 }

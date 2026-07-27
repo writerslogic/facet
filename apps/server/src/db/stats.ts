@@ -170,6 +170,9 @@ async function topByColumn(
 		excludeEmpty?: boolean;
 		limit?: number;
 		extra?: SQL;
+		/** k-anonymity floor: only surface a value whose cohort has at least this many events, so a
+		 * segment can never resolve to a near-unique visitor (the privacy guarantee Umami lacks). */
+		minCount?: number;
 	} = {},
 ): Promise<CountRow[]> {
 	const conditions: SQL[] = [buildFilteredEventWhere(f)];
@@ -183,14 +186,74 @@ async function topByColumn(
 		conditions.push(opts.extra);
 	}
 	const count = sql<number>`COUNT(*)`;
-	const rows = await db(env)
+	const grouped = db(env)
 		.select({ key: column, count })
 		.from(schema.events)
 		.where(and(...conditions))
-		.groupBy(column)
-		.orderBy(desc(count), column)
-		.limit(opts.limit ?? 1000);
+		.groupBy(column);
+	const bounded = opts.minCount ? grouped.having(sql`COUNT(*) >= ${opts.minCount}`) : grouped;
+	const rows = await bounded.orderBy(desc(count), column).limit(opts.limit ?? 1000);
 	return rows.map((r) => ({ key: String(r.key), count: Number(r.count) }));
+}
+
+/** k-anonymity threshold for the segmentation dimensions: a value is only surfaced once at least this
+ * many events share it, so no breakdown (or cross-filter intersection) can single out a visitor. */
+export const K_ANON = 3;
+
+export function topBrowsers(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
+	return topByColumn(env, f, schema.events.browser, {
+		excludeNull: true,
+		limit,
+		minCount: K_ANON,
+	});
+}
+
+export function topOperatingSystems(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
+	return topByColumn(env, f, schema.events.os, {
+		excludeNull: true,
+		limit,
+		minCount: K_ANON,
+	});
+}
+
+export function topScreens(env: Env, f: StatsFilter, limit = 8): Promise<CountRow[]> {
+	return topByColumn(env, f, schema.events.screenTier, {
+		excludeNull: true,
+		limit,
+		minCount: K_ANON,
+	});
+}
+
+export function topLanguages(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
+	return topByColumn(env, f, schema.events.language, {
+		excludeNull: true,
+		limit,
+		minCount: K_ANON,
+	});
+}
+
+export function topRegions(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
+	return topByColumn(env, f, schema.events.region, {
+		excludeNull: true,
+		limit,
+		minCount: K_ANON,
+	});
+}
+
+export function topNetworks(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
+	return topByColumn(env, f, schema.events.network, {
+		excludeNull: true,
+		limit,
+		minCount: K_ANON,
+	});
+}
+
+export function topConnections(env: Env, f: StatsFilter, limit = 4): Promise<CountRow[]> {
+	return topByColumn(env, f, schema.events.connection, {
+		excludeNull: true,
+		limit,
+		minCount: K_ANON,
+	});
 }
 
 export function topPaths(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
