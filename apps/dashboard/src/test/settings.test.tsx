@@ -111,8 +111,8 @@ afterEach(() => {
 async function openSettingsWithToken() {
 	renderApp();
 	fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
-	// Prompted for the admin token.
-	expect(screen.getByLabelText('Admin token')).toBeInTheDocument();
+	// Prompted for the admin token (Settings is code-split, so await its lazy chunk).
+	expect(await screen.findByLabelText('Admin token')).toBeInTheDocument();
 	fireEvent.change(screen.getByLabelText('Admin token'), {
 		target: { value: ADMIN_TOKEN },
 	});

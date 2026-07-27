@@ -6,20 +6,51 @@
 import type { CubeCell, StatsQuery } from '@facet/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { useEffect, useRef, useState } from 'react';
-import { Anomalies } from './components/Anomalies.js';
-import { AskPanel } from './components/AskPanel.js';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { BentoBoard, BentoSkeleton } from './components/BentoBoard.js';
 import { CubeFilterBar } from './components/CubeFilterBar.js';
-import { Experiments } from './components/Experiments.js';
 import { ExportButton } from './components/ExportButton.js';
-import { FunnelsView } from './components/FunnelsView.js';
 import { KeyGate } from './components/KeyGate.js';
 import { Layout } from './components/Layout.js';
-import { Realtime } from './components/Realtime.js';
-import { Retention } from './components/Retention.js';
-import { Settings } from './components/Settings.js';
 import { AuthErrorBanner, ErrorState } from './components/StatusStates.js';
+
+// The heavy read tabs are code-split: only the Overview (inline below) ships in the initial bundle;
+// every other tab's JS loads on first view, cutting the JavaScript-to-interactive on the page that
+// actually loads first. Named exports are adapted to the default-export shape `lazy` expects.
+const Anomalies = lazy(() =>
+	import('./components/Anomalies.js').then((m) => ({ default: m.Anomalies })),
+);
+const AskPanel = lazy(() =>
+	import('./components/AskPanel.js').then((m) => ({ default: m.AskPanel })),
+);
+const Experiments = lazy(() =>
+	import('./components/Experiments.js').then((m) => ({
+		default: m.Experiments,
+	})),
+);
+const FunnelsView = lazy(() =>
+	import('./components/FunnelsView.js').then((m) => ({
+		default: m.FunnelsView,
+	})),
+);
+const Realtime = lazy(() =>
+	import('./components/Realtime.js').then((m) => ({ default: m.Realtime })),
+);
+const Retention = lazy(() =>
+	import('./components/Retention.js').then((m) => ({ default: m.Retention })),
+);
+const Settings = lazy(() =>
+	import('./components/Settings.js').then((m) => ({ default: m.Settings })),
+);
+
+/** Fallback shown while a lazily-loaded tab's JS chunk is fetched (keeps the shell from shifting). */
+function TabFallback(): ReactElement {
+	return (
+		<div className="flex min-h-0 flex-1 items-center justify-center text-[color:var(--muted)] text-sm">
+			<span className="animate-pulse">Loading…</span>
+		</div>
+	);
+}
 import { useAnomalies } from './hooks/anomaly.js';
 import { useCube } from './hooks/cube.js';
 import { useCompareStats, useStats } from './hooks/stats.js';
@@ -306,7 +337,9 @@ function Dashboard(): ReactElement {
 			}
 		>
 			{showSettings ? (
-				<Settings />
+				<Suspense fallback={<TabFallback />}>
+					<Settings />
+				</Suspense>
 			) : (
 				<>
 					<div
@@ -332,44 +365,46 @@ function Dashboard(): ReactElement {
 							</button>
 						))}
 					</div>
-					{view === 'overview' ? (
-						<div className="flex min-h-0 flex-1 flex-col">
-							<Overview
+					<Suspense fallback={<TabFallback />}>
+						{view === 'overview' ? (
+							<div className="flex min-h-0 flex-1 flex-col">
+								<Overview
+									onOpenSettings={() => setShowSettings(true)}
+									filter={cubeFilter}
+									onFilterChange={setCubeFilter}
+									serverFilter={serverFilter}
+									onServerFilterChange={setServerFilter}
+								/>
+							</div>
+						) : view === 'realtime' ? (
+							<Realtime apiKey={apiKey} siteId={siteId} />
+						) : view === 'funnels' ? (
+							<FunnelsView
+								apiKey={apiKey}
+								siteId={siteId}
+								range={range}
 								onOpenSettings={() => setShowSettings(true)}
-								filter={cubeFilter}
-								onFilterChange={setCubeFilter}
-								serverFilter={serverFilter}
-								onServerFilterChange={setServerFilter}
 							/>
-						</div>
-					) : view === 'realtime' ? (
-						<Realtime apiKey={apiKey} siteId={siteId} />
-					) : view === 'funnels' ? (
-						<FunnelsView
-							apiKey={apiKey}
-							siteId={siteId}
-							range={range}
-							onOpenSettings={() => setShowSettings(true)}
-						/>
-					) : view === 'retention' ? (
-						<Retention apiKey={apiKey} siteId={siteId} range={range} />
-					) : view === 'experiments' ? (
-						<Experiments
-							apiKey={apiKey}
-							siteId={siteId}
-							range={range}
-							onOpenSettings={() => setShowSettings(true)}
-						/>
-					) : view === 'anomalies' ? (
-						<Anomalies
-							apiKey={apiKey}
-							siteId={siteId}
-							range={range}
-							onInvestigate={investigate}
-						/>
-					) : (
-						<AskPanel apiKey={apiKey} siteId={siteId} range={range} />
-					)}
+						) : view === 'retention' ? (
+							<Retention apiKey={apiKey} siteId={siteId} range={range} />
+						) : view === 'experiments' ? (
+							<Experiments
+								apiKey={apiKey}
+								siteId={siteId}
+								range={range}
+								onOpenSettings={() => setShowSettings(true)}
+							/>
+						) : view === 'anomalies' ? (
+							<Anomalies
+								apiKey={apiKey}
+								siteId={siteId}
+								range={range}
+								onInvestigate={investigate}
+							/>
+						) : (
+							<AskPanel apiKey={apiKey} siteId={siteId} range={range} />
+						)}
+					</Suspense>
 				</>
 			)}
 		</Layout>
