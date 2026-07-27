@@ -100,7 +100,7 @@ describe('opt-out state', () => {
 		store['facet.optout'] = '0';
 		expect(isExplicitlyOptedOut()).toBe(false);
 		setOptOutScript({ getAttribute: () => '' });
-		delete store['facet.optout'];
+		Reflect.deleteProperty(store, 'facet.optout');
 		expect(isExplicitlyOptedOut()).toBe(true);
 	});
 

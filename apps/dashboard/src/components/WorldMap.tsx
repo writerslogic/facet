@@ -2,25 +2,25 @@
 // (brighter = more, since the board is dark), on the prism ramp indigo→fuchsia. Hovering reads out the
 // country; clicking cross-filters the board. Dependency-free — geometry is the inlined `WORLD` module.
 
-import type { CountRow } from "@facet/shared";
-import { type ReactElement, useMemo, useState } from "react";
-import { cn } from "../lib/cn.js";
-import { formatNumber } from "../lib/format.js";
-import { WORLD, WORLD_VIEWBOX } from "../lib/worldGeo.js";
-import { useThemeColors } from "../theme.js";
+import type { CountRow } from '@facet/shared';
+import { type ReactElement, useMemo, useState } from 'react';
+import { cn } from '../lib/cn.js';
+import { formatNumber } from '../lib/format.js';
+import { WORLD, WORLD_VIEWBOX } from '../lib/worldGeo.js';
+import { useThemeColors } from '../theme.js';
 
 type Rgb = [number, number, number];
 
 function hexToRgb(hex: string): Rgb {
-	const h = hex.replace("#", "").trim();
+	const h = hex.replace('#', '').trim();
 	const full =
 		h.length === 3
 			? h
-					.split("")
+					.split('')
 					.map((c) => c + c)
-					.join("")
+					.join('')
 			: h;
-	const n = Number.parseInt(full || "818cf8", 16);
+	const n = Number.parseInt(full || '818cf8', 16);
 	return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
@@ -28,8 +28,7 @@ function hexToRgb(hex: string): Rgb {
 // intensity so a hot country glows and a cold one only tints. `t` is 0–1 (log-scaled share).
 function ramp(t: number, lo: Rgb, hi: Rgb): string {
 	const clamp = Math.max(0, Math.min(1, t));
-	const mix = (a: number, b: number): number =>
-		Math.round(a + (b - a) * clamp);
+	const mix = (a: number, b: number): number => Math.round(a + (b - a) * clamp);
 	const op = (0.32 + 0.6 * clamp).toFixed(2);
 	return `rgba(${mix(lo[0], hi[0])},${mix(lo[1], hi[1])},${mix(lo[2], hi[2])},${op})`;
 }
@@ -91,26 +90,16 @@ export function WorldMap({
 								key={c.iso}
 								d={c.d}
 								fill={has ? ramp(t, lo, hi) : noData}
-								stroke={isActive ? colors.d3 : "rgb(var(--bg))"}
+								stroke={isActive ? colors.d3 : 'rgb(var(--bg))'}
 								strokeWidth={isActive ? 0.8 : 0.3}
-								className={
-									has && onSelect
-										? "cursor-pointer"
-										: undefined
-								}
+								className={has && onSelect ? 'cursor-pointer' : undefined}
 								style={{
 									opacity: dim ? 0.72 : 1,
-									transition: "opacity .15s, fill .3s",
+									transition: 'opacity .15s, fill .3s',
 								}}
 								onMouseEnter={() => setHover(c.iso)}
-								onMouseLeave={() =>
-									setHover((h) => (h === c.iso ? null : h))
-								}
-								onClick={
-									has && onSelect
-										? () => onSelect(c.iso)
-										: undefined
-								}
+								onMouseLeave={() => setHover((h) => (h === c.iso ? null : h))}
+								onClick={has && onSelect ? () => onSelect(c.iso) : undefined}
 							/>
 						);
 					})}
@@ -126,10 +115,7 @@ export function WorldMap({
 								{formatNumber(readCount)}
 							</span>
 							<span className="text-[11px] text-[color:var(--muted)] tabular-nums">
-								{total > 0
-									? Math.round((readCount / total) * 100)
-									: 0}
-								%
+								{total > 0 ? Math.round((readCount / total) * 100) : 0}%
 							</span>
 						</>
 					) : (
@@ -150,25 +136,21 @@ export function WorldMap({
 							<button
 								type="button"
 								aria-pressed={isActive}
-								onClick={
-									onSelect ? () => onSelect(iso) : undefined
-								}
+								onClick={onSelect ? () => onSelect(iso) : undefined}
 								onMouseEnter={() => setHover(iso)}
-								onMouseLeave={() =>
-									setHover((h) => (h === iso ? null : h))
-								}
+								onMouseLeave={() => setHover((h) => (h === iso ? null : h))}
 								className={cn(
-									"group relative flex w-full items-center gap-2 overflow-hidden rounded-md px-1.5 py-1 text-left",
+									'group relative flex w-full items-center gap-2 overflow-hidden rounded-md px-1.5 py-1 text-left',
 									isActive
-										? "bg-[color:rgb(var(--hover))]"
-										: "hover:bg-[color:rgb(var(--hover))]",
+										? 'bg-[color:rgb(var(--hover))]'
+										: 'hover:bg-[color:rgb(var(--hover))]',
 								)}
 							>
 								<span
 									className="absolute inset-y-0.5 left-0 rounded-sm"
 									style={{
 										width: `${width}%`,
-										background: `color-mix(in srgb, ${i < 3 ? PRISM[i] : "var(--faint)"} 22%, transparent)`,
+										background: `color-mix(in srgb, ${i < 3 ? PRISM[i] : 'var(--faint)'} 22%, transparent)`,
 									}}
 									aria-hidden="true"
 								/>
@@ -190,4 +172,4 @@ export function WorldMap({
 	);
 }
 
-const PRISM = ["var(--c1)", "var(--c2)", "var(--c3)"] as const;
+const PRISM = ['var(--c1)', 'var(--c2)', 'var(--c3)'] as const;

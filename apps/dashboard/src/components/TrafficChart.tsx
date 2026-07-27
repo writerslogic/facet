@@ -231,7 +231,6 @@ function ChartCanvas({
 	// Cross-filter / range changes tween the series old→new instead of hard-swapping, so re-slicing the
 	// board reads as a smooth transformation rather than a jump. Snaps when the bucket count changes
 	// (a different x-axis can't be interpolated) or under reduced-motion.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: tween fires on data change; reads the live chart
 	useEffect(() => {
 		const chart = chartRef.current;
 		if (!chart || typeof chart.setData !== 'function') return;
@@ -402,7 +401,6 @@ function ChartCanvas({
 		};
 		// `data` is intentionally omitted: the chart is built once (from dataRef) and data *changes* tween
 		// via the effect above, rather than rebuilding the canvas on every filter/range change.
-		// biome-ignore lint/correctness/useExhaustiveDependencies: rebuild only on size/theme; data updates are tweened
 	}, [
 		height,
 		fillHeight,

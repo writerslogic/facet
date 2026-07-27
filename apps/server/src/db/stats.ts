@@ -17,25 +17,15 @@ import type {
 	SeriesPoint,
 	StatsFilter,
 	StatsSummary,
-} from "@facet/shared";
-import {
-	type SQL,
-	and,
-	desc,
-	eq,
-	gte,
-	isNotNull,
-	lt,
-	ne,
-	sql,
-} from "drizzle-orm";
-import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
-import type { Env } from "../env.js";
-import { computeAttribution } from "../lib/attribution.js";
-import { DAY_MS, HOUR_MS } from "../lib/constants.js";
-import { buildEventWhere } from "./filters.js";
-import { db } from "./queries.js";
-import * as schema from "./schema.js";
+} from '@facet/shared';
+import { type SQL, and, desc, eq, gte, isNotNull, lt, ne, sql } from 'drizzle-orm';
+import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
+import type { Env } from '../env.js';
+import { computeAttribution } from '../lib/attribution.js';
+import { DAY_MS, HOUR_MS } from '../lib/constants.js';
+import { buildEventWhere } from './filters.js';
+import { db } from './queries.js';
+import * as schema from './schema.js';
 
 // Internal/system events (experiment `$exposure`, any `$`-prefixed name, and the auto-generated
 // `form_submit` interaction) are excluded from marketer-facing "custom event" metrics. They remain
@@ -92,12 +82,8 @@ export async function summary(env: Env, f: StatsFilter): Promise<StatsSummary> {
 }
 
 /** Time series bucketed by hour/day, ascending, with every empty bucket in [start, end) zero-filled. */
-export async function series(
-	env: Env,
-	f: StatsFilter,
-	interval: Interval,
-): Promise<SeriesPoint[]> {
-	const bucketMs = interval === "hour" ? HOUR_MS : DAY_MS;
+export async function series(env: Env, f: StatsFilter, interval: Interval): Promise<SeriesPoint[]> {
+	const bucketMs = interval === 'hour' ? HOUR_MS : DAY_MS;
 	const bucket = sql<number>`(${schema.events.createdAt} - (${schema.events.createdAt} % ${bucketMs}))`;
 	const rows = await db(env)
 		.select({ t: bucket, pageviews: pageviewCount, visitors: visitorCount })
@@ -131,12 +117,8 @@ const CUBE_TOP_COUNTRIES = 30;
  * client-side slicing by those low-cardinality axes with no further server reads. Country is folded to
  * the top-N by volume plus `'other'`, so the cube is both bounded AND complete (every event lands in a
  * cell — totals stay exact). Path/referrer are deliberately excluded (high cardinality → server-side). */
-export async function cube(
-	env: Env,
-	f: StatsFilter,
-	interval: Interval,
-): Promise<CubeCell[]> {
-	const bucketMs = interval === "hour" ? HOUR_MS : DAY_MS;
+export async function cube(env: Env, f: StatsFilter, interval: Interval): Promise<CubeCell[]> {
+	const bucketMs = interval === 'hour' ? HOUR_MS : DAY_MS;
 	const bucket = sql<number>`(${schema.events.createdAt} - (${schema.events.createdAt} % ${bucketMs}))`;
 
 	// Bound country cardinality without dropping data: keep the top-N countries, fold the rest to 'other'.
@@ -201,7 +183,7 @@ async function topByColumn(
 		conditions.push(isNotNull(column));
 	}
 	if (opts.excludeEmpty) {
-		conditions.push(ne(column, ""));
+		conditions.push(ne(column, ''));
 	}
 	if (opts.extra) {
 		conditions.push(opts.extra);
@@ -212,12 +194,8 @@ async function topByColumn(
 		.from(schema.events)
 		.where(and(...conditions))
 		.groupBy(column);
-	const bounded = opts.minCount
-		? grouped.having(sql`COUNT(*) >= ${opts.minCount}`)
-		: grouped;
-	const rows = await bounded
-		.orderBy(desc(count), column)
-		.limit(opts.limit ?? 1000);
+	const bounded = opts.minCount ? grouped.having(sql`COUNT(*) >= ${opts.minCount}`) : grouped;
+	const rows = await bounded.orderBy(desc(count), column).limit(opts.limit ?? 1000);
 	return rows.map((r) => ({ key: String(r.key), count: Number(r.count) }));
 }
 
@@ -225,11 +203,7 @@ async function topByColumn(
  * many events share it, so no breakdown (or cross-filter intersection) can single out a visitor. */
 export const K_ANON = 3;
 
-export function topBrowsers(
-	env: Env,
-	f: StatsFilter,
-	limit = 12,
-): Promise<CountRow[]> {
+export function topBrowsers(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.browser, {
 		excludeNull: true,
 		limit,
@@ -237,11 +211,7 @@ export function topBrowsers(
 	});
 }
 
-export function topOperatingSystems(
-	env: Env,
-	f: StatsFilter,
-	limit = 12,
-): Promise<CountRow[]> {
+export function topOperatingSystems(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.os, {
 		excludeNull: true,
 		limit,
@@ -249,11 +219,7 @@ export function topOperatingSystems(
 	});
 }
 
-export function topScreens(
-	env: Env,
-	f: StatsFilter,
-	limit = 8,
-): Promise<CountRow[]> {
+export function topScreens(env: Env, f: StatsFilter, limit = 8): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.screenTier, {
 		excludeNull: true,
 		limit,
@@ -261,11 +227,7 @@ export function topScreens(
 	});
 }
 
-export function topLanguages(
-	env: Env,
-	f: StatsFilter,
-	limit = 12,
-): Promise<CountRow[]> {
+export function topLanguages(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.language, {
 		excludeNull: true,
 		limit,
@@ -273,11 +235,7 @@ export function topLanguages(
 	});
 }
 
-export function topRegions(
-	env: Env,
-	f: StatsFilter,
-	limit = 12,
-): Promise<CountRow[]> {
+export function topRegions(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.region, {
 		excludeNull: true,
 		limit,
@@ -285,11 +243,7 @@ export function topRegions(
 	});
 }
 
-export function topNetworks(
-	env: Env,
-	f: StatsFilter,
-	limit = 12,
-): Promise<CountRow[]> {
+export function topNetworks(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.network, {
 		excludeNull: true,
 		limit,
@@ -297,11 +251,7 @@ export function topNetworks(
 	});
 }
 
-export function topConnections(
-	env: Env,
-	f: StatsFilter,
-	limit = 4,
-): Promise<CountRow[]> {
+export function topConnections(env: Env, f: StatsFilter, limit = 4): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.connection, {
 		excludeNull: true,
 		limit,
@@ -312,10 +262,7 @@ export function topConnections(
 /** Ecommerce revenue over the range. Grouped by currency and reporting the dominant one, so total /
  * orders / AOV are always currency-consistent (correct for single-currency sites; the top currency for
  * mixed). `orders` counts valued events. */
-export async function revenue(
-	env: Env,
-	f: StatsFilter,
-): Promise<RevenueSummary> {
+export async function revenue(env: Env, f: StatsFilter): Promise<RevenueSummary> {
 	const total = sql<number>`SUM(${schema.events.value})`;
 	const rows = await db(env)
 		.select({
@@ -340,11 +287,7 @@ export async function revenue(
 
 /** Revenue summed per channel, k-anonymised on order count so a channel with too few orders is not
  * surfaced. `count` carries the (rounded) revenue so it renders through the shared ranked-list boxes. */
-export async function revenueByChannel(
-	env: Env,
-	f: StatsFilter,
-	limit = 12,
-): Promise<CountRow[]> {
+export async function revenueByChannel(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
 	const sum = sql<number>`SUM(${schema.events.value})`;
 	const rows = await db(env)
 		.select({ key: schema.events.channel, sum })
@@ -373,10 +316,7 @@ const ATTRIBUTION_MAX_EVENTS = 50000;
 /** Multi-touch attribution: build each visitor's within-day channel path (identity is only stable inside
  * a UTC day — the salt rotates daily, so this needs NO persistent cross-session id), flag the day as
  * converting with its summed revenue, and run the attribution models. */
-export async function attribution(
-	env: Env,
-	f: StatsFilter,
-): Promise<AttributionResult> {
+export async function attribution(env: Env, f: StatsFilter): Promise<AttributionResult> {
 	const rows = await db(env)
 		.select({
 			vh: schema.events.visitorHash,
@@ -385,17 +325,12 @@ export async function attribution(
 			value: schema.events.value,
 		})
 		.from(schema.events)
-		.where(
-			and(buildFilteredEventWhere(f), isNotNull(schema.events.channel)),
-		)
+		.where(and(buildFilteredEventWhere(f), isNotNull(schema.events.channel)))
 		.orderBy(schema.events.visitorHash, schema.events.createdAt)
 		.limit(ATTRIBUTION_MAX_EVENTS);
 	// Group rows into (visitor, UTC day) paths. Rows arrive ordered by (visitor, time), so each group's
 	// channels are already in touch order.
-	const groups = new Map<
-		string,
-		{ channels: string[]; value: number; converted: boolean }
-	>();
+	const groups = new Map<string, { channels: string[]; value: number; converted: boolean }>();
 	for (const r of rows) {
 		const day = Math.floor(Number(r.at) / DAY_MS);
 		const key = `${r.vh}|${day}`;
@@ -414,19 +349,11 @@ export async function attribution(
 	return computeAttribution([...groups.values()]);
 }
 
-export function topPaths(
-	env: Env,
-	f: StatsFilter,
-	limit = 10,
-): Promise<CountRow[]> {
+export function topPaths(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.path, { limit });
 }
 
-export function topReferrers(
-	env: Env,
-	f: StatsFilter,
-	limit = 10,
-): Promise<CountRow[]> {
+export function topReferrers(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.referrer, {
 		excludeEmpty: true,
 		limit,
@@ -434,11 +361,7 @@ export function topReferrers(
 }
 
 /** Marketer-facing custom events only ($-prefixed internals and form_submit are excluded). */
-export function topEvents(
-	env: Env,
-	f: StatsFilter,
-	limit = 10,
-): Promise<CountRow[]> {
+export function topEvents(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.name, {
 		excludeNull: true,
 		limit,
@@ -447,11 +370,7 @@ export function topEvents(
 }
 
 /** Internal/system interactions ($exposure, other $-prefixed events, form_submit), shown separately. */
-export function topInteractions(
-	env: Env,
-	f: StatsFilter,
-	limit = 10,
-): Promise<CountRow[]> {
+export function topInteractions(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.name, {
 		excludeNull: true,
 		limit,
@@ -459,11 +378,7 @@ export function topInteractions(
 	});
 }
 
-export function topCountries(
-	env: Env,
-	f: StatsFilter,
-	limit = 10,
-): Promise<CountRow[]> {
+export function topCountries(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {
 	return topByColumn(env, f, schema.events.country, {
 		excludeNull: true,
 		limit,
@@ -488,10 +403,7 @@ function buildSessionWhere(f: StatsFilter): SQL {
  * range but no sessions have been materialized yet (the hourly cron has not caught up), so a caller
  * can distinguish "no data" from "not built yet".
  */
-export async function sessionFreshness(
-	env: Env,
-	f: StatsFilter,
-): Promise<Freshness> {
+export async function sessionFreshness(env: Env, f: StatsFilter): Promise<Freshness> {
 	const [rawRow, sessionRow] = await Promise.all([
 		db(env)
 			.select({ n: sql<number>`COUNT(*)` })
@@ -507,7 +419,7 @@ export async function sessionFreshness(
 	const rawEvents = Number(rawRow?.n ?? 0);
 	const sessions = Number(sessionRow?.n ?? 0);
 	return {
-		materialization: "hourly",
+		materialization: 'hourly',
 		pending: rawEvents > 0 && sessions === 0,
 	};
 }
@@ -544,10 +456,7 @@ export async function realtime(
 }
 
 /** Session engagement metrics over the range; all zero when there are no sessions. */
-export async function engagement(
-	env: Env,
-	f: StatsFilter,
-): Promise<EngagementSummary> {
+export async function engagement(env: Env, f: StatsFilter): Promise<EngagementSummary> {
 	const row = await db(env)
 		.select({
 			sessions: sql<number>`COUNT(*)`,
@@ -585,7 +494,7 @@ export async function channels(env: Env, f: StatsFilter): Promise<CountRow[]> {
 			and(
 				buildSessionWhere(f),
 				isNotNull(schema.eventSessions.channel),
-				ne(schema.eventSessions.channel, "internal"),
+				ne(schema.eventSessions.channel, 'internal'),
 			),
 		)
 		.groupBy(schema.eventSessions.channel)
@@ -598,10 +507,10 @@ export async function channels(env: Env, f: StatsFilter): Promise<CountRow[]> {
 const COHORT_MAX_PERIODS = 12;
 
 const SALT_WINDOW_NOTE =
-	"Retention depth is bounded by the site salt window: a visitor_hash is stable only within one " +
-	"window (default: daily). At the daily window a returning person gets a new hash each day, so " +
-	"multi-period retention is legitimately ~0. Wider (weekly/monthly) retention requires a wider " +
-	"salt window via the identity spectrum.";
+	'Retention depth is bounded by the site salt window: a visitor_hash is stable only within one ' +
+	'window (default: daily). At the daily window a returning person gets a new hash each day, so ' +
+	'multi-period retention is legitimately ~0. Wider (weekly/monthly) retention requires a wider ' +
+	'salt window via the identity spectrum.';
 
 /** Convert a `YYYY-MM-DD` day_key to a UTC-midnight unix-ms timestamp. */
 function dayKeyToMs(dayKey: string): number {
@@ -614,7 +523,7 @@ const WEEK_MS = 7 * DAY_MS;
  * its ISO-week Monday. UTC epoch (1970-01-01) was a Thursday, so shifting by 4 days lands Monday on
  * the week boundary. Input is already day-aligned, so `t % DAY_MS === 0`. */
 function bucketStart(ms: number, period: CohortPeriod): number {
-	if (period === "day") {
+	if (period === 'day') {
 		return ms;
 	}
 	return ms - ((ms / DAY_MS + 3) % 7) * DAY_MS;
@@ -659,7 +568,7 @@ export async function cohortRetention(
 		return { period, cohorts: [], note: SALT_WINDOW_NOTE };
 	}
 
-	const periodMs = period === "day" ? DAY_MS : WEEK_MS;
+	const periodMs = period === 'day' ? DAY_MS : WEEK_MS;
 	// Origin: the bucket-start of the earliest active day, so bucket indices start at 0.
 	const originStart = bucketStart(
 		Math.min(...rows.map((r) => dayKeyToMs(String(r.dayKey)))),
@@ -670,8 +579,7 @@ export async function cohortRetention(
 	const byVisitor = new Map<string, { first: number; seen: Set<number> }>();
 	for (const r of rows) {
 		const idx = Math.floor(
-			(bucketStart(dayKeyToMs(String(r.dayKey)), period) - originStart) /
-				periodMs,
+			(bucketStart(dayKeyToMs(String(r.dayKey)), period) - originStart) / periodMs,
 		);
 		const key = String(r.visitorHash);
 		const entry = byVisitor.get(key);
@@ -684,10 +592,7 @@ export async function cohortRetention(
 	}
 
 	// Cohort → size and per-offset returning counts.
-	const cohorts = new Map<
-		number,
-		{ size: number; returned: Map<number, number> }
-	>();
+	const cohorts = new Map<number, { size: number; returned: Map<number, number> }>();
 	for (const { first, seen } of byVisitor.values()) {
 		let cohort = cohorts.get(first);
 		if (!cohort) {
@@ -698,18 +603,13 @@ export async function cohortRetention(
 		for (const idx of seen) {
 			const offset = idx - first;
 			if (offset >= 0 && offset < COHORT_MAX_PERIODS) {
-				cohort.returned.set(
-					offset,
-					(cohort.returned.get(offset) ?? 0) + 1,
-				);
+				cohort.returned.set(offset, (cohort.returned.get(offset) ?? 0) + 1);
 			}
 		}
 	}
 
 	// Keep only the most recent COHORT_MAX_PERIODS cohorts, ascending by period.
-	const cohortIdxs = [...cohorts.keys()]
-		.sort((a, b) => a - b)
-		.slice(-COHORT_MAX_PERIODS);
+	const cohortIdxs = [...cohorts.keys()].sort((a, b) => a - b).slice(-COHORT_MAX_PERIODS);
 	const result: CohortRow[] = cohortIdxs.map((idx) => {
 		const c = cohorts.get(idx) as {
 			size: number;

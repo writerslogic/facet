@@ -16,7 +16,8 @@
 			"**/.vercel/**",
 			"**/.next/**",
 			"**/build/**",
-			"pnpm-lock.yaml"
+			"pnpm-lock.yaml",
+			"apps/dashboard/src/lib/worldGeo.ts"
 		],
 		"include": ["src/**/*.ts", "src/**/*.tsx", "worker/**/*.ts", "*.ts", "*.js"]
 	},

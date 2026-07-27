@@ -2,14 +2,12 @@
 // tests lock the desktop (6-col) and mobile (2-col) packing: the shipped layout packs with no overlaps
 // and no dead cells (gap-fill), wide tiles span the grid, and a narrow grid clamps oversized tiles.
 
-import { describe, expect, it } from "vitest";
-import { packSlots, trackTemplate } from "../lib/elasticGrid.js";
-import { DEFAULT_LAYOUT, type Slot } from "../lib/tiles.js";
+import { describe, expect, it } from 'vitest';
+import { packSlots, trackTemplate } from '../lib/elasticGrid.js';
+import { DEFAULT_LAYOUT, type Slot } from '../lib/tiles.js';
 
 /** True if any two placements share a cell — the packer must never overlap tiles. */
-function hasOverlap(
-	placements: ReturnType<typeof packSlots>["placements"],
-): boolean {
+function hasOverlap(placements: ReturnType<typeof packSlots>['placements']): boolean {
 	const seen = new Set<string>();
 	for (const p of placements) {
 		for (let r = p.rowStart; r < p.rowStart + p.rowSpan; r++) {
@@ -23,8 +21,8 @@ function hasOverlap(
 	return false;
 }
 
-describe("packSlots", () => {
-	it("packs the shipped layout on the desktop grid with no overlaps and no dead cells", () => {
+describe('packSlots', () => {
+	it('packs the shipped layout on the desktop grid with no overlaps and no dead cells', () => {
 		const { placements, rowCount } = packSlots(DEFAULT_LAYOUT, 6);
 		expect(placements).toHaveLength(DEFAULT_LAYOUT.length);
 		expect(hasOverlap(placements)).toBe(false);
@@ -53,29 +51,29 @@ describe("packSlots", () => {
 		});
 	});
 
-	it("clamps an oversized tile to the grid width on a narrow (2-col) grid", () => {
-		const wide: Slot[] = [{ uid: "w", tileId: "traffic", size: "wide" }];
+	it('clamps an oversized tile to the grid width on a narrow (2-col) grid', () => {
+		const wide: Slot[] = [{ uid: 'w', tileId: 'traffic', size: 'wide' }];
 		const { placements } = packSlots(wide, 2);
 		expect(placements[0]?.colSpan).toBe(2); // wide wants 6 cols, clamps to 2
 		expect(hasOverlap(placements)).toBe(false);
 	});
 
-	it("spans a wide tile across the full desktop grid", () => {
-		const wide: Slot[] = [{ uid: "w", tileId: "traffic", size: "wide" }];
+	it('spans a wide tile across the full desktop grid', () => {
+		const wide: Slot[] = [{ uid: 'w', tileId: 'traffic', size: 'wide' }];
 		const { placements } = packSlots(wide, 6);
 		expect(placements[0]?.colSpan).toBe(6);
 	});
 
-	it("packs into more rows on the narrow (2-col) grid — the board shrinks them to fit", () => {
+	it('packs into more rows on the narrow (2-col) grid — the board shrinks them to fit', () => {
 		const { rowCount } = packSlots(DEFAULT_LAYOUT, 2);
 		expect(rowCount).toBeGreaterThan(6);
 	});
 });
 
-describe("trackTemplate", () => {
-	it("renders fr weights as collapsible minmax tracks", () => {
+describe('trackTemplate', () => {
+	it('renders fr weights as collapsible minmax tracks', () => {
 		expect(trackTemplate([1, 2.2, 0.5])).toBe(
-			"minmax(0, 1fr) minmax(0, 2.2fr) minmax(0, 0.5fr)",
+			'minmax(0, 1fr) minmax(0, 2.2fr) minmax(0, 0.5fr)',
 		);
 	});
 });
