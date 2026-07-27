@@ -207,6 +207,9 @@ export interface StatsResponse {
 	 * Optional/absent for sites that send no valued events. */
 	revenue?: RevenueSummary;
 	revenue_by_channel?: CountRow[];
+	/** Multi-touch attribution over the range (per-model channel credit). Absent when there are no
+	 * converting (valued) paths. */
+	attribution?: AttributionResult;
 	/** Session-data freshness. Optional for backward compatibility. */
 	meta?: Freshness;
 }
@@ -218,4 +221,17 @@ export interface RevenueSummary {
 	orders: number;
 	aov: number;
 	currency: string | null;
+}
+
+/** Multi-touch attribution models. Heuristics (first/last/linear/position/time_decay) plus the
+ * data-driven `markov` (removal-effect over the channel-transition graph). All computed over aggregate,
+ * day-scoped channel paths — NO persistent cross-session identity. */
+export type AttributionModel = 'first' | 'last' | 'linear' | 'position' | 'time_decay' | 'markov';
+
+/** Per-model channel credit (`count` carries the attributed revenue), plus the converting-path totals.
+ * `models[m]` is the channel→revenue ranking under model `m`. */
+export interface AttributionResult {
+	conversions: number;
+	revenue: number;
+	models: Record<AttributionModel, CountRow[]>;
 }

@@ -2,6 +2,7 @@
 // place they're registered. Order here is the "Add tile" menu order. To add a box: create a file that
 // exports a `TileDef`, then add it to `BOXES`.
 
+import { attributionBox } from './AttributionBox.js';
 import { browsersBox } from './BrowsersBox.js';
 import { channelsBox } from './ChannelsBox.js';
 import { connectionBox } from './ConnectionBox.js';
@@ -45,4 +46,5 @@ export const BOXES: TileDef[] = [
 	networksBox,
 	connectionBox,
 	revenueBox,
+	attributionBox,
 ];

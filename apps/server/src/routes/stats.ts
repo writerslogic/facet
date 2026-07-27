@@ -27,6 +27,7 @@ import { experimentResult } from '../db/experiments.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import {
+	attribution,
 	channels,
 	cohortRetention,
 	cube,
@@ -131,6 +132,7 @@ statsRoutes.get(
 			connections,
 			revenueResult,
 			revenueByChannelResult,
+			attributionResult,
 		] = await Promise.all([
 			summary(c.env, f),
 			series(c.env, f, interval),
@@ -151,6 +153,7 @@ statsRoutes.get(
 			topConnections(c.env, f),
 			revenue(c.env, f),
 			revenueByChannel(c.env, f),
+			attribution(c.env, f),
 		]);
 		const body: StatsResponse = {
 			summary: summaryResult,
@@ -171,6 +174,7 @@ statsRoutes.get(
 			top_connections: connections,
 			revenue: revenueResult,
 			revenue_by_channel: revenueByChannelResult,
+			attribution: attributionResult,
 			meta: freshness,
 		};
 		return c.json(body);
