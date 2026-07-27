@@ -23,7 +23,7 @@
     {
       "binding": "DB",
       "database_name": "facet",
-      "database_id": "612c7eea-5d42-4ae9-816a-e7102b091ee2",
+      "database_id": "PLACEHOLDER_D1_DATABASE_ID",
       "migrations_dir": "migrations"
     }
   ],
