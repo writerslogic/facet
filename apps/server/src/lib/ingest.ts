@@ -138,6 +138,13 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 		utm,
 		siteHostname: input.hostname,
 	});
+	// Ecommerce: lift a finite numeric `props.revenue` into the typed `value` column (with `currency`)
+	// so revenue aggregates SUM/AVG efficiently. Non-numeric/absent revenue leaves both null.
+	const revenue = input.props?.revenue;
+	const value = typeof revenue === 'number' && Number.isFinite(revenue) ? revenue : null;
+	const cur = input.props?.currency;
+	const currency =
+		value !== null && typeof cur === 'string' ? cur.slice(0, 3).toUpperCase() : null;
 	const row: NewEvent = {
 		siteId: input.siteId,
 		hostname: input.hostname,
@@ -165,6 +172,8 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 		screenTier: input.segmentation?.screenTier ?? null,
 		orientation: input.segmentation?.orientation ?? null,
 		dprClass: input.segmentation?.dprClass ?? null,
+		value,
+		currency,
 	};
 	// The id is minted HERE (not at insert) so an at-least-once queue redelivery re-inserts the same id
 	// as a no-op — the persist path is idempotent, so a retry can never duplicate the event.

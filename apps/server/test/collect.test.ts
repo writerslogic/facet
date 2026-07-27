@@ -12,6 +12,7 @@ const SITE_A = '11111111-1111-4111-8111-111111111111';
 const SITE_BOT = '22222222-2222-4222-8222-222222222222';
 const SITE_REP = '33333333-3333-4333-8333-333333333333';
 const SITE_SEG = '44444444-4444-4444-8444-444444444444';
+const SITE_REV = '55555555-5555-4555-8555-555555555555';
 
 function post(body: string, headers: Record<string, string> = {}) {
 	return createApp().request(
@@ -105,6 +106,28 @@ describe('POST /api/collect', () => {
 			orientation: 'landscape',
 			dpr_class: '2x',
 		});
+	});
+
+	it('lifts props.revenue/currency into the typed value + currency columns', async () => {
+		const res = await post(
+			JSON.stringify({
+				site_id: SITE_REV,
+				hostname: 'shop.test',
+				path: '/checkout',
+				referrer: '',
+				name: 'purchase',
+				props: { revenue: 49.99, currency: 'usd' },
+			}),
+		);
+		expect(res.status).toBe(202);
+		const row = await env.DB.prepare(
+			'SELECT value, currency, name FROM events WHERE site_id = ?',
+		)
+			.bind(SITE_REV)
+			.first<{ value: number; currency: string; name: string }>();
+		expect(row?.name).toBe('purchase');
+		expect(row?.value).toBeCloseTo(49.99);
+		expect(row?.currency).toBe('USD');
 	});
 
 	it('drops bot traffic without inserting an event', async () => {

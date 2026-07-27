@@ -88,6 +88,12 @@ export function track(_name?: string, _props?: EventProps): void {
 	}
 }
 
+/** Track an ecommerce purchase: a `purchase` event carrying revenue + currency (and any extra props).
+ * The server lifts revenue/currency into typed columns for revenue reporting. */
+export function purchase(revenue: number, currency = 'USD', props?: EventProps): void {
+	track('purchase', { ...props, revenue, currency });
+}
+
 /** Configure the tracker (host + site id). Called by the auto-init shim. */
 export function init(_config_: FacetConfig): void {
 	Config = _config_;

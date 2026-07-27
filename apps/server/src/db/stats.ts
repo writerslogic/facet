@@ -12,6 +12,7 @@ import type {
 	Freshness,
 	Interval,
 	RealtimeSnapshot,
+	RevenueSummary,
 	SeriesPoint,
 	StatsFilter,
 	StatsSummary,
@@ -254,6 +255,56 @@ export function topConnections(env: Env, f: StatsFilter, limit = 4): Promise<Cou
 		limit,
 		minCount: K_ANON,
 	});
+}
+
+/** Ecommerce revenue over the range. Grouped by currency and reporting the dominant one, so total /
+ * orders / AOV are always currency-consistent (correct for single-currency sites; the top currency for
+ * mixed). `orders` counts valued events. */
+export async function revenue(env: Env, f: StatsFilter): Promise<RevenueSummary> {
+	const total = sql<number>`SUM(${schema.events.value})`;
+	const rows = await db(env)
+		.select({
+			currency: schema.events.currency,
+			total,
+			orders: sql<number>`COUNT(${schema.events.value})`,
+		})
+		.from(schema.events)
+		.where(and(buildFilteredEventWhere(f), isNotNull(schema.events.value)))
+		.groupBy(schema.events.currency)
+		.orderBy(desc(total));
+	const top = rows[0];
+	const totalValue = Number(top?.total ?? 0);
+	const orders = Number(top?.orders ?? 0);
+	return {
+		total: totalValue,
+		orders,
+		aov: orders > 0 ? totalValue / orders : 0,
+		currency: top?.currency ?? null,
+	};
+}
+
+/** Revenue summed per channel, k-anonymised on order count so a channel with too few orders is not
+ * surfaced. `count` carries the (rounded) revenue so it renders through the shared ranked-list boxes. */
+export async function revenueByChannel(env: Env, f: StatsFilter, limit = 12): Promise<CountRow[]> {
+	const sum = sql<number>`SUM(${schema.events.value})`;
+	const rows = await db(env)
+		.select({ key: schema.events.channel, sum })
+		.from(schema.events)
+		.where(
+			and(
+				buildFilteredEventWhere(f),
+				isNotNull(schema.events.value),
+				isNotNull(schema.events.channel),
+			),
+		)
+		.groupBy(schema.events.channel)
+		.having(sql`COUNT(${schema.events.value}) >= ${K_ANON}`)
+		.orderBy(desc(sum))
+		.limit(limit);
+	return rows.map((r) => ({
+		key: String(r.key),
+		count: Math.round(Number(r.sum)),
+	}));
 }
 
 export function topPaths(env: Env, f: StatsFilter, limit = 10): Promise<CountRow[]> {

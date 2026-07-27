@@ -5,6 +5,7 @@ import {
 	index,
 	integer,
 	primaryKey,
+	real,
 	sqliteTable,
 	text,
 	uniqueIndex,
@@ -51,6 +52,11 @@ export const events = sqliteTable(
 		screenTier: text('screen_tier'),
 		orientation: text('orientation'),
 		dprClass: text('dpr_class'),
+		// Ecommerce: monetary value + ISO currency, extracted at ingest from a valued event's
+		// `props.revenue`/`props.currency` (e.g. track('purchase', { revenue: 49.99, currency: 'USD' })).
+		// REAL is fine for analytics aggregates (SUM/AVG); not ledger-grade accounting.
+		value: real('value'),
+		currency: text('currency'),
 	},
 	(t) => [
 		index('idx_events_site_created_name').on(t.siteId, t.createdAt, t.name),

@@ -32,6 +32,8 @@ import {
 	cube,
 	engagement,
 	realtime,
+	revenue,
+	revenueByChannel,
 	series,
 	sessionFreshness,
 	summary,
@@ -127,6 +129,8 @@ statsRoutes.get(
 			regions,
 			networks,
 			connections,
+			revenueResult,
+			revenueByChannelResult,
 		] = await Promise.all([
 			summary(c.env, f),
 			series(c.env, f, interval),
@@ -145,6 +149,8 @@ statsRoutes.get(
 			topRegions(c.env, f),
 			topNetworks(c.env, f),
 			topConnections(c.env, f),
+			revenue(c.env, f),
+			revenueByChannel(c.env, f),
 		]);
 		const body: StatsResponse = {
 			summary: summaryResult,
@@ -163,6 +169,8 @@ statsRoutes.get(
 			top_regions: regions,
 			top_networks: networks,
 			top_connections: connections,
+			revenue: revenueResult,
+			revenue_by_channel: revenueByChannelResult,
 			meta: freshness,
 		};
 		return c.json(body);

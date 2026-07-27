@@ -18,6 +18,7 @@ import { pagesBox } from './PagesBox.js';
 import { pageviewsBox } from './PageviewsBox.js';
 import { referrersBox } from './ReferrersBox.js';
 import { regionsBox } from './RegionsBox.js';
+import { revenueBox } from './RevenueBox.js';
 import { screensBox } from './ScreensBox.js';
 import { trafficBox } from './TrafficBox.js';
 import { visitorsBox } from './VisitorsBox.js';
@@ -43,4 +44,5 @@ export const BOXES: TileDef[] = [
 	regionsBox,
 	networksBox,
 	connectionBox,
+	revenueBox,
 ];

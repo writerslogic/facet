@@ -203,6 +203,19 @@ export interface StatsResponse {
 	top_regions?: CountRow[];
 	top_networks?: CountRow[];
 	top_connections?: CountRow[];
+	/** Ecommerce revenue over the range (dominant currency), and per-channel revenue (k-anonymised).
+	 * Optional/absent for sites that send no valued events. */
+	revenue?: RevenueSummary;
+	revenue_by_channel?: CountRow[];
 	/** Session-data freshness. Optional for backward compatibility. */
 	meta?: Freshness;
+}
+
+/** Ecommerce revenue rollup for a range. `total`/`aov` are in `currency` (the dominant one when a site
+ * mixes currencies); `orders` is the count of valued events. */
+export interface RevenueSummary {
+	total: number;
+	orders: number;
+	aov: number;
+	currency: string | null;
 }

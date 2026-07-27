@@ -2,11 +2,11 @@ import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 
 describe('migration 0002 — sessions & traffic columns', () => {
-	it('events table has 27 columns', async () => {
+	it('events table has 29 columns', async () => {
 		const result = await env.DB.prepare('PRAGMA table_info(events)').all<{
 			name: string;
 		}>();
-		expect(result.results).toHaveLength(27);
+		expect(result.results).toHaveLength(29);
 		const names = result.results.map((r) => r.name);
 		expect(names).toContain('utm_source');
 		expect(names).toContain('utm_medium');

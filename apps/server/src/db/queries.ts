@@ -40,6 +40,8 @@ export interface NewEvent {
 	screenTier?: string | null;
 	orientation?: string | null;
 	dprClass?: string | null;
+	value?: number | null;
+	currency?: string | null;
 }
 
 /** Insert a raw event row. Returns the generated event id. */
