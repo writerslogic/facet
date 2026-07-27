@@ -38,6 +38,7 @@
     }
   ],
   "vars": {
-    "RAW_RETENTION_DAYS": "90"
+    "RAW_RETENTION_DAYS": "90",
+    "SESSION_SECRET": "test-session-secret"
   }
 }

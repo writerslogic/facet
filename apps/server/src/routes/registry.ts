@@ -5,6 +5,7 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { adminRoutes } from './admin.js';
 import { attestationRoutes } from './attestation.js';
+import { authRoutes } from './auth.js';
 import { collectRoute } from './collect.js';
 import { consentRoutes } from './consent.js';
 import { eventRoute } from './event.js';
@@ -30,6 +31,7 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/.well-known', router: wellKnownRoutes },
 	{ path: '/api/health', router: healthRoute },
 	{ path: '/api/collect', router: collectRoute },
+	{ path: '/api/auth', router: authRoutes },
 	{ path: '/api/event', router: eventRoute },
 	{ path: '/api/consent', router: consentRoutes },
 	{ path: '/api', router: statsRoutes },

@@ -23,6 +23,9 @@ export interface Env {
 	CF_API_TOKEN: string;
 	/** Admin bearer token (Worker secret, never a var). */
 	ADMIN_TOKEN: string;
+	/** HMAC secret (Worker secret) for signing dashboard session tokens. When unset, account auth is
+	 * disabled (the /api/auth routes return 503) — the per-site API-key path is unaffected. */
+	SESSION_SECRET?: string;
 	/** Workers AI binding, used to translate natural-language analytics questions. */
 	AI: Ai;
 	/** Optional anomaly-alert webhook URL (var). When unset, anomaly webhooks are disabled. */

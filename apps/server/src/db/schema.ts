@@ -16,7 +16,58 @@ export const sites = sqliteTable('sites', {
 	name: text('name').notNull(),
 	domain: text('domain').notNull(),
 	createdAt: integer('created_at').notNull(),
+	// Owning team (RBAC). Nullable + additive: a site with no team behaves as today (API-key access only).
+	teamId: text('team_id'),
 });
+
+// ── Accounts & RBAC (Phase 4). Dashboard operators — NOT tracked visitors — so this is orthogonal to
+//    the cookieless/no-cross-session-identity visitor model. Passwordless: no password column ever. ──
+
+/** A dashboard user, identified by email. No password is stored — auth is magic-link + passkeys. */
+export const users = sqliteTable('users', {
+	id: text('id').primaryKey(),
+	email: text('email').notNull().unique(),
+	name: text('name'),
+	createdAt: integer('created_at').notNull(),
+	lastLogin: integer('last_login'),
+});
+
+/** A team that owns sites; members access them through a role. */
+export const teams = sqliteTable('teams', {
+	id: text('id').primaryKey(),
+	name: text('name').notNull(),
+	createdAt: integer('created_at').notNull(),
+});
+
+/** A user's role on a team: owner ▸ admin ▸ analyst ▸ viewer (see ROLE_RANK in lib/accounts). */
+export const memberships = sqliteTable(
+	'memberships',
+	{
+		teamId: text('team_id').notNull(),
+		userId: text('user_id').notNull(),
+		role: text('role').notNull(),
+		createdAt: integer('created_at').notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.teamId, t.userId] }),
+		index('idx_memberships_user').on(t.userId),
+	],
+);
+
+/** Single-use, short-lived magic-link tokens. Only the SHA-256 of the secret is stored; the raw token
+ * lives only in the emailed link. `used_at` enforces single use. */
+export const authTokens = sqliteTable(
+	'auth_tokens',
+	{
+		id: text('id').primaryKey(),
+		tokenHash: text('token_hash').notNull(),
+		email: text('email').notNull(),
+		expiresAt: integer('expires_at').notNull(),
+		usedAt: integer('used_at'),
+		createdAt: integer('created_at').notNull(),
+	},
+	(t) => [index('idx_auth_tokens_email').on(t.email)],
+);
 
 export const events = sqliteTable(
 	'events',
