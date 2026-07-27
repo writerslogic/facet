@@ -4,9 +4,11 @@
 
 import { eq } from 'drizzle-orm';
 import type { MiddlewareHandler } from 'hono';
+import { getCookie } from 'hono/cookie';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv, Env } from '../env.js';
+import { SESSION_COOKIE, siteRole, verifySession } from './accounts.js';
 import { hashKey } from './apikeys.js';
 import { constantTimeEqualHex, sha256Hex } from './crypto.js';
 import { ApiError } from './http.js';
@@ -57,6 +59,31 @@ export const requireApiKey: MiddlewareHandler<AppEnv> = async (c, next) => {
 	}
 	c.set('siteId', siteId);
 	return next();
+};
+
+/**
+ * Read access to a site's analytics via EITHER a per-site API key (unchanged, programmatic) OR a
+ * dashboard session cookie whose user holds any role on the team that owns the requested `site_id`.
+ * Sets `c.get('siteId')`. The RBAC integration: session users only ever see sites their team owns,
+ * while the API-key path stays byte-for-byte as before.
+ */
+export const requireSiteAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
+	const keySite = await authenticateKey(c.env, c.req.header('Authorization') ?? null);
+	if (keySite) {
+		c.set('siteId', keySite);
+		return next();
+	}
+	const secret = c.env.SESSION_SECRET;
+	const token = getCookie(c, SESSION_COOKIE);
+	const siteId = c.req.query('site_id');
+	if (secret && token && siteId) {
+		const payload = await verifySession(token, secret, Date.now());
+		if (payload && (await siteRole(c.env, payload.sub, siteId))) {
+			c.set('siteId', siteId);
+			return next();
+		}
+	}
+	throw new ApiError('unauthorized', 401);
 };
 
 /** Middleware: require the admin bearer token, compared to ADMIN_TOKEN in constant time. */

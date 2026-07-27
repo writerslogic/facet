@@ -12,6 +12,7 @@ import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import {
+	SESSION_COOKIE,
 	consumeMagicToken,
 	createMagicToken,
 	signSession,
@@ -24,7 +25,6 @@ import { ApiError, validationErrorHook } from '../lib/http.js';
 
 export const authRoutes = new Hono<AppEnv>();
 
-const SESSION_COOKIE = 'facet_session';
 const RequestSchema = v.object({
 	email: v.pipe(v.string(), v.email(), v.maxLength(254)),
 });

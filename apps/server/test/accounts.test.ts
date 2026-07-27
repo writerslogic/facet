@@ -5,6 +5,7 @@ import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import {
+	SESSION_COOKIE,
 	consumeMagicToken,
 	createMagicToken,
 	isRole,
@@ -147,5 +148,37 @@ describe('POST /api/auth/admin-link (self-hosted bootstrap, no email)', () => {
 			env,
 		);
 		expect(verifyRes.status).toBe(200);
+	});
+});
+
+describe('requireSiteAccess (session RBAC on /api/stats)', () => {
+	it('lets a team member read their site and blocks non-members', async () => {
+		const now = Date.now();
+		const secret = env.SESSION_SECRET as string;
+		const app = createApp();
+		const siteId = '10101010-1010-4010-8010-101010101010';
+		const q = `?site_id=${siteId}&start=${now - 86_400_000}&end=${now}`;
+
+		// A member of the team that owns the site can read it via a session cookie (no API key).
+		const member = await upsertUserByEmail(env, 'member@example.com', now);
+		const teamId = (await userMemberships(env, member.id))[0]?.teamId as string;
+		await env.DB.prepare(
+			'INSERT OR REPLACE INTO sites (id, name, domain, created_at, team_id) VALUES (?, ?, ?, ?, ?)',
+		)
+			.bind(siteId, 'S', 's.test', now, teamId)
+			.run();
+		const memberCookie = `${SESSION_COOKIE}=${await signSession(member.id, secret, now)}`;
+		const ok = await app.request(`/api/stats${q}`, { headers: { cookie: memberCookie } }, env);
+		expect(ok.status).toBe(200);
+
+		// A user with no membership on this site's team is blocked.
+		const outsider = await upsertUserByEmail(env, 'outsider@example.com', now);
+		const outsiderCookie = `${SESSION_COOKIE}=${await signSession(outsider.id, secret, now)}`;
+		const blocked = await app.request(
+			`/api/stats${q}`,
+			{ headers: { cookie: outsiderCookie } },
+			env,
+		);
+		expect(blocked.status).toBe(401);
 	});
 });

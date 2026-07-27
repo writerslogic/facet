@@ -2,11 +2,14 @@
 // tokens, and team roles. This is entirely separate from the cookieless VISITOR model — these are the
 // humans who log in to view analytics. No password is ever stored; only a SHA-256 of a one-time token.
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
 import { constantTimeEqualHex, randomHex, sha256Hex } from './crypto.js';
+
+/** The session cookie name, shared by the auth routes and the site-access middleware. */
+export const SESSION_COOKIE = 'facet_session';
 
 /** Team roles, from most to least privileged. */
 export type Role = 'owner' | 'admin' | 'analyst' | 'viewer';
@@ -193,4 +196,23 @@ export async function userMemberships(
 	return rows
 		.filter((r) => isRole(r.role))
 		.map((r) => ({ teamId: r.teamId, role: r.role as Role }));
+}
+
+/** The role a user holds on the team that owns `siteId`, or null if the site is unowned or the user is
+ * not a member. Used to gate dashboard (session) access to a site's analytics. */
+export async function siteRole(env: Env, userId: string, siteId: string): Promise<Role | null> {
+	const site = await db(env)
+		.select({ teamId: schema.sites.teamId })
+		.from(schema.sites)
+		.where(eq(schema.sites.id, siteId))
+		.get();
+	if (!site?.teamId) return null;
+	const m = await db(env)
+		.select({ role: schema.memberships.role })
+		.from(schema.memberships)
+		.where(
+			and(eq(schema.memberships.teamId, site.teamId), eq(schema.memberships.userId, userId)),
+		)
+		.get();
+	return m && isRole(m.role) ? m.role : null;
 }

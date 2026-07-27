@@ -54,7 +54,7 @@ import {
 } from '../db/stats.js';
 import type { AppEnv } from '../env.js';
 import { aiRunner, answerQuestion } from '../lib/ai.js';
-import { requireApiKey } from '../lib/auth.js';
+import { requireSiteAccess } from '../lib/auth.js';
 import {
 	DAY_MS,
 	EXPORT_MAX_ROWS,
@@ -105,7 +105,7 @@ function toStatsFilter(query: StatsQueryInput, siteId: string): StatsFilter {
 
 statsRoutes.get(
 	'/stats',
-	requireApiKey,
+	requireSiteAccess,
 	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const query = c.req.valid('query');
@@ -185,7 +185,7 @@ statsRoutes.get(
 // device/country/channel instantly, with no further server round-trips.
 statsRoutes.get(
 	'/stats/cube',
-	requireApiKey,
+	requireSiteAccess,
 	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const query = c.req.valid('query');
@@ -198,7 +198,7 @@ statsRoutes.get(
 
 statsRoutes.get(
 	'/stats/sessions',
-	requireApiKey,
+	requireSiteAccess,
 	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
@@ -211,7 +211,7 @@ statsRoutes.get(
 
 statsRoutes.get(
 	'/stats/channels',
-	requireApiKey,
+	requireSiteAccess,
 	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
@@ -229,7 +229,7 @@ statsRoutes.get(
 // default daily window cross-period retention is honestly ~0, not a bug.
 statsRoutes.get(
 	'/stats/retention',
-	requireApiKey,
+	requireSiteAccess,
 	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
@@ -245,7 +245,7 @@ statsRoutes.get(
 // marketer-facing custom events, which exclude them.
 statsRoutes.get(
 	'/stats/interactions',
-	requireApiKey,
+	requireSiteAccess,
 	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
@@ -255,7 +255,7 @@ statsRoutes.get(
 
 // Realtime snapshot: active-visitor proxy (distinct daily hashes) + pageviews over the last few
 // minutes. Privacy-safe (no cookies/ids), bounded window, indexed by created_at.
-statsRoutes.get('/stats/realtime', requireApiKey, async (c) => {
+statsRoutes.get('/stats/realtime', requireSiteAccess, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);
@@ -279,7 +279,7 @@ const EXPORT_DIMENSIONS: Record<
 	channel: (env, f) => channels(env, f),
 };
 
-statsRoutes.get('/stats/export', requireApiKey, async (c) => {
+statsRoutes.get('/stats/export', requireSiteAccess, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);
@@ -378,7 +378,7 @@ statsRoutes.get('/stats/export', requireApiKey, async (c) => {
 // Signed AnalyticsReportCredential (VC 2.0, eddsa-jcs-2022) over an aggregate stats snapshot for a
 // site+range. The credential subject is the DATASET (`<origin>/sites/<id>`), never a person. Requires
 // an Ed25519 signing key; 501 when unconfigured.
-statsRoutes.get('/stats/report', requireApiKey, async (c) => {
+statsRoutes.get('/stats/report', requireSiteAccess, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);
@@ -426,7 +426,7 @@ statsRoutes.get('/stats/report', requireApiKey, async (c) => {
 
 statsRoutes.get(
 	'/stats/anomalies',
-	requireApiKey,
+	requireSiteAccess,
 	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
@@ -438,7 +438,7 @@ statsRoutes.get(
 
 // Natural-language analytics query: translate a plain-English question into a constrained intent
 // (via Workers AI) and execute it over the aggregate helpers. Aggregate-only, no identity.
-statsRoutes.post('/stats/query', requireApiKey, async (c) => {
+statsRoutes.post('/stats/query', requireSiteAccess, async (c) => {
 	const body = (await c.req.json().catch(() => ({}))) as {
 		site_id?: unknown;
 		question?: unknown;
@@ -469,7 +469,7 @@ statsRoutes.post('/stats/query', requireApiKey, async (c) => {
 	return c.json(await answerQuestion(c.env, aiRunner(c.env), siteId, body.question, f));
 });
 
-statsRoutes.get('/stats/conversions', requireApiKey, async (c) => {
+statsRoutes.get('/stats/conversions', requireSiteAccess, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);
@@ -511,7 +511,7 @@ statsRoutes.get('/stats/conversions', requireApiKey, async (c) => {
 
 // API-key-scoped catalog reads so the dashboard can enumerate a site's goals/funnels (config, not
 // PII) without the admin token. Creation/deletion remain admin-only.
-statsRoutes.get('/stats/goals', requireApiKey, async (c) => {
+statsRoutes.get('/stats/goals', requireSiteAccess, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);
@@ -519,7 +519,7 @@ statsRoutes.get('/stats/goals', requireApiKey, async (c) => {
 	return c.json({ goals: await listGoals(c.env, siteId) });
 });
 
-statsRoutes.get('/stats/funnels', requireApiKey, async (c) => {
+statsRoutes.get('/stats/funnels', requireSiteAccess, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);
@@ -527,7 +527,7 @@ statsRoutes.get('/stats/funnels', requireApiKey, async (c) => {
 	return c.json({ funnels: await listFunnels(c.env, siteId) });
 });
 
-statsRoutes.get('/stats/experiments', requireApiKey, async (c) => {
+statsRoutes.get('/stats/experiments', requireSiteAccess, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);
@@ -535,7 +535,7 @@ statsRoutes.get('/stats/experiments', requireApiKey, async (c) => {
 	return c.json({ experiments: await listExperiments(c.env, siteId) });
 });
 
-statsRoutes.get('/stats/experiment', requireApiKey, async (c) => {
+statsRoutes.get('/stats/experiment', requireSiteAccess, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);
