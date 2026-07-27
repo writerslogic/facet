@@ -103,6 +103,33 @@ export function Layout({
 			>
 				{children}
 			</main>
+			<PoweredBy />
 		</div>
+	);
+}
+
+/** True when this build is licensed to white-label (attribution suppressed). Set at build time via
+ * `VITE_FACET_WHITE_LABEL=1`. AGPL builds leave it unset; removing attribution otherwise requires either
+ * AGPL compliance (publish your source) or a commercial white-label license — see TRADEMARK.md. */
+export function isWhiteLabel(): boolean {
+	return import.meta.env.VITE_FACET_WHITE_LABEL === '1';
+}
+
+/** A small, unobtrusive "Powered by Facet" attribution, fixed bottom-right so it survives in both the
+ * fill (Overview) and scrolling layouts. Deliberately a plain, integrated element — not obfuscated —
+ * because under AGPL an operator may remove it by publishing their source, or hold a commercial license
+ * to white-label (see TRADEMARK.md). Hidden when this build is white-labeled. */
+export function PoweredBy(): ReactElement | null {
+	if (isWhiteLabel()) return null;
+	return (
+		<a
+			href="https://github.com/writerslogic/facet"
+			target="_blank"
+			rel="noopener noreferrer"
+			className="fixed right-3 bottom-2 z-40 inline-flex items-center gap-1 rounded-full bg-[color:rgb(var(--hover))] px-2 py-0.5 text-[10px] text-[color:var(--muted)] ring-1 ring-[color:rgb(var(--border))] backdrop-blur transition hover:text-[color:var(--ink)]"
+		>
+			<BrandMark className="size-3" />
+			Powered by Facet
+		</a>
 	);
 }
