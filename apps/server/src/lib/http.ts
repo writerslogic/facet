@@ -38,6 +38,38 @@ export function toErrorBody(err: ApiError): ErrorBody {
 	return body;
 }
 
+/** One validation failure, reduced to the two things a caller can act on. */
+interface ValidationIssue {
+	/** Dotted path to the offending field, omitted for a whole-body failure. */
+	path?: string;
+	message: string;
+}
+
+/** The parts of a valibot issue this module reads. Structural, so `http.ts` stays valibot-free. */
+interface RawIssue {
+	message?: unknown;
+	path?: readonly { key?: unknown }[];
+}
+
+/** Reduce raw valibot issues to `{ path, message }`.
+ * A raw issue carries `path[].input`, which is the ENTIRE validated object — so returning issues
+ * verbatim echoed every submitted field back to the caller, including a magic-link token
+ * (`/api/auth/verify`) or arbitrary event props (`/api/collect`). It also pinned an internal
+ * library shape as the public error contract. */
+function toValidationIssues(issues: readonly unknown[] | undefined): ValidationIssue[] {
+	return (issues ?? []).map((raw) => {
+		const issue = raw as RawIssue;
+		const path = issue.path?.map((p) => String(p.key)).join('.');
+		const out: ValidationIssue = {
+			message: typeof issue.message === 'string' ? issue.message : 'invalid value',
+		};
+		if (path) {
+			out.path = path;
+		}
+		return out;
+	});
+}
+
 /** Shared vValidator hook: on a valibot failure, render the canonical `validation_failed` envelope;
  * otherwise return undefined so the request proceeds. Replaces the byte-identical inline hook that
  * every validated route declared. */
@@ -46,7 +78,13 @@ export function validationErrorHook(
 	c: Context<AppEnv>,
 ): Response | undefined {
 	if (!result.success) {
-		return c.json({ error: 'validation_failed', issues: result.issues }, 400);
+		return c.json(
+			{
+				error: 'validation_failed',
+				issues: toValidationIssues(result.issues),
+			},
+			400,
+		);
 	}
 	return undefined;
 }

@@ -4,8 +4,9 @@
 
 import { CreateSiteSchema, IssueKeySchema, SetIdentitySchema, type Site } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
-import { desc, eq } from 'drizzle-orm';
+import { desc } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { siteExists } from '../db/catalog.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
@@ -66,12 +67,7 @@ adminRoutes.patch(
 	async (c) => {
 		const siteId = c.req.param('id') ?? '';
 		const body = c.req.valid('json');
-		const site = await db(c.env)
-			.select({ id: schema.sites.id })
-			.from(schema.sites)
-			.where(eq(schema.sites.id, siteId))
-			.get();
-		if (!site) {
+		if (!(await siteExists(c.env, siteId))) {
 			return c.json({ error: 'not_found' }, 404);
 		}
 		if (body.tier !== 'anonymous' && getSigningKey(c.env) === null) {

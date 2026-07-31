@@ -19,6 +19,17 @@ import type { Env } from '../env.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
 
+/** Whether a site row exists. Lets a public read 404 an unknown site instead of serving an empty
+ * catalog, which is indistinguishable from a correctly-configured site that has no rows yet. */
+export async function siteExists(env: Env, siteId: string): Promise<boolean> {
+	const row = await db(env)
+		.select({ id: schema.sites.id })
+		.from(schema.sites)
+		.where(eq(schema.sites.id, siteId))
+		.get();
+	return Boolean(row);
+}
+
 /** List a site's goals, newest first. */
 export async function listGoals(env: Env, siteId: string): Promise<Goal[]> {
 	const rows = await db(env)

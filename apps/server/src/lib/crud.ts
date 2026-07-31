@@ -9,6 +9,7 @@ import type { GenericSchema } from 'valibot';
 import { db } from '../db/queries.js';
 import type { AppEnv } from '../env.js';
 import { requireAdmin } from './auth.js';
+import { validationErrorHook } from './http.js';
 
 /** A table usable by the CRUD factory: keyed by `id`, scoped by `site_id`, ordered by `created_at`. */
 type CrudTable = SQLiteTable & {
@@ -27,22 +28,18 @@ export function crudRouter(opts: {
 	const router = new Hono<AppEnv>();
 	router.use('*', requireAdmin);
 
-	router.post(
-		'/',
-		vValidator('json', schema, (result, c) => {
-			if (!result.success) {
-				return c.json({ error: 'validation_failed', issues: result.issues }, 400);
-			}
-		}),
-		async (c) => {
-			const body = c.req.valid('json') as Record<string, unknown>;
-			const row = { id: crypto.randomUUID(), created_at: Date.now(), ...body };
-			await db(c.env)
-				.insert(table)
-				.values(row as never);
-			return c.json({ [resourceKey]: row }, 201);
-		},
-	);
+	router.post('/', vValidator('json', schema, validationErrorHook), async (c) => {
+		const body = c.req.valid('json') as Record<string, unknown>;
+		const row = {
+			id: crypto.randomUUID(),
+			created_at: Date.now(),
+			...body,
+		};
+		await db(c.env)
+			.insert(table)
+			.values(row as never);
+		return c.json({ [resourceKey]: row }, 201);
+	});
 
 	router.get('/', async (c) => {
 		const siteId = c.req.query('site_id') ?? '';

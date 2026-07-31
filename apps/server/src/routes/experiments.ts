@@ -8,7 +8,7 @@ import { vValidator } from '@hono/valibot-validator';
 import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as v from 'valibot';
-import { listActiveExperiments } from '../db/catalog.js';
+import { listActiveExperiments, siteExists } from '../db/catalog.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
@@ -21,13 +21,22 @@ export const experimentsRoutes = new Hono<AppEnv>();
 
 // Public flag config for the browser client. Unauthenticated by design (config, not PII). Must be
 // registered before the admin routes so it is not shadowed by requireAdmin.
-experimentsRoutes.get('/active', async (c) => {
-	const siteId = c.req.query('site_id') ?? '';
-	if (!v.safeParse(UuidSchema, siteId).success) {
-		return c.json({ experiments: [] });
-	}
-	return c.json({ experiments: await listActiveExperiments(c.env, siteId) });
-});
+// An unknown site 404s rather than returning an empty list: a misconfigured `data-site-id` is
+// otherwise indistinguishable from a site that simply has no active experiments. Existence is not a
+// secret — the id is embedded in the page's script tag — and the response body stays identical.
+experimentsRoutes.get(
+	'/active',
+	vValidator('query', v.object({ site_id: UuidSchema }), validationErrorHook),
+	async (c) => {
+		const { site_id: siteId } = c.req.valid('query');
+		if (!(await siteExists(c.env, siteId))) {
+			return c.json({ error: 'not_found' }, 404);
+		}
+		return c.json({
+			experiments: await listActiveExperiments(c.env, siteId),
+		});
+	},
+);
 
 experimentsRoutes.post(
 	'/',
