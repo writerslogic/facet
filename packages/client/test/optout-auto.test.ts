@@ -28,12 +28,13 @@ function setup(opts: {
 	};
 	const docHandlers: Record<string, Handler> = {};
 	const winHandlers: Record<string, () => void> = {};
-	vi.stubGlobal('location', {
+	const loc = {
 		href: 'https://shop.example.com/?utm_source=nl',
 		hostname: 'shop.example.com',
 		pathname: '/',
 		search: '?utm_source=nl',
-	});
+	};
+	vi.stubGlobal('location', loc);
 	vi.stubGlobal('document', {
 		referrer: '',
 		currentScript: {
@@ -77,8 +78,16 @@ function setup(opts: {
 	return {
 		beacons: () => count,
 		submit: (target) => docHandlers.submit?.({ target }),
-		pushState: () => history.pushState({}, '', '/x'),
-		popstate: () => winHandlers.popstate?.(),
+		// A real pushState moves location; the stub must too, or the repeat-pageview
+		// guard sees every navigation as a re-send of the same path and collapses it.
+		pushState: () => {
+			loc.pathname = '/x';
+			history.pushState({}, '', '/x');
+		},
+		popstate: () => {
+			loc.pathname = '/y';
+			winHandlers.popstate?.();
+		},
 	};
 }
 

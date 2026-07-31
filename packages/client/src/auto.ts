@@ -22,6 +22,25 @@ declare global {
 	}
 }
 
+// A SPA router normalizes the URL on mount (react-router's BrowserRouter replaceStates the resolved
+// location), firing a patched replaceState microseconds after the initial pageview and double-counting
+// every landing. Collapse a pageview that repeats the path of the one just sent. Only the LAST sent
+// path is compared, so A→B→A still counts three times, and the timestamp is only advanced on a sent
+// beacon, so a router that keeps rewriting the same path can't hold the gate open indefinitely.
+const REPEAT_PAGEVIEW_MS = 500;
+let lastPath: string | null = null;
+let lastSentAt = 0;
+
+/** Send an auto-tracked pageview unless it duplicates the immediately preceding one. */
+function trackPageview(): void {
+	const path = (typeof location !== 'undefined' ? location.pathname : '') || '/';
+	const now = Date.now();
+	if (path === lastPath && now - lastSentAt < REPEAT_PAGEVIEW_MS) return;
+	lastPath = path;
+	lastSentAt = now;
+	track();
+}
+
 function boot(): void {
 	if (typeof document === 'undefined') return;
 	const el = document.currentScript as HTMLScriptElement | null;
@@ -61,7 +80,7 @@ function boot(): void {
 	// A deliberate opt-out installs no trackers at all; a passive GPC/DNT signal still counts anonymously.
 	if (isExplicitlyOptedOut()) return;
 
-	track();
+	trackPageview();
 
 	if (typeof history !== 'undefined') {
 		for (const type of ['pushState', 'replaceState'] as const) {
@@ -71,7 +90,7 @@ function boot(): void {
 				...args: Parameters<History['pushState']>
 			): void {
 				original.apply(this, args);
-				track();
+				trackPageview();
 			};
 		}
 	}
@@ -91,7 +110,7 @@ function boot(): void {
 	);
 
 	if (typeof window !== 'undefined') {
-		window.addEventListener('popstate', () => track());
+		window.addEventListener('popstate', () => trackPageview());
 	}
 }
 
