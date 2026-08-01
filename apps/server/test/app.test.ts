@@ -16,7 +16,7 @@ describe('app shell', () => {
 		expect(await res.json()).toEqual({ error: 'not_found' });
 	});
 
-	it('OPTIONS /api/collect → 204 preflight allowing any origin', async () => {
+	it('OPTIONS /api/collect → 204 preflight reflecting the caller origin', async () => {
 		const res = await createApp().request('/api/collect', {
 			method: 'OPTIONS',
 			headers: {
@@ -25,7 +25,12 @@ describe('app shell', () => {
 			},
 		});
 		expect(res.status).toBe(204);
-		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('*');
+		// Any origin is still allowed, but the origin is reflected rather than answered with a
+		// wildcard: navigator.sendBeacon() sends in credentials mode, and a credentialed request
+		// against `*` is rejected by the browser, which silently dropped every cross-origin
+		// beacon. See test/cors-cross-origin.test.ts.
+		expect(res.headers.get('Access-Control-Allow-Origin')).toBe('https://example.com');
+		expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
 	});
 
 	it('POST /api/collect over the body limit → 413 payload_too_large', async () => {

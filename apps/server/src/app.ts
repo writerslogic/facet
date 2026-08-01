@@ -29,12 +29,34 @@ function withDashboardSecurityHeaders(res: Response): Response {
 export function createApp(): Hono<AppEnv> {
 	const app = new Hono<AppEnv>();
 
-	// Public beacon only: any origin may POST, and oversized bodies are rejected before parsing.
+	// Public beacon: any origin may POST. The origin is reflected rather than sent as `*`
+	// because navigator.sendBeacon() always issues the request in credentials mode, and a
+	// credentialed request is rejected outright against a wildcard —
+	// "Cannot use wildcard in Access-Control-Allow-Origin when credentials flag is true".
+	// Every beacon from a site whose origin differs from this one was being dropped, so
+	// cross-origin installs recorded nothing at all. Reflecting the origin and allowing
+	// credentials is what makes a credentialed cross-origin POST legal; it grants nothing
+	// extra here, since collection is cookieless.
 	app.use(
 		'/api/collect',
 		cors({
-			origin: '*',
+			origin: (origin) => origin ?? '*',
+			credentials: true,
 			allowMethods: ['POST', 'OPTIONS'],
+			allowHeaders: ['content-type'],
+			maxAge: CORS_MAX_AGE,
+		}),
+	);
+
+	// The tracker also reads its experiment assignments cross-origin. This carried no CORS
+	// headers at all, so the browser blocked a 200 response and every install outside this
+	// origin silently fell back to no experiments. Read-only and uncredentialed, so a
+	// wildcard is both sufficient and correct here.
+	app.use(
+		'/api/experiments/active',
+		cors({
+			origin: '*',
+			allowMethods: ['GET', 'OPTIONS'],
 			allowHeaders: ['content-type'],
 			maxAge: CORS_MAX_AGE,
 		}),
