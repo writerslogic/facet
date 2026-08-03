@@ -133,6 +133,32 @@ export const StatsQuerySchema = v.object({
 	channel: v.optional(v.pipe(v.string(), v.maxLength(40))),
 });
 
+/** A query-string integer bounded to `[min, max]`. Query params arrive as strings, so the transform
+ * happens before the numeric checks — same pipeline shape as `StatsQuerySchema.start`. */
+function boundedIntParam(min: number, max: number) {
+	return v.pipe(
+		v.string(),
+		v.transform(Number),
+		v.number(),
+		v.integer(),
+		v.minValue(min),
+		v.maxValue(max),
+	);
+}
+
+/** Upper bound on the lines a per-dimension time series may return. A multi-line chart stops being
+ * readable well before this, and it is what bounds the response to `limit × buckets` points. */
+export const SERIES_MAX_KEYS = 8;
+
+/** Query for `GET /api/stats/timeseries`: the stats query plus which dimension to split by and how
+ * many keys to return. `dimension` is required — there is no sensible default, and guessing one
+ * would silently answer a different question than the caller asked. */
+export const DimensionSeriesQuerySchema = v.object({
+	...StatsQuerySchema.entries,
+	dimension: v.picklist(['path', 'referrer', 'country', 'device', 'channel']),
+	limit: v.optional(boundedIntParam(1, SERIES_MAX_KEYS)),
+});
+
 // Constrained natural-language query intent: the LLM only emits a value matching this schema, which
 // the executor maps onto existing aggregate helpers. Never used to build SQL from model text.
 export const QueryIntentSchema = v.object({
@@ -261,6 +287,7 @@ export type QueryIntent = v.InferOutput<typeof QueryIntentSchema>;
 export type CollectInput = v.InferOutput<typeof CollectPayloadSchema>;
 export type ServerEventInput = v.InferOutput<typeof ServerEventSchema>;
 export type StatsQueryInput = v.InferOutput<typeof StatsQuerySchema>;
+export type DimensionSeriesQueryInput = v.InferOutput<typeof DimensionSeriesQuerySchema>;
 export type CreateSiteInput = v.InferOutput<typeof CreateSiteSchema>;
 export type IssueKeyInput = v.InferOutput<typeof IssueKeySchema>;
 export type GoalInput = v.InferOutput<typeof GoalSchema>;

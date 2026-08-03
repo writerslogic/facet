@@ -1,6 +1,7 @@
 // Public entrypoint for @facet/shared: re-exports every shared type.
 
 export * from './admin.js';
+export * from './alerts.js';
 export * from './events.js';
 export * from './experiments.js';
 export * from './flags.js';

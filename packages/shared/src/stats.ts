@@ -214,6 +214,201 @@ export interface StatsResponse {
 	meta?: Freshness;
 }
 
+// ── Visualization contracts (distribution, per-dimension series, path hierarchy, journeys, clock) ──
+//
+// These five exist because the cube and the flat top-N lists cannot express the shapes a box plot, a
+// multi-line chart, a treemap, a chord diagram and a nightingale need. Every one of them is bounded
+// by construction: no response grows with the number of sessions, visitors or distinct URLs, and
+// none of them ever emits a per-observation row.
+
+/** The percentile levels a distribution reports, ascending. Enough for a box-and-whisker (p25/p50/
+ * p75 plus whiskers) AND to shape a violin/density curve without shipping the raw sample. */
+export type DistributionPercentile = 'p05' | 'p10' | 'p25' | 'p50' | 'p75' | 'p90' | 'p95' | 'p99';
+
+/** One histogram bin. `[from, to)`; the final bin is open-ended (`to: null`). Bins partition the
+ * metric's entire domain, so `sum(count)` always equals the distribution's `count`. */
+export interface DistributionBucket {
+	from: number;
+	/** Exclusive upper edge, or `null` for the open-ended final bin. */
+	to: number | null;
+	count: number;
+}
+
+/**
+ * Summary statistics for one metric over the sessions in range, computed in SQL.
+ *
+ * `percentiles[p]` is the value at 0-based index `floor(p * (n - 1))` of the ascending sample — the
+ * "lower" / nearest-rank order statistic, NOT an interpolated one. It is therefore always a value
+ * that some session actually had, is exact integer arithmetic (no float drift), and is reproducible
+ * by hand from a sorted list. A renderer that wants interpolated quartiles must interpolate itself.
+ */
+export interface MetricDistribution {
+	min: number;
+	max: number;
+	mean: number;
+	percentiles: Record<DistributionPercentile, number>;
+	/** Fixed bin edges (see `DistributionBucket`) — the shape a violin/density plot is drawn from. */
+	histogram: DistributionBucket[];
+}
+
+/**
+ * Response body for `GET /api/stats/distribution`.
+ *
+ * PRIVACY: raw per-session rows are never returned — they are unbounded and each one is a single
+ * visitor's behaviour. Order statistics are only emitted once at least `min_count` sessions match,
+ * because below that the percentile vector IS the raw sample re-encoded (with n = 5 and 8
+ * percentiles reported, every observation appears). When `suppressed` is true both distributions
+ * are `null` and only `count` is returned.
+ */
+export interface SessionDistributionResponse {
+	/** Sessions matching the filter — the n behind every statistic below. */
+	count: number;
+	/** True when `count < min_count`; both distributions are then `null`. */
+	suppressed: boolean;
+	/** The anonymity floor `count` must reach for statistics to be emitted. */
+	min_count: number;
+	/** How `percentiles` are picked. See `MetricDistribution`. */
+	percentile_method: 'nearest-rank-lower';
+	/** Session duration in milliseconds. `null` when suppressed. */
+	duration_ms: MetricDistribution | null;
+	/** Pageviews per session. `null` when suppressed. */
+	pageviews: MetricDistribution | null;
+	/** Session-data freshness, as on the other session-derived reads. */
+	meta: Freshness;
+}
+
+/** Dimensions a per-key time series can be drawn over. Deliberately the high-cardinality pair
+ * (`path`, `referrer`) plus the three cube axes, so one endpoint answers every multi-line chart. */
+export type SeriesDimension = 'path' | 'referrer' | 'country' | 'device' | 'channel';
+
+/** One bucket of one key's line.
+ *
+ * There is NO `visitors` field, and that is deliberate. `COUNT(DISTINCT visitor_hash)` per
+ * (key, bucket) is not additive along EITHER axis: a visitor who reads two paths in one hour is
+ * counted on both lines, and a visitor active in two hours is counted in both buckets. A multi-line
+ * chart invites exactly that summation (stacked areas, "total across series" tooltips), so a
+ * visitors field here would be wrong in the most-used reading of the chart. `pageviews` and
+ * `events` are plain counts and are additive in both directions — those are the only two safe
+ * metrics for this shape. For distinct visitors use `GET /api/stats` (whole range) or the cube's
+ * per-cell `visitors` with its own non-additivity caveat. */
+export interface DimensionSeriesPoint {
+	/** Bucket start, unix epoch milliseconds. */
+	t: number;
+	pageviews: number;
+	events: number;
+}
+
+/** One line of the chart: a dimension value and its zero-filled series over the range. */
+export interface DimensionSeries {
+	key: string;
+	/** Pageviews for this key over the WHOLE range — the metric the top-N ranking used. */
+	total: number;
+	/** One point per bucket in [start, end), ascending, empty buckets zero-filled. */
+	points: DimensionSeriesPoint[];
+}
+
+/** Response body for `GET /api/stats/timeseries`. The series are the top `limit` keys by pageviews;
+ * the long tail is omitted, so the lines do NOT sum to the range total (`GET /api/stats` has that).
+ * `truncated` says whether anything was left out. */
+export interface DimensionSeriesResponse {
+	dimension: SeriesDimension;
+	interval: Interval;
+	series: DimensionSeries[];
+	/** True when more keys existed than were returned. */
+	truncated: boolean;
+}
+
+/**
+ * One node of the URL-prefix tree. `pageviews` is the subtree total (what a treemap's area and a
+ * sunburst's arc encode); `self` is the pageviews on this exact path, so `pageviews - self` is what
+ * the children hold and a node can be drawn with its own slice.
+ */
+export interface PathTreeNode {
+	/** Full prefix, e.g. `/blog` or `/blog/2026`. The root is `/`. */
+	path: string;
+	/** The single segment this node adds (`blog`). Empty at the root. */
+	segment: string;
+	/** 0 at the root. */
+	depth: number;
+	/** Pageviews on this path and everything beneath it. */
+	pageviews: number;
+	/** Pageviews on this exact path only. */
+	self: number;
+	children: PathTreeNode[];
+	/** Present and true on the synthetic node a parent's folded-away children were rolled into
+	 * (long tail, or a subtree below the anonymity floor). Its `path` is not a real URL. */
+	other?: boolean;
+}
+
+/** Response body for `GET /api/stats/path-tree`. */
+export interface PathTreeResponse {
+	/** Depth at which the tree stops. A deeper URL contributes to its ancestor at this depth. */
+	max_depth: number;
+	/** The anonymity floor a node must reach to be labelled; below it a subtree folds into `other`. */
+	min_count: number;
+	root: PathTreeNode;
+	/** Distinct paths that contributed to the tree. */
+	paths: number;
+	/** True when the site had more distinct paths than the query would read. */
+	truncated: boolean;
+}
+
+/** One entry→exit journey and how many sessions took it. `entry === exit` is a real single-page
+ * journey (a bounce), not a placeholder. */
+export interface JourneyPair {
+	entry: string;
+	exit: string;
+	sessions: number;
+}
+
+/**
+ * Response body for `GET /api/stats/journeys`.
+ *
+ * PRIVACY: an (entry, exit) pair is a two-step behavioural sequence for one visit, over two
+ * attacker-supplied URLs — the most re-identifying shape in this file. A pair is therefore only
+ * returned once at least `min_visitors` DISTINCT visitors took it (not merely distinct sessions:
+ * one person reloading three times must not clear the floor). `sessions` covers only the returned
+ * pairs, so `total_sessions - sessions` is what the floor and the top-N bound withheld.
+ */
+export interface JourneysResponse {
+	pairs: JourneyPair[];
+	/** Distinct visitors a pair needs before it is surfaced. */
+	min_visitors: number;
+	/** Sessions accounted for by `pairs`. */
+	sessions: number;
+	/** All sessions in range, whether or not their pair was surfaced. */
+	total_sessions: number;
+	meta: Freshness;
+}
+
+/** One cell of the day-of-week × hour-of-day grid. Both coordinates are UTC. */
+export interface ClockCell {
+	/** UTC day of week, 0 = Sunday … 6 = Saturday. */
+	day: number;
+	/** UTC hour of day, 0..23. */
+	hour: number;
+	pageviews: number;
+	events: number;
+}
+
+/**
+ * Response body for `GET /api/stats/clock`: activity folded onto a 7 × 24 grid.
+ *
+ * TIMEZONE: everything is UTC, always. `events.created_at` is stored as a unix timestamp and the
+ * hour/day are derived from it by integer arithmetic on the epoch — no site timezone, no server
+ * locale, no `strftime` with a modifier. A dashboard that wants local hours must shift these
+ * client-side; the server will not guess a timezone it was never told.
+ */
+export interface ClockResponse {
+	timezone: 'UTC';
+	/** Exactly 168 cells (7 × 24), zero-filled, ordered by day then hour. */
+	cells: ClockCell[];
+	/** Pageviews per UTC hour, index 0..23 — the nightingale's radial marginal. */
+	by_hour: number[];
+	/** Pageviews per UTC weekday, index 0..6 (Sunday first). */
+	by_day: number[];
+}
+
 /** Ecommerce revenue rollup for a range. `total`/`aov` are in `currency` (the dominant one when a site
  * mixes currencies); `orders` is the count of valued events. */
 export interface RevenueSummary {
