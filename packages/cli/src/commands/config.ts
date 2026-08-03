@@ -1,13 +1,18 @@
-// `facet config`: D1 bootstrap helpers over a wrangler.jsonc. set-db-id writes database_id via a
-// targeted string replace (no JSON reparse) so comments and unrelated config survive byte-for-byte.
+// `facet config`: D1 bootstrap helpers over a wrangler.jsonc. The edits themselves live in
+// lib/wranglerConfig.ts — a targeted string replace (no JSON reparse) so comments and unrelated
+// config survive byte-for-byte — and are shared with `facet init`, which drives the same writes.
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import {
+	PLACEHOLDER_DB_ID,
+	getDatabaseId,
+	hasDatabaseIdField,
+	setDatabaseId,
+} from '../lib/wranglerConfig.js';
 import { printError } from '../util.js';
 
-const PLACEHOLDER = 'PLACEHOLDER_D1_DATABASE_ID';
 const DEFAULT_CONFIGS = ['./wrangler.jsonc', 'apps/server/wrangler.jsonc'];
-const DB_ID_RE = /("database_id"\s*:\s*")([^"]*)(")/;
 
 /** Resolve the config path: an explicit --config, else the first existing default. */
 function resolveConfigPath(flag: string | undefined): string | null {
@@ -16,6 +21,15 @@ function resolveConfigPath(flag: string | undefined): string | null {
 		if (existsSync(candidate)) return candidate;
 	}
 	return null;
+}
+
+function reportMissingConfig(flag: string | undefined): number {
+	printError(
+		flag
+			? `Config not found: ${flag}`
+			: `No wrangler.jsonc found (looked in ${DEFAULT_CONFIGS.join(', ')}). Pass --config <path>.`,
+	);
+	return 1;
 }
 
 export function runConfig(args: string[]): number {
@@ -42,32 +56,20 @@ function setDbId(args: string[]): number {
 		return 1;
 	}
 	const path = resolveConfigPath(values.config);
-	if (!path) {
-		printError(
-			values.config
-				? `Config not found: ${values.config}`
-				: `No wrangler.jsonc found (looked in ${DEFAULT_CONFIGS.join(', ')}). Pass --config <path>.`,
-		);
-		return 1;
-	}
+	if (!path) return reportMissingConfig(values.config);
 
 	const source = readFileSync(path, 'utf8');
-	const match = source.match(DB_ID_RE);
-	if (!match) {
+	if (!hasDatabaseIdField(source)) {
 		printError(`No "database_id" field found in ${path}.`);
 		return 1;
 	}
 
-	const current = match[2];
-	if (current && current !== PLACEHOLDER && current !== values.id && !values.force) {
-		printError(
-			`Refusing to overwrite existing database_id "${current}" in ${path}. Pass --force to override.`,
-		);
+	const edit = setDatabaseId(source, values.id, Boolean(values.force));
+	if (!edit.ok) {
+		printError(`${edit.reason.replace(/\.$/, '')} in ${path}.`);
 		return 1;
 	}
-
-	const updated = source.replace(DB_ID_RE, `$1${values.id}$3`);
-	writeFileSync(path, updated);
+	writeFileSync(path, edit.source);
 	process.stdout.write(`Set database_id in ${path}.\n`);
 	return 0;
 }
@@ -80,24 +82,19 @@ function check(args: string[]): number {
 	});
 
 	const path = resolveConfigPath(values.config);
-	if (!path) {
-		printError(
-			values.config
-				? `Config not found: ${values.config}`
-				: `No wrangler.jsonc found (looked in ${DEFAULT_CONFIGS.join(', ')}). Pass --config <path>.`,
-		);
-		return 1;
-	}
+	if (!path) return reportMissingConfig(values.config);
 
 	const source = readFileSync(path, 'utf8');
-	const match = source.match(DB_ID_RE);
-	if (!match || !match[2]) {
+	if (!hasDatabaseIdField(source)) {
 		printError(`database_id is missing or empty in ${path}.`);
 		return 1;
 	}
-	if (match[2] === PLACEHOLDER) {
+	if (getDatabaseId(source) === null) {
+		const empty = !source.includes(PLACEHOLDER_DB_ID);
 		printError(
-			`database_id in ${path} is still the placeholder. Run \`facet config set-db-id --id <id>\` first.`,
+			empty
+				? `database_id is missing or empty in ${path}.`
+				: `database_id in ${path} is still the placeholder. Run \`facet init\` (or \`facet config set-db-id --id <id>\`) first.`,
 		);
 		return 1;
 	}
