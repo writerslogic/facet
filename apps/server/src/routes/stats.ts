@@ -3,6 +3,7 @@
 
 import {
 	type CountRow,
+	DimensionSeriesQuerySchema,
 	type Goal,
 	type StatsFilter,
 	type StatsQueryInput,
@@ -24,6 +25,14 @@ import { detectAnomalies } from '../db/anomaly.js';
 import { listExperiments, listFunnels, listGoals } from '../db/catalog.js';
 import { goalConversions } from '../db/conversions.js';
 import { experimentResult } from '../db/experiments.js';
+import {
+	clock,
+	dimensionSeries,
+	journeys,
+	pathTree,
+	sessionDistribution,
+	unsupportedDistributionFilters,
+} from '../db/insights.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import {
@@ -63,7 +72,9 @@ import {
 	REALTIME_WINDOW_MS,
 } from '../lib/constants.js';
 import { toCsv } from '../lib/csv.js';
+import { renderDigest } from '../lib/digest.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
+import { rateLimit } from '../lib/ratelimit.js';
 import {
 	deploymentDid,
 	ed25519KeyErrorCode,
@@ -82,6 +93,12 @@ function assertRange(start: number, end: number): void {
 	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
 		throw new ApiError('range_too_large', 400);
 	}
+}
+
+/** The bucket granularity for a range: whatever the caller asked for, else hour for a short window
+ * and day for a long one. Shared by every time-bucketed read so they all bucket identically. */
+function intervalFor(query: StatsQueryInput): 'hour' | 'day' {
+	return query.interval ?? (query.end - query.start <= 48 * HOUR_MS ? 'hour' : 'day');
 }
 
 /** Validate a stats query against the key's site + range, returning the internal filter. */
@@ -110,8 +127,7 @@ statsRoutes.get(
 	async (c) => {
 		const query = c.req.valid('query');
 		const f = toStatsFilter(query, c.get('siteId'));
-		const interval =
-			query.interval ?? (query.end - query.start <= 48 * HOUR_MS ? 'hour' : 'day');
+		const interval = intervalFor(query);
 		const [
 			summaryResult,
 			seriesResult,
@@ -190,8 +206,7 @@ statsRoutes.get(
 	async (c) => {
 		const query = c.req.valid('query');
 		const f = toStatsFilter(query, c.get('siteId'));
-		const interval =
-			query.interval ?? (query.end - query.start <= 48 * HOUR_MS ? 'hour' : 'day');
+		const interval = intervalFor(query);
 		return c.json({ interval, cells: await cube(c.env, f, interval) });
 	},
 );
@@ -250,6 +265,92 @@ statsRoutes.get(
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
 		return c.json({ interactions: await topInteractions(c.env, f) });
+	},
+);
+
+// ── Visualization reads ───────────────────────────────────────────────────────────────────────────
+// Five shapes the cube and the flat top-N lists cannot express (box/violin, multi-line, treemap and
+// sunburst, chord, nightingale). Every one is API-key authenticated, site-scoped and range-capped by
+// the same `requireSiteAccess` + `StatsQuerySchema` + `toStatsFilter` path as the reads above, and
+// every one is bounded by a constant rather than by the data. Aggregation is in SQL — see db/insights.ts.
+
+// Session duration + pages-per-session as summary statistics and a bounded histogram. Never per-
+// session rows: those are unbounded AND each one is a single visitor's behaviour. Statistics are
+// withheld entirely below the anonymity floor (`suppressed: true`), because under it the percentile
+// vector is the raw sample re-encoded.
+statsRoutes.get(
+	'/stats/distribution',
+	requireSiteAccess,
+	vValidator('query', StatsQuerySchema, validationErrorHook),
+	async (c) => {
+		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
+		// A session row carries only channel/entry/exit, so the other filters cannot be honoured.
+		// Rejecting is the point: silently ignoring them would return the UNFILTERED distribution
+		// under a filtered label, which is worse than no endpoint.
+		const unsupported = unsupportedDistributionFilters(f);
+		if (unsupported.length > 0) {
+			throw new ApiError(
+				'unsupported_filter',
+				400,
+				`distribution cannot be filtered by ${unsupported.join(', ')}; only channel is a session column`,
+			);
+		}
+		return c.json(await sessionDistribution(c.env, f));
+	},
+);
+
+// One time series per top-N dimension value, for a multi-line chart. The cube already covers
+// device/country/channel client-side; the gap this closes is path and referrer. `visitors` is
+// deliberately absent — see `DimensionSeriesPoint` for why it would be wrong here.
+statsRoutes.get(
+	'/stats/timeseries',
+	requireSiteAccess,
+	vValidator('query', DimensionSeriesQuerySchema, validationErrorHook),
+	async (c) => {
+		const query = c.req.valid('query');
+		const f = toStatsFilter(query, c.get('siteId'));
+		return c.json(
+			await dimensionSeries(c.env, f, query.dimension, intervalFor(query), query.limit),
+		);
+	},
+);
+
+// The URL-prefix tree for a zoomable treemap / sunburst: `/blog/post-a` and `/blog/post-b` roll up
+// under `/blog`. Bounded by depth, children per node and distinct paths read; a subtree below the
+// k-anonymity floor folds into a synthetic `other` node rather than being labelled.
+statsRoutes.get(
+	'/stats/path-tree',
+	requireSiteAccess,
+	vValidator('query', StatsQuerySchema, validationErrorHook),
+	async (c) => {
+		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
+		return c.json(await pathTree(c.env, f));
+	},
+);
+
+// Real entry→exit journeys from the materialized session rows, for a chord diagram or a second
+// Sankey. Floored on DISTINCT VISITORS, not sessions — a two-URL behavioural sequence is the most
+// re-identifying shape here, and one person reloading must not clear the floor.
+statsRoutes.get(
+	'/stats/journeys',
+	requireSiteAccess,
+	vValidator('query', StatsQuerySchema, validationErrorHook),
+	async (c) => {
+		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
+		return c.json(await journeys(c.env, f));
+	},
+);
+
+// Activity folded onto a 7 × 24 grid for a polar/nightingale chart and a day×hour heatmap. UTC
+// only, derived by integer arithmetic on the epoch — the codebase treats timestamps as UTC and this
+// does not become the one place that silently guesses a local timezone.
+statsRoutes.get(
+	'/stats/clock',
+	requireSiteAccess,
+	vValidator('query', StatsQuerySchema, validationErrorHook),
+	async (c) => {
+		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
+		return c.json(await clock(c.env, f));
 	},
 );
 
@@ -567,3 +668,78 @@ statsRoutes.get('/stats/experiment', requireSiteAccess, async (c) => {
 	);
 	return c.json(result);
 });
+
+// GET /api/stats/digest — the whole site in one compact markdown block, for machine readers.
+//
+// An LLM agent working on a site wants "how is this doing" in one cheap call. Answering that from
+// /api/stats means shipping a large JSON document and paying to re-parse a schema on every turn, and
+// answering it from a feed would be worse still (see lib/digest.ts for why RSS is the wrong shape).
+// This composes the same helpers /api/stats uses and renders them to markdown, which is close to the
+// token floor for tabular data and needs no schema sent alongside it.
+//
+// Same API-key auth, same site ownership check, and the same 90-day range cap as every other read.
+statsRoutes.get(
+	'/stats/digest',
+	requireSiteAccess,
+	rateLimit((c) => `stats-digest:${c.get('siteId')}`),
+	vValidator('query', StatsQuerySchema, validationErrorHook),
+	async (c) => {
+		const query = c.req.valid('query');
+		const f = toStatsFilter(query, c.get('siteId'));
+		// The equal-length window immediately before this one, so every headline metric carries a
+		// delta. An agent asking "how is this doing" almost always means "compared to what".
+		const span = f.end - f.start;
+		const previousFilter: StatsFilter = { ...f, start: f.start - span, end: f.start };
+
+		const [
+			site,
+			summaryResult,
+			previousResult,
+			engagementResult,
+			paths,
+			referrers,
+			countries,
+			devices,
+			channelsResult,
+			anomalies,
+			freshness,
+		] = await Promise.all([
+			db(c.env).select().from(schema.sites).where(eq(schema.sites.id, f.siteId)).get(),
+			summary(c.env, f),
+			summary(c.env, previousFilter),
+			engagement(c.env, f),
+			topPaths(c.env, f),
+			topReferrers(c.env, f),
+			topCountries(c.env, f),
+			topDevices(c.env, f),
+			channels(c.env, f),
+			detectAnomalies(c.env, f, Date.now()),
+			sessionFreshness(c.env, f),
+		]);
+
+		const markdown = renderDigest({
+			siteName: site?.name ?? 'Site',
+			siteDomain: site?.domain ?? '',
+			start: f.start,
+			end: f.end,
+			summary: summaryResult,
+			previous: previousResult,
+			engagement: engagementResult,
+			topPaths: paths,
+			topReferrers: referrers,
+			topCountries: countries,
+			topDevices: devices,
+			channels: channelsResult,
+			anomalies,
+			sessionsPending: freshness.pending,
+		});
+
+		return c.body(markdown, 200, {
+			'content-type': 'text/markdown; charset=utf-8',
+			'cache-control': 'no-store',
+			// This body interpolates attacker-controlled text (paths and referrers come from the
+			// public beacon), so it must never be sniffed into text/html by a consumer.
+			'x-content-type-options': 'nosniff',
+		});
+	},
+);

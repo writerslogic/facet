@@ -106,13 +106,19 @@ wellKnownRoutes.get('/did-configuration.json', async (c) => {
 	});
 });
 
-// RFC 9116 security.txt. Text is stable except for the request-relative Expires, so a modest cache is safe.
+// RFC 9116 security.txt. Text is stable except for the request-relative Expires, so a modest cache
+// is safe. `Contact` is the one required field and only the operator can supply it: a shipped
+// default would publish the upstream maintainer's mailbox as THIS deployment's disclosure address,
+// so an unconfigured deployment publishes no security.txt at all (404, same `not_configured` shape
+// as did.json) rather than a claim its operator never made.
 wellKnownRoutes.get('/security.txt', (c) => {
+	const contact = c.env.FACET_SECURITY_CONTACT?.trim();
+	if (!contact) return c.json({ error: 'not_configured' }, 404);
 	const origin = new URL(c.req.url).origin;
 	const body = buildSecurityTxt({
 		origin,
-		contact: c.env.FACET_SECURITY_CONTACT,
-		policy: c.env.FACET_SECURITY_POLICY,
+		contact,
+		policy: c.env.FACET_SECURITY_POLICY?.trim() || undefined,
 		now: Date.now(),
 	});
 	return c.body(body, 200, {

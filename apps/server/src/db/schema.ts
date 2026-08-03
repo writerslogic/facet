@@ -349,3 +349,53 @@ export const consentRecords = sqliteTable(
 		index('idx_consent_site_extuser').on(t.site_id, t.external_user_id),
 	],
 );
+
+// Alerting. Both tables are additive: a deployment with no rows behaves exactly as before, and the
+// alert cron job short-circuits on an empty `alert_destinations`. snake_case JS keys match the
+// goals/funnels convention so a validated admin body inserts without a per-field remap.
+
+/** Where a site's anomaly alerts are sent. `target` is an https URL (webhook) or a mailbox (email);
+ * `secret` is the per-destination HMAC key minted at creation and shown to the operator exactly
+ * once. It is stored in the clear because signing requires the key material itself — unlike an API
+ * key, a one-way hash cannot produce a MAC. It is never returned by the list endpoint. */
+export const alertDestinations = sqliteTable(
+	'alert_destinations',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		name: text('name').notNull(),
+		type: text('type').notNull(), // webhook | email
+		target: text('target').notNull(),
+		min_severity: text('min_severity').notNull().default('warning'), // info | warning | critical
+		secret: text('secret'),
+		enabled: integer('enabled').notNull().default(1),
+		created_at: integer('created_at').notNull(),
+	},
+	(t) => [index('idx_alert_destinations_site').on(t.site_id)],
+);
+
+/** One row per (destination, anomaly) — the persisted fact that an alert was claimed, so the same
+ * anomaly can never be alerted twice. The UNIQUE (destination_id, dedupe_key) index is the dedupe:
+ * a row is claimed by an INSERT ... ON CONFLICT DO NOTHING *before* delivery is attempted, so a
+ * crash mid-delivery, an overlapping cron, or a re-detection of the same hour next run all collide
+ * on it. `attempts` bounds retries of a delivery that never confirmed; `status` records the outcome
+ * so a failing endpoint is visible rather than silent. */
+export const alertDeliveries = sqliteTable(
+	'alert_deliveries',
+	{
+		id: text('id').primaryKey(),
+		destination_id: text('destination_id').notNull(),
+		site_id: text('site_id').notNull(),
+		dedupe_key: text('dedupe_key').notNull(),
+		severity: text('severity').notNull(),
+		status: text('status').notNull(), // pending | delivered | failed
+		attempts: integer('attempts').notNull().default(0),
+		last_error: text('last_error'),
+		created_at: integer('created_at').notNull(),
+		updated_at: integer('updated_at').notNull(),
+	},
+	(t) => [
+		uniqueIndex('idx_alert_deliveries_dedupe').on(t.destination_id, t.dedupe_key),
+		index('idx_alert_deliveries_site').on(t.site_id, t.created_at),
+	],
+);

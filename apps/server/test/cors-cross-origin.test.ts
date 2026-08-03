@@ -1,8 +1,8 @@
 // Cross-origin CORS for the two endpoints the browser tracker calls.
 //
-// Regression test for a live outage: facet.writerslogic.com collected nothing at all from
-// writersproof.com. Two independent causes, both invisible server-side because every response
-// was a 200 — the browser discarded them after the fact.
+// Regression test for a live outage: a deployment collected nothing at all from a tracked site on a
+// different origin. Two independent causes, both invisible server-side because every response was a
+// 200 — the browser discarded them after the fact.
 //
 //   /api/collect          answered `Access-Control-Allow-Origin: *`, but navigator.sendBeacon()
 //                         always issues its request in credentials mode, and a credentialed
@@ -14,13 +14,16 @@ import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 
 const app = createApp();
-const ORIGIN = 'https://writersproof.com';
+const ORIGIN = 'https://tracked-site.example';
 
 describe('cross-origin CORS for the browser tracker', () => {
 	it('reflects the caller origin on the beacon rather than sending a wildcard', async () => {
 		const res = await app.request(
 			'/api/collect',
-			{ method: 'OPTIONS', headers: { Origin: ORIGIN, 'Access-Control-Request-Method': 'POST' } },
+			{
+				method: 'OPTIONS',
+				headers: { Origin: ORIGIN, 'Access-Control-Request-Method': 'POST' },
+			},
 			env,
 		);
 		const allowOrigin = res.headers.get('access-control-allow-origin');
@@ -58,7 +61,10 @@ describe('cross-origin CORS for the browser tracker', () => {
 	it('answers the experiment preflight', async () => {
 		const res = await app.request(
 			'/api/experiments/active',
-			{ method: 'OPTIONS', headers: { Origin: ORIGIN, 'Access-Control-Request-Method': 'GET' } },
+			{
+				method: 'OPTIONS',
+				headers: { Origin: ORIGIN, 'Access-Control-Request-Method': 'GET' },
+			},
 			env,
 		);
 		expect(res.headers.get('access-control-allow-origin')).toBe('*');

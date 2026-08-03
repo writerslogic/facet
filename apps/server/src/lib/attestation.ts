@@ -52,13 +52,24 @@ export async function deploymentDescriptor(env: Env): Promise<DeploymentProperti
 	};
 }
 
-/** The enabled privacy transforms, as stable labels for RATS process evidence. */
+/**
+ * The enabled privacy transforms, as stable labels for RATS process evidence.
+ *
+ * These labels previously read `dnt-honored` / `gpc-honored`, which claimed more than the deployment
+ * does. Do-Not-Track and Global Privacy Control do NOT suppress collection: an anonymous, cookieless
+ * pageview carries no personal data and is still counted (see lib/gpc.ts and the client's
+ * `isExplicitlyOptedOut`). What the signals actually do is disable personalization — experiments and
+ * feature flags — and force the anonymous Tier-0 visitor hash so a signalling visitor is never
+ * identity-elevated. An unqualified "honored" inside a CRYPTOGRAPHICALLY SIGNED statement is the
+ * worst possible place for that ambiguity, because an auditor cannot check it against the source.
+ * The labels below assert exactly what is implemented and nothing more.
+ */
 const PRIVACY_TRANSFORMS = [
 	'daily-rotating-salted-sha256-visitor-hash',
 	'no-raw-ip-storage',
 	'cookieless',
-	'dnt-honored',
-	'gpc-honored',
+	'dnt-gpc-disable-personalization',
+	'gpc-forces-anonymous-identity',
 ] as const;
 
 /** Assemble RATS process evidence for the running deployment (software attestation only). */

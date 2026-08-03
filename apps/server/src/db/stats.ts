@@ -39,7 +39,7 @@ const isInteraction = sql`${schema.events.name} IS NOT NULL AND (${schema.events
  * summary/series/breakdown reads all narrow to the same filtered rows. Country/device/channel may be
  * NULL in `events`; an exact-match on a provided value simply won't match those, which is correct.
  * Note: `cube` deliberately uses `buildEventWhere` directly (it excludes path/referrer by design). */
-function buildFilteredEventWhere(f: StatsFilter): SQL {
+export function buildFilteredEventWhere(f: StatsFilter): SQL {
 	const conditions: SQL[] = [buildEventWhere(f)];
 	if (f.path !== undefined) {
 		conditions.push(eq(schema.events.path, f.path));
@@ -59,8 +59,8 @@ function buildFilteredEventWhere(f: StatsFilter): SQL {
 	return and(...conditions) as SQL;
 }
 
-const pageviewCount = sql<number>`SUM(CASE WHEN ${schema.events.name} IS NULL THEN 1 ELSE 0 END)`;
-const eventCount = sql<number>`SUM(CASE WHEN ${isCustomEvent} THEN 1 ELSE 0 END)`;
+export const pageviewCount = sql<number>`SUM(CASE WHEN ${schema.events.name} IS NULL THEN 1 ELSE 0 END)`;
+export const eventCount = sql<number>`SUM(CASE WHEN ${isCustomEvent} THEN 1 ELSE 0 END)`;
 const visitorCount = sql<number>`COUNT(DISTINCT ${schema.events.visitorHash})`;
 
 /** Pageviews (name IS NULL), custom events (name IS NOT NULL), and distinct visitors. */
@@ -390,7 +390,7 @@ export function topDevices(env: Env, f: StatsFilter): Promise<CountRow[]> {
 }
 
 /** Build the site + [start, end) predicate over `event_sessions` (hostname is not a session column). */
-function buildSessionWhere(f: StatsFilter): SQL {
+export function buildSessionWhere(f: StatsFilter): SQL {
 	return and(
 		eq(schema.eventSessions.siteId, f.siteId),
 		gte(schema.eventSessions.startedAt, f.start),

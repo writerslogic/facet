@@ -32,9 +32,12 @@ export interface Env {
 	WEBHOOK_URL?: string;
 	/** Optional secret (Worker secret) used to HMAC-sign anomaly webhook payloads. */
 	WEBHOOK_SECRET?: string;
-	/** Optional security.txt contact URI (var). Defaults to the project security mailbox. */
+	/** YOUR deployment's security.txt contact URI (var), e.g. `mailto:security@example.com`. There is
+	 * deliberately no default: until this is set, `/.well-known/security.txt` returns 404 rather than
+	 * publishing someone else's address as this deployment's disclosure contact. */
 	FACET_SECURITY_CONTACT?: string;
-	/** Optional security.txt policy URL (var). Defaults to the repo SECURITY.md. */
+	/** Optional security.txt policy URL (var) — your own disclosure policy. Omitted from the served
+	 * file when unset; never defaulted to the upstream project's policy. */
 	FACET_SECURITY_POLICY?: string;
 	/** Optional deployment signing key as a private JWK string (Worker secret, Ed25519 preferred).
 	 * When unset, all signing/attestation features are inert and the deployment behaves as before. */
