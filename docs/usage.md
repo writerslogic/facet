@@ -111,21 +111,36 @@ track('purchase', {
 A payload that violates these limits is rejected with `400 validation_failed`; see the
 [API reference](./api.md).
 
-## Visitor opt-out & Do Not Track
+## Visitor opt-out, Do Not Track & Global Privacy Control
 
-Facet honors **Do Not Track by default**: if the browser sends a DNT signal
-(`navigator.doNotTrack === '1'`, `window.doNotTrack === '1'`, `navigator.doNotTrack === 'yes'`,
-or `navigator.msDoNotTrack === '1'`) the visitor is treated as opted out, and no beacons are
-sent — no pageview, no SPA navigations, no `form_submit`, no UTM read, and no experiment fetch,
-bucketing, or `$exposure`.
+Two controls stop collection, and a DNT/GPC browser signal is **not** one of them.
 
-There are three controls, in precedence order (highest first):
+**A deliberate opt-out stops everything.** Set `localStorage['facet.optout']` to `'1'`/`'true'`, or
+put `data-facet-optout` on the script tag, and `track()` returns before it builds a payload: no
+pageview, no SPA navigations, no `form_submit`, no UTM read. The auto bundle also installs no
+history or submit listeners at all.
 
-1. **`localStorage['facet.optout']`** — the visitor's persistent choice. `'1'`/`'true'` opts out;
-   `'0'`/`'false'` is an explicit opt-in that **overrides Do Not Track** (a deliberate per-visitor
-   decision wins over the browser default).
-2. **`data-facet-optout`** on the script tag — opts out when present and not a false-like value.
-3. **Do Not Track** browser signals.
+**A DNT or GPC signal does not stop the pageview.** If the browser sends DNT
+(`navigator.doNotTrack === '1'`, `window.doNotTrack === '1'`, `navigator.doNotTrack === 'yes'`, or
+`navigator.msDoNotTrack === '1'`) or Global Privacy Control
+(`navigator.globalPrivacyControl === true` / the `Sec-GPC: 1` header), and the visitor has not
+deliberately opted out, Facet still sends and still counts the pageview — the server does not drop
+`Sec-GPC` requests either. What the signal *does* do is turn off experiments and feature flags (no
+`/active` fetch, no `/flags/eval`, no bucketing, no `$exposure`) and force the anonymous Tier-0
+visitor hash so the visitor is never identity-elevated. The rationale: an anonymous, cookieless
+pageview carries no personal data, so counting it keeps total-traffic figures accurate. See
+[privacy → Visitor opt-out, Do Not Track & Global Privacy Control](./privacy.md#visitor-opt-out-do-not-track--global-privacy-control).
+
+Precedence, highest first:
+
+1. **`localStorage['facet.optout']`** — the visitor's persistent choice. `'1'`/`'true'` opts out of
+   everything; `'0'`/`'false'` is an explicit opt-in that **overrides DNT and GPC** for experiments
+   and flags (a deliberate per-visitor decision wins over the browser default). It cannot override
+   the server, which still sees `Sec-GPC: 1` on the request.
+2. **`data-facet-optout`** on the script tag — opts out of everything when present and not a
+   false-like value.
+3. **DNT / GPC browser signals** — opt out of experiments and feature flags only.
+4. Otherwise opted in.
 
 Opt a whole site's script out (e.g. for a self-hosted embed you only want on consent):
 
@@ -152,8 +167,9 @@ import { optOut, optIn, isOptedOut } from '@writerslogic/facet';
 // or window.facet.optOut() / optIn() / isOptedOut() with the script tag.
 
 optOut(); // sets localStorage['facet.optout'] = '1'; all collection stops now
-optIn(); //  sets '0'; re-enables tracking and overrides Do Not Track
-isOptedOut(); // current effective state (re-read on every call)
+optIn(); //  sets '0'; re-enables tracking and overrides DNT/GPC client-side
+isOptedOut(); // re-read on every call; true for DNT/GPC too, so it reports the
+//              experiment/flag gate, not whether pageviews are being sent
 ```
 
 Storage access is wrapped so a blocked or unavailable `localStorage` (private mode, disabled

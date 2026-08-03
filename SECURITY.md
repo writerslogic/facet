@@ -10,6 +10,15 @@ Facet is pre-1.0 and under active development. Security fixes are applied to
 | `main`  | ✅        |
 | < 0.3   | ❌        |
 
+## What this policy covers
+
+This is the policy for **Facet the software**, maintained in this repository. It is not the policy of
+any particular deployment. If you found an issue in someone's running Facet instance (a
+misconfiguration, an exposed admin token, exposed data), report it to **that instance's operator** —
+a deployment publishes its own operator's contact at `/.well-known/security.txt`, which Facet serves
+only from a contact that operator explicitly configured. Report it here as well if the underlying
+cause is a bug in Facet itself.
+
 ## Reporting a Vulnerability
 
 **Please do not report security vulnerabilities through public GitHub issues.**

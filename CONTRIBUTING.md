@@ -25,7 +25,8 @@ that would require persisting identifiable data will not be accepted; propose a 
 
 ### Development setup
 
-Prerequisites: **Node ≥ 20**, **pnpm 11**, and (for deploy/D1) a Cloudflare account with `wrangler`.
+Prerequisites: **Node ≥ 22** (the root `package.json` `engines` field, and what pnpm 11 requires),
+**pnpm 11**, and (for deploy/D1) a Cloudflare account with `wrangler`.
 
 ```sh
 pnpm install

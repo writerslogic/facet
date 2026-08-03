@@ -10,15 +10,15 @@ the project (requires a GitHub login) and self-attest against the criteria. This
 | Criterion | Status | Evidence |
 | --- | --- | --- |
 | Project homepage + describes what it does | ✅ | `README.md`, https://github.com/writerslogic/facet |
-| FLOSS license (OSI-approved) | ✅ | `LICENSE` (Apache-2.0) |
-| License in standard location | ✅ | `LICENSE` at repo root |
+| FLOSS license (OSI-approved) | ✅ | `LICENSE` (AGPL-3.0-only) — per-package split in `LICENSING.md` (MIT client/CLI/shared, Apache-2.0 trust) |
+| License in standard location | ✅ | `LICENSE` at repo root; each package carries its own `LICENSE` |
 | Basic documentation for users | ✅ | `docs/` (usage, self-hosting, api, privacy, trust, standards) |
 | Documentation for the interface/API | ✅ | `docs/api.md` |
 | Public version-controlled source | ✅ | GitHub, git |
 | Unique, semantic version numbering | ✅ | SemVer; `CHANGELOG.md`, git tags `vX.Y.Z` |
 | Release notes for each release | ✅ | `CHANGELOG.md` (Keep a Changelog) + GitHub Releases |
 | Bug-reporting process | ✅ | GitHub Issues; `CONTRIBUTING.md` |
-| Vulnerability-reporting process (private) | ✅ | `SECURITY.md` (private advisories + admin@writerslogic.com) |
+| Vulnerability-reporting process (private) | ✅ | `SECURITY.md` — GitHub private security advisories, plus the maintainer contact listed there |
 | Working build system | ✅ | pnpm workspaces; `pnpm build` |
 | Automated test suite | ✅ | Vitest (`@cloudflare/vitest-pool-workers`), 500+ tests; `pnpm test` in CI |
 | Tests added with new functionality (policy) | ✅ | Enforced in review; every feature/fix ships regression tests |

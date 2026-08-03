@@ -11,8 +11,8 @@ see [Trust & provenance](./trust.md) for the runtime split.
 
 | Standard | What Facet does | Where |
 | --- | --- | --- |
-| **Global Privacy Control (GPC)** | Honored as an opt-out signal (`navigator.globalPrivacyControl`) | `packages/client` opt-out |
-| **Do Not Track** | Honored as an opt-out signal | `packages/client` opt-out |
+| **Global Privacy Control (GPC)** | Disables personalization and forces the anonymous Tier-0 hash. Does **not** suppress the anonymous, cookieless pageview — that carries no personal data and is still counted. Read via `navigator.globalPrivacyControl` and the `Sec-GPC` header | `packages/client` opt-out, `apps/server/src/lib/gpc.ts` |
+| **Do Not Track** | Same treatment as GPC: no experiments, no flag bucketing, anonymous identity only. Does **not** suppress collection. Only a deliberate opt-out (`localStorage['facet.optout']` / `data-facet-optout`) stops the beacon | `packages/client` opt-out |
 | **W3C Data Privacy Vocabulary (DPV)** | Machine-readable privacy manifest of processing / purpose / legal basis | `/.well-known/facet-privacy.json` |
 | **GDPR / ePrivacy (by construction)** | Cookieless; unique counting via daily-rotating salted `SHA-256`; raw IP never stored | [privacy.md](./privacy.md) |
 
@@ -20,7 +20,7 @@ see [Trust & provenance](./trust.md) for the runtime split.
 
 | Standard | What Facet does | Where |
 | --- | --- | --- |
-| **RFC 9116 (`security.txt`)** | Machine-readable security contact + policy | `/.well-known/security.txt` |
+| **RFC 9116 (`security.txt`)** | Machine-readable security contact + policy, built from **your** `FACET_SECURITY_CONTACT` / `FACET_SECURITY_POLICY`. No project default: unset means the file is not served, never someone else's mailbox | `/.well-known/security.txt` |
 | **RFC 8615 (well-known URIs)** | All discovery documents under `/.well-known/` | `apps/server` well-known routes |
 
 ## Cryptographic provenance & identity
@@ -53,7 +53,7 @@ see [Trust & provenance](./trust.md) for the runtime split.
 | --- | --- | --- |
 | **SLSA v1.0 Build Level 2** | Signed build provenance on every published package | [SECURITY.md](../SECURITY.md), `release.yml` |
 | **npm provenance (Sigstore/Rekor)** | `npm publish --provenance` | `release.yml` |
-| **SPDX / CycloneDX SBOM** | Software Bill of Materials attached to each release | `release.yml` |
+| **SPDX SBOM** | Software Bill of Materials generated and Sigstore-attested against each release tarball | `release.yml` |
 
 Verify a release's provenance:
 

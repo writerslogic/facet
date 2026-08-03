@@ -1,9 +1,12 @@
+<!-- Standing brief handed to any external reviewer engaged to assess the trust & provenance layer.
+     Deliberately impersonal: it should be usable by whoever picks up the review, including a fork's
+     own maintainers commissioning their own audit. -->
+
 # Facet — Security Audit Brief
 
-**For:** Blake Self
-**From:** David Condrey (david@writerslogic.com)
-**Subject:** Independent review of the Facet trust & provenance layer
-**Status:** Unaudited new cryptographic code. Internally reviewed only (see §7). Seeking an independent external assessment before it ships as a security guarantee.
+**For:** any external reviewer assessing the Facet trust & provenance layer
+**Subject:** Independent review of `packages/trust` and its server integration points
+**Status:** Unaudited new cryptographic code. Internally reviewed only (see §7). An independent external assessment is wanted before it ships as a security guarantee.
 
 ---
 
@@ -13,7 +16,7 @@ Facet is a privacy-first, cookieless web analytics service that runs entirely on
 
 The focus is the **trust & provenance layer** (`packages/trust`): an opt-in set of cryptographic primitives that let a deployment sign its outputs and prove properties about itself (data-retention attestations, signed stats exports, a transparency log, verifiable credentials, hardware key-attestation). It is **inert unless a signing key is configured**, so a normal deployment never exercises it.
 
-I want an adversary's read on whether these primitives actually deliver the integrity and authenticity they claim, before I present them to users as trustworthy.
+What is wanted is an adversary's read on whether these primitives actually deliver the integrity and authenticity they claim, before they are presented to users as trustworthy.
 
 ## 2. Scope
 
@@ -35,7 +38,7 @@ I want an adversary's read on whether these primitives actually deliver the inte
 **Server integration points (in scope for trust-boundary questions):**
 `apps/server/src/lib/signing.ts` (key loading), `apps/server/src/lib/transparency.ts` (D1-backed MMR log), `apps/server/src/lib/scitt.ts`, and the `.well-known` / attestation / report routes.
 
-**Out of scope:** the analytics ingestion pipeline, dashboard UI, rate limiting, bot filtering. (Happy to extend scope if you want it.)
+**Out of scope:** the analytics ingestion pipeline, dashboard UI, rate limiting, bot filtering. (Scope can be extended on request.)
 
 ## 3. Runtime & cryptographic model
 
@@ -64,7 +67,7 @@ The verification entry points are where a bug means forgery or bypass:
 - `verifyProcessEvidence` / `verifyPopChallenge` (`rats.ts`) — RATS EAT + proof-of-possession challenge/response.
 - `verifyCoseSign` (`cose.ts`), `verifyDetachedProof` / `verifyDetachedJws` (`jws.ts`), `verifySelectiveCredential` disclosure digest binding (`sd.ts`).
 
-**Attack classes I most want tested:** key-substitution / trust-anchor bypass, algorithm confusion, unverified field binding (is every security-relevant field actually inside the signed bytes?), canonicalization collisions or field-position moves, freshness/replay on attestation and PoP, and truncation/boundary issues in base58/base64/hex decoding of attacker input.
+**Attack classes most worth testing:** key-substitution / trust-anchor bypass, algorithm confusion, unverified field binding (is every security-relevant field actually inside the signed bytes?), canonicalization collisions or field-position moves, freshness/replay on attestation and PoP, and truncation/boundary issues in base58/base64/hex decoding of attacker input.
 
 ## 6. How to build and run
 
@@ -86,24 +89,24 @@ Trust tests live in `packages/trust/test/`. They run under `@cloudflare/vitest-p
 
 This internal review is **not a substitute for your assessment** — it was performed by the same party that wrote the code. Treat its conclusions as claims to falsify, not as findings to trust.
 
-## 8. What I'm asking for
+## 8. What the review should produce
 
 1. An adversarial pass on the §5 verification paths against the §5 attack classes.
 2. A judgment on whether the §4 invariants actually hold.
 3. Any weakness in key provisioning / secret handling (§4.1).
-4. Whether the standards implementations are interoperable and correct enough to claim conformance, or whether I should soften those claims.
+4. Whether the standards implementations are interoperable and correct enough to claim conformance, or whether those claims should be softened.
 
-Findings in whatever form suits you — file:line + a concrete exploit per issue is ideal. Severity ranking helps me prioritize. A "nothing exploitable found" result, with the coverage you actually ran, is equally valuable.
+Findings in whatever form suits you — file:line + a concrete exploit per issue is ideal. Severity ranking helps prioritize. A "nothing exploitable found" result, with the coverage you actually ran, is equally valuable.
 
 ## 9. Process
 
 Let's run it as a loop so nothing gets lost:
 
-1. **File findings as GitHub issues** on `github.com/writerslogic/facet` — one issue per finding, with file:line, a concrete exploit/repro, and a severity. Label them `security` so they're easy to triage.
-2. **I patch** each issue and reference the issue number in the fixing commit, then ping you when a batch is ready.
+1. **File findings as GitHub issues** on the project repository (`github.com/writerslogic/facet` upstream) — one issue per finding, with file:line, a concrete exploit/repro, and a severity. Label them `security` so they're easy to triage.
+2. **The maintainers patch** each issue and reference the issue number in the fixing commit, then ping you when a batch is ready.
 3. **You re-review** the patches (re-open the issue if a fix is incomplete; close it if it holds).
-4. **Official report when everything passes** — once all issues are closed, a short signed-off summary of what you reviewed, what you found, and that the current state passes. That's the document I'd attach when presenting the trust layer as audited.
+4. **Official report when everything passes** — once all issues are closed, a short signed-off summary of what you reviewed, what you found, and that the current state passes. That is the document to attach when presenting the trust layer as audited.
 
-One exception to step 1: if you find something **critical and actively exploitable**, please use the private security contact below first (coordinated disclosure) rather than opening a public issue, so it can be patched before it's visible. Everything else is fine in the open.
+One exception to step 1: if you find something **critical and actively exploitable**, please use the private disclosure channel first (coordinated disclosure) rather than opening a public issue, so it can be patched before it's visible. Everything else is fine in the open.
 
-Security contact / disclosure: `security@writerslogic.com` (a deployment serves this at `/.well-known/security.txt`, RFC 9116, built by `apps/server/src/lib/security-txt.ts`). Thanks, Blake.
+Private disclosure channel: see [`SECURITY.md`](../SECURITY.md) — GitHub private security advisories, or the maintainer contact listed there. (Separately, a *running deployment* publishes its **own** operator's contact at `/.well-known/security.txt`, RFC 9116, built by `apps/server/src/lib/security-txt.ts`; that address belongs to whoever runs that instance, not to this project.)

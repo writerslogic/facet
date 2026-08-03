@@ -43,7 +43,10 @@ jobs:
 
       - name: Build static demo
         env:
-          FACET_BASE: /facet/
+          # A GitHub Pages project site is served from /<repo>/, so derive the asset base path from
+          # the repository rather than hardcoding this repo's name — a fork (or a rename) still gets
+          # a demo whose assets resolve.
+          FACET_BASE: /${{ github.event.repository.name }}/
           VITE_FACET_STATIC_DEMO: '1'
           VITE_FACET_DEMO_LABEL: Live demo
         run: pnpm --filter @facet/dashboard build

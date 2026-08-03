@@ -15,7 +15,7 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   their identity tier (GPC-aware; `site_id` is taken from the key, never the body).
 - `GET /api/stats/anomalies`, `GET /api/stats/experiments`, `GET /api/stats/experiment`,
   `GET /api/stats/retention`, `POST /api/stats/query` — **API key**.
-- `GET /api/stats`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
+- `GET /api/stats`, `GET /api/stats/cube`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
   `GET /api/stats/interactions`, `GET /api/stats/realtime`, `GET /api/stats/export`,
   `GET /api/stats/conversions`, `GET /api/stats/goals`, `GET /api/stats/funnels`,
   `GET /api/funnels/:id/report` — **API key**: `Authorization: Bearer <clk_...>`
@@ -23,8 +23,12 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
 - `POST /api/sites`, `GET /api/sites`, `POST /api/keys`, `GET /api/keys`,
   `DELETE /api/keys/:id`, goal/funnel CRUD (`POST`/`GET`/`DELETE /api/goals`,
   `POST`/`GET`/`DELETE /api/funnels`), identity config (`PATCH /api/sites/:id/identity`),
-  and flag CRUD (`POST`/`GET /api/flags`,
-  `PATCH`/`DELETE /api/flags/:id`) — **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
+  flag CRUD (`POST`/`GET /api/flags`, `PATCH`/`DELETE /api/flags/:id`), alert destinations
+  (`POST`/`GET /api/alerts`, `DELETE /api/alerts/:id`), and `POST /api/auth/admin-link` —
+  **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
+- `POST /api/auth/request`, `POST /api/auth/verify` — **public** (dashboard sign-in);
+  `GET /api/auth/me`, `POST /api/auth/logout` — **session cookie**. All `503 auth_unavailable`
+  unless `SESSION_SECRET` is bound.
 
 ## Error envelope
 
@@ -62,8 +66,14 @@ rejected with `413 payload_too_large` before parsing. Bot user-agents are silent
 with an empty body.
 
 A request carrying the [Global Privacy Control](https://globalprivacycontrol.org/) header
-`Sec-GPC: 1` is treated as an opt-out: it returns `202` but no event is written and no visitor
-hash is derived. This mirrors the client-side opt-out and holds for direct callers too.
+`Sec-GPC: 1` is **still counted**: the event is written and the anonymous, cookieless pageview
+is included in total traffic, because it carries no personal data. What GPC does instead is
+force the anonymous Tier-0 visitor hash for that request, so a signalling visitor can never be
+identity-elevated whatever consent record exists (`apps/server/src/lib/ingest.ts`). It also
+disables personalization — feature-flag evaluation returns `reason: "gpc"` and experiments are
+never bucketed. Only a **deliberate** client opt-out (`localStorage['facet.optout']` or
+`data-facet-optout`) suppresses the beacon, and that happens in the browser: no request is
+sent at all.
 
 Body fields (`site_id`, `hostname`, `path`, `referrer` required; `name`, `props`
 optional):
@@ -114,7 +124,9 @@ never stored.
 - **Auth:** `Authorization: Bearer <api_key>` (the site is taken from the key; no `site_id` in the body).
 - **Body:** `hostname`, `path` (absolute), optional `referrer`, `name`, `props`, `utm`, and optional
   `ip` / `user_agent` (the end-user's, for hashing + device/channel classification).
-- **Responses:** `202` (empty) on accept, bot-drop, or a `Sec-GPC: 1` opt-out; `400 validation_failed`; `401 invalid_api_key`.
+- **Responses:** `202` (empty) on accept or bot-drop; `400 validation_failed`; `401 invalid_api_key`.
+- A relayed `Sec-GPC: 1` does not drop the event (same rule as the beacon above): it is counted,
+  pinned to the anonymous Tier-0 hash, and any supplied `user_id` is ignored.
 
 ```sh
 curl -X POST https://your-deployment.example.com/api/event \
@@ -205,6 +217,160 @@ every bucket; the `top_*` lists are `{ key, count }` rows sorted by count descen
   have been materialized yet (the cron has not caught up) — letting a caller distinguish
   "no data" from "not built yet". `GET /api/stats/sessions` and `GET /api/stats/channels`
   return the same `meta` block.
+
+---
+
+### `GET /api/stats/cube?site_id&start&end&interval=hour|day` (API key)
+
+The low-cardinality dimensional cube for the range: one cell per `(bucket, device, country,
+channel)` with `pageviews` / `events` / `visitors`. The dashboard hydrates this once and slices
+by those axes client-side with no further round-trips. Same query schema, site-ownership check
+and range cap as `GET /api/stats`; `interval` defaults the same way.
+
+Country is folded to the top 30 by volume plus `'other'`, so the cube is bounded **and**
+complete — every event lands in a cell and the totals still reconcile with `GET /api/stats`.
+`path` and `referrer` are deliberately excluded (high cardinality; use the breakdowns).
+
+```json
+{
+  "interval": "day",
+  "cells": [
+    { "t": 1730000000000, "device": "desktop", "country": "US", "channel": "organic",
+      "pageviews": 42, "events": 3, "visitors": 20 }
+  ]
+}
+```
+
+---
+
+## Visualization reads
+
+Five shapes the cube and the flat top-N lists cannot express: a session distribution
+(box/violin), a per-dimension time series (multi-line), the URL-prefix tree (treemap and
+sunburst), entry→exit journeys (chord/Sankey), and the UTC clock grid (nightingale, day×hour
+heatmap).
+
+All five are **API key** authenticated (`Authorization: Bearer <clk_...>`), site-scoped (a key
+that does not own `site_id` gets `403 site_mismatch`), and enforce the same range rules as
+`GET /api/stats` (`end > start` else `400 bad_range`; range ≤ 90 days else
+`400 range_too_large`). Every response is bounded by a constant, never by the data: a site with a
+million distinct URLs and a site with ten get the same maximum response size.
+
+### `GET /api/stats/distribution` (API key)
+
+Session **duration** and **pages-per-session** as summary statistics plus a bounded histogram.
+Raw per-session rows are never returned — they are unbounded, and each one is a single visitor's
+behaviour.
+
+Same query parameters as `GET /api/stats`, with one restriction: only `channel` may be used as a
+filter. `hostname`, `path`, `referrer`, `country` and `device` return `400 unsupported_filter`,
+because `event_sessions` is a materialized per-session row with no such column — and answering
+them by *ignoring* them would return the unfiltered distribution under a filtered label.
+
+`percentiles[p]` is the value at 0-based index `floor(p × (n − 1))` of the ascending sample — the
+**nearest-rank-lower** order statistic, **not** an interpolated quartile. It is therefore always a
+value some session actually had. A renderer wanting interpolated quartiles must interpolate itself.
+
+`histogram` bins are `[from, to)` and partition the metric's whole domain (the last bin is
+open-ended, `to: null`), so the bin counts always sum to `count`.
+
+**Privacy:** statistics are emitted only once at least `min_count` (**25**) sessions match. That
+floor is higher than the k-anonymity floor used for breakdowns (3) on purpose: a distribution
+reports eleven order statistics, so below ~11 observations the percentile vector *is* the raw
+sample re-encoded. Below the floor, `suppressed` is `true` and both distributions are `null`.
+
+Duration bins are `1s / 5s / 15s / 30s / 1m / 2m / 5m / 10m / 30m` and above; pageview bins are
+`0`, one each for `1`–`5`, then `6–10`, `11–20`, `21+`.
+
+---
+
+### `GET /api/stats/timeseries` (API key)
+
+One time series per top-N dimension value, for a multi-line chart. The cube already answers this
+client-side for `device` / `country` / `channel`; the gap this closes is `path` and `referrer`,
+which are deliberately excluded from the cube.
+
+| Param | Required | Notes |
+| --- | --- | --- |
+| `dimension` | yes | `path`, `referrer`, `country`, `device` or `channel`. No default — guessing one would answer a different question than the caller asked. |
+| `limit` | no | Lines to return, `1`–`8` (default `5`). Outside that range is `400 validation_failed`, not a silent clamp. |
+
+Plus every parameter `GET /api/stats` accepts (`site_id`, `start`, `end`, `interval`, `hostname`,
+and the exact-match dimension filters).
+
+There is **no `visitors` field, deliberately.** `COUNT(DISTINCT visitor_hash)` per (key, bucket) is
+not additive along either axis: a visitor who reads two paths in one hour is counted on both lines,
+and a visitor active in two hours is counted in both buckets. A multi-line chart invites exactly
+that summation, so a visitors field here would be wrong in the chart's most common reading.
+`pageviews` and `events` are plain counts and are additive in both directions.
+
+Keys are ranked by **pageviews over the whole range**, which is not identical to the `top_paths`
+ordering on `GET /api/stats` (that counts every event on a path). `series` covers only the top
+`limit` keys, so the lines do **not** sum to the range total; `truncated` says whether a tail was
+dropped. Each line is zero-filled across every bucket in the range.
+
+**Privacy:** a key must clear the k-anonymity floor (3 events over the range) before it becomes a
+labelled line. Beyond that, this endpoint batches calls that
+`GET /api/stats?path=…&interval=hour` already answers one at a time — it adds no resolution.
+
+---
+
+### `GET /api/stats/path-tree` (API key)
+
+The URL-prefix tree for a zoomable treemap or a sunburst: `/blog/post-a` and `/blog/post-b` roll up
+under `/blog`. Same query parameters as `GET /api/stats`.
+
+`pageviews` on a node is the **subtree** total (what a treemap's area encodes); `self` is the
+pageviews on that exact path, so `pageviews - self` is what the children hold. Counts are
+**pageviews** (beacons with no event name), so the root reconciles with `summary.pageviews` — not
+with `top_paths`, which counts every event on a path.
+
+The tree stops at `max_depth` (**4**); a deeper URL contributes to its ancestor at that depth. Each
+node keeps at most 12 labelled children. Query strings and duplicate slashes are normalized away,
+so `/blog//post-a/` and `/blog/post-a?utm_source=x` land on the same node.
+
+**Privacy:** a URL path is attacker-controlled text that can carry an identifier a site
+accidentally put in its own routes. Any subtree below `min_count` (**3**) pageviews is folded into
+its parent's synthetic `other` node (`"other": true`) rather than being labelled — strictly
+stronger than `top_paths`, which surfaces a one-hit path verbatim. Folding preserves the totals, so
+children always sum to their parent's subtree total and nothing vanishes from the chart.
+
+---
+
+### `GET /api/stats/journeys` (API key)
+
+The most-travelled entry→exit journeys over the range, from the materialized session rows — the
+input for a chord diagram or a second Sankey. Same query parameters as `GET /api/stats`. Capped at
+50 pairs. `entry === exit` is a real single-page journey (a bounce), not a placeholder.
+
+**Privacy:** an (entry, exit) pair is a two-step behavioural sequence for one visit, over two
+attacker-supplied URLs — the most re-identifying shape in the API. A pair is therefore surfaced only
+once at least `min_visitors` (**3**) **distinct visitors** took it, not merely three sessions: one
+person reloading a rare page three times must not clear the floor. `sessions` counts only the
+returned pairs, so `total_sessions - sessions` is what the floor and the 50-pair bound withheld.
+
+Sessions are materialized by an hourly cron, so `meta` carries the same freshness signal as
+`GET /api/stats/sessions`.
+
+---
+
+### `GET /api/stats/clock` (API key)
+
+Activity folded onto a 7 × 24 grid, for a polar/nightingale chart and a day×hour heatmap. Same
+query parameters as `GET /api/stats`, including every dimension filter.
+
+**Everything is UTC, always.** `day` is `0` = Sunday … `6` = Saturday and `hour` is `0`–`23`, both
+derived from `events.created_at` by integer arithmetic on the unix epoch — no site timezone, no
+server locale, no `strftime` modifier. A dashboard that wants local hours must shift these
+client-side; the server will not guess a timezone it was never told.
+
+`cells` is always exactly 168 entries, zero-filled and ordered day-major, so a heatmap can index it
+as `cells[day * 24 + hour]`. `by_hour` and `by_day` are the pageview marginals (24 and 7 entries).
+The response size is fixed whatever the range.
+
+**Privacy:** no anonymity floor is applied, because this is strictly coarser than
+`GET /api/stats?interval=hour`, which already returns exact per-hour counts. Collapsing every date
+in the range onto one weekly grid can only blur timestamps, never sharpen them.
 
 ---
 
@@ -413,6 +579,59 @@ None of these signing features create any per-visitor identifier — they attest
 
 ---
 
+## Machine readers (LLM agents)
+
+Three endpoints exist so an agent managing a site can read its analytics cheaply, instead of
+ingesting the full JSON API on every turn.
+
+### `GET /llms.txt` (public)
+
+A plain-text map of the deployment following the `llms.txt` convention: what this service is, how to
+authenticate, which endpoint to start with, and the cookieless caveats needed to interpret the
+numbers correctly. Exposes no site identifiers and no data.
+
+### `GET /api/stats/digest?site_id&start&end` (API key)
+
+The whole site as one **`text/markdown`** block: headline traffic with period-over-period deltas,
+engagement, the top pages / referrers / countries / devices / channels, and any detected anomalies.
+
+Markdown rather than JSON because the binding constraint for this consumer is tokens, not
+parseability: a markdown table names each column once, where JSON repeats every key on every row and
+XML (so RSS/Atom) adds an opening and closing tag per field on top of that. It is deliberately not a
+feed — RSS models discrete chronological items with a title, link, guid and pubDate, and analytics
+aggregates have none of those.
+
+Same authentication, site-ownership check and 90-day range cap as `GET /api/stats`.
+
+```sh
+curl "https://your-deployment.example.com/api/stats/digest?site_id=$SITE_ID&start=$START&end=$END" \
+  -H "Authorization: Bearer $FACET_API_KEY"
+```
+
+### `POST /api/mcp` (API key)
+
+A [Model Context Protocol](https://modelcontextprotocol.io) endpoint over JSON-RPC 2.0, so an agent
+can call tools instead of fetching documents. Implements the core surface — `initialize`,
+`tools/list`, `tools/call`, `ping` — and is a deliberate subset: no resources, prompts, sampling or
+SSE streaming, one request/response per POST.
+
+Tools: `get_digest`, `get_summary`, `top_dimension`, `get_realtime`.
+
+Authentication is the **bearer API key only**. The dashboard session cookie is deliberately not
+accepted here: honouring a cookie on a cross-origin POST would make this a CSRF sink. Because a key
+is bound to one site, no tool takes a `site_id` and no caller can reach another site's data.
+
+A malformed request returns a JSON-RPC `error`; a tool that runs and fails returns a normal `result`
+with `isError: true`, so a client can distinguish "your request was wrong" from "the query failed".
+
+```sh
+curl -X POST https://your-deployment.example.com/api/mcp \
+  -H "Authorization: Bearer $FACET_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
+       "params":{"name":"get_digest","arguments":{"days":7}}}'
+```
+
 ## Well-known documents
 
 Facet serves these documents directly from the Worker (not the static-asset binding), each with the
@@ -420,7 +639,7 @@ correct content type:
 
 | Path | Purpose |
 | --- | --- |
-| `/.well-known/security.txt` | RFC 9116 disclosure contact (Contact, Expires, Policy, Canonical). |
+| `/.well-known/security.txt` | RFC 9116 disclosure contact (Contact, Expires, Canonical, and Policy if you set one). `404` until you set `FACET_SECURITY_CONTACT` — Facet never publishes a contact you did not choose. |
 | `/.well-known/jwks.json` | The deployment's public signing key(s) as a JWK Set. Empty (`{"keys":[]}`) when signing is unconfigured. |
 | `/.well-known/did.json` | did:web DID document (`did:web:<host>`); Multikey verification method from the JWKS key. `404` unless an Ed25519 key is configured. |
 | `/.well-known/did-configuration.json` | DIF Domain Linkage Credential binding the origin to the DID (`404` unless Ed25519 configured). |
@@ -957,6 +1176,86 @@ curl -X DELETE "https://your-deployment.example.com/api/keys/22222222-2222-4222-
 ```json
 { "deleted": true }
 ```
+
+---
+
+## Admin: alert destinations
+
+Where anomaly alerts are delivered. **Admin token only** for every route — alert configuration
+decides where a deployment's data is sent, so a site API key must never reach it.
+
+### `POST /api/alerts`
+
+Body: `{ "site_id": UUID, "name": string (1–100), "type": "webhook"|"email", "target": string
+(1–2048), "min_severity"?: "info"|"warning"|"critical", "enabled"?: boolean }`. `min_severity`
+defaults to `warning`; `enabled` defaults to `true`. Returns `201`.
+
+`target` is re-validated server-side beyond schema shape: a `webhook` target must survive the
+SSRF policy (`400 invalid_webhook_url`), an `email` target must be a mailbox
+(`400 invalid_email_target`). A webhook destination is issued an HMAC signing `secret`, returned
+**once** in this response and never disclosed again — the list endpoint omits it. Lost it? Delete
+the destination and create another (same handling as an API key).
+
+```json
+{
+  "alert_destination": {
+    "id": "33333333-3333-4333-8333-333333333333",
+    "site_id": "11111111-1111-4111-8111-111111111111",
+    "name": "ops webhook",
+    "type": "webhook",
+    "target": "https://hooks.example.com/facet",
+    "min_severity": "warning",
+    "enabled": true,
+    "created_at": 1704067200000
+  },
+  "secret": "…shown once…"
+}
+```
+
+### `GET /api/alerts?site_id=<uuid>`
+
+Lists a site's destinations, newest first, as `{ "alert_destinations": [...] }`. The `secret`
+column is never included.
+
+### `DELETE /api/alerts/:id?site_id=<uuid>`
+
+Deletes a destination scoped to its site. Returns `{ "deleted": true }`, or `404 not_found`.
+Delivery history is intentionally retained — it is the audit trail of what was sent.
+
+---
+
+## Account auth (dashboard sign-in)
+
+Passwordless sign-in for the dashboard UI, entirely separate from the per-site API-key path. All
+of it is gated on `SESSION_SECRET`: without that binding every route below returns
+`503 auth_unavailable`, and the beacon plus programmatic stats endpoints are unaffected.
+
+### `POST /api/auth/request` (public)
+
+Body `{ "email": string (≤ 254, valid address) }`. Mints a single-use magic-link token. Always
+returns `202` with an empty body, whether or not the address has an account — the response never
+reveals which. Delivering the link by email is a deployment concern (bind a Cloudflare Email
+sender); the token itself is created regardless.
+
+### `POST /api/auth/admin-link` (admin)
+
+Body `{ "email": … }`. The self-hosted bootstrap/invite path: an operator holding `ADMIN_TOKEN`
+mints a magic link and gets it back directly as `{ email, token, link }`. This is what makes
+sign-in work with **no** email service configured.
+
+### `POST /api/auth/verify` (public)
+
+Body `{ "token": string (3–200) }`. Consumes the token and sets an HMAC-signed, `httpOnly`,
+`Secure`, `SameSite=Lax` session cookie (30 days). Returns `{ "user": … }`, or
+`401 invalid_token` when the link is invalid, already used, or expired.
+
+### `GET /api/auth/me` (session cookie)
+
+Returns `{ "user": …, "memberships": [...] }` for the signed-in user, or `401 unauthenticated`.
+
+### `POST /api/auth/logout` (session cookie)
+
+Clears the session cookie. Returns `204`.
 
 ---
 

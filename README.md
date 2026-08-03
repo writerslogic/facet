@@ -42,6 +42,45 @@ daily-rotating, salted `SHA-256` hash, **raw IP addresses are never stored**, an
 cross-session identity to leak. The browser client is a drop-in for umami — existing sites migrate
 by swapping a single script tag.
 
+Facet is software you run, not a service you sign up for. There is no Facet cloud, no account to
+create, and no data of yours held anywhere but your own Cloudflare account.
+
+## Install
+
+Facet deploys to **your** Cloudflare account. You need Node ≥ 22, pnpm 11, and an authenticated
+`wrangler`. One command does the rest:
+
+```sh
+git clone https://github.com/writerslogic/facet.git
+cd facet && pnpm install
+npx @writerslogic/facet-cli init
+```
+
+`init` creates the D1 database, generates an `ADMIN_TOKEN` and stores it as a Worker secret, applies
+migrations, builds the dashboard, deploys, then creates your first site and issues its API key. It
+asks only three things — the hostname, the site domain, and the site name — each with a default you
+can accept by pressing Enter, and it prints the full plan for confirmation before creating anything.
+
+Re-run it any time: every step detects whether it is already done, so a failed install resumes
+rather than duplicating resources. `facet doctor` diagnoses an existing install and is safe to paste
+into a bug report. `facet init --dry-run` prints the plan and changes nothing.
+
+Deploying without a custom hostname gives you a `*.workers.dev` URL that works immediately; putting
+it on your own hostname is an optional step. No deployment-specific value in this repo points at anyone else's domain, account, or
+mailbox — the hostname, the database, the admin token, and the security contact are all yours to
+set, and Facet publishes nothing about your deployment that you did not configure. Full walkthrough:
+**[docs/install.md](./docs/install.md)**. Manual path, environment variables and operations:
+**[docs/self-hosting.md](./docs/self-hosting.md)**.
+
+## What it costs
+
+Facet charges nothing: there is no hosted plan, no per-event pricing, and no seat count. Your only
+bill is Cloudflare's, for one Worker and one D1 database. Small and mid-size sites generally fit
+inside Cloudflare's free tier; beyond it, the Workers paid plan starts at $5/month at time of
+writing. The optional "Ask" tab uses Workers AI, which is metered separately — every other feature
+works without it. Check Cloudflare's current [Workers](https://developers.cloudflare.com/workers/platform/pricing/)
+and [D1](https://developers.cloudflare.com/d1/platform/pricing/) pricing for the authoritative numbers.
+
 ## Why Facet
 
 - **Single deploy.** One Worker serves ingest, the stats API, the dashboard, and cron rollups.
@@ -177,12 +216,32 @@ reporting: [SECURITY.md](./SECURITY.md).
 - [Trust & provenance](./docs/trust.md) — signed deployment attestations, verification, hardware-rooted keys
 - [Standards & conformance](./docs/standards.md) — the open standards Facet implements, and where
 - [API reference](./docs/api.md) — every endpoint, auth, and error code
+- [Licensing](./LICENSING.md) — which license covers which package, and the commercial option
+- [Trademark & attribution](./TRADEMARK.md) — the name, the logo, and removing "Powered by Facet"
 - [CHANGELOG](./CHANGELOG.md) · [Contributing](./CONTRIBUTING.md) · [Security](./SECURITY.md)
 
-## License
+## License &amp; attribution
 
-Open source with a commercial option, © 2026 WritersLogic, Inc. The server and dashboard are
-**[AGPL-3.0](./LICENSE)** (self-host free; offering a modified hosted service requires sharing changes).
-The browser SDK, CLI, and shared types are **MIT**, and the trust/provenance library is **Apache-2.0**,
-so you can embed and build on them freely. A commercial license is available for hosted/OEM use without
-AGPL obligations — see **[LICENSING.md](./LICENSING.md)** (licensing@writerslogic.com).
+Open source with a commercial option. Facet is written and copyrighted by WritersLogic, Inc.
+(© 2026); that is authorship, not a dependency — a Facet you deploy talks to nothing of ours.
+
+**Can you use it?** In short: yes, for free, including commercially, as long as you don't offer a
+*modified* Facet to other people as a service without publishing your changes.
+
+| What you're doing | License | What you owe |
+| --- | --- | --- |
+| Self-hosting Facet for your own sites or organization — including a commercial business | **[AGPL-3.0-only](./LICENSE)** | Nothing. Run it, modify it internally, free forever. |
+| Embedding the browser SDK in your site, or using the CLI | **MIT** (`packages/client`, `packages/cli`, `packages/shared`) | Nothing. Your site stays closed-source. |
+| Building on the trust/provenance library | **Apache-2.0** (`packages/trust`) | Nothing (includes a patent grant). |
+| Offering a **modified** Facet to others as a hosted service | **AGPL-3.0-only** | Publish your modified source under the AGPL — **or** buy a commercial license. |
+| Removing the "Powered by Facet" attribution | either | Publish your source per the AGPL, **or** hold a commercial white-label license. |
+| Rebranding a fork under the Facet name or logo | — | Not granted by any code license. Use your own name — see **[TRADEMARK.md](./TRADEMARK.md)**. |
+
+The dashboard shows a small **"Powered by Facet"** link. It is a plain, unobfuscated element with no
+phone-home and no tamper check: you may remove it by complying with the AGPL (publish your
+corresponding source, which the license already requires of a modified network service) **or** under
+a commercial white-label license, which sets `VITE_FACET_WHITE_LABEL=1` without the source
+obligation. Full terms: **[TRADEMARK.md](./TRADEMARK.md)**.
+
+Commercial licensing (hosted/OEM use without AGPL obligations, white-label, warranty and support):
+**[LICENSING.md](./LICENSING.md)** — licensing@writerslogic.com.

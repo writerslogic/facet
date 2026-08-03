@@ -59,7 +59,7 @@ body:
       label: Environment
       description: Node version, pnpm version, wrangler version, and whether local (`wrangler dev`) or deployed.
       placeholder: |
-        - Node: 20.x
+        - Node: 22.x
         - pnpm: 11.x
         - wrangler: 4.x
         - Environment: local / deployed

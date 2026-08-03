@@ -21,6 +21,23 @@ pnpm install
 
 ## Deploy
 
+```sh
+npx @writerslogic/facet-cli init     # or `facet init` with the CLI installed
+```
+
+One command does all of it: creates the D1 database and writes its id into the Worker config,
+generates and stores the `ADMIN_TOKEN`, applies migrations, builds the dashboard, deploys, then
+creates your first site and issues its API key. It asks only for the hostname, the site domain, and
+the site name — each with a default — and confirms before it creates anything. Re-running it resumes
+rather than starting over, and `facet doctor` diagnoses an install that has gone sideways.
+
+See the [install guide](./install.md) for the full step list, the flags (`--dry-run`, `--yes`,
+`--workers-dev`, `--hostname`, `--new-key`, `--rotate-admin-token`), and the failure table.
+
+The rest of this page is the manual path — the same steps, run by hand.
+
+## Manual deploy
+
 ### 1. Create the D1 database
 
 ```sh
@@ -35,8 +52,8 @@ that preserves the file's comments and unrelated config):
 facet config set-db-id --id <database_id> --config apps/server/wrangler.jsonc
 ```
 
-`set-db-id` refuses to clobber an already-set real id unless you pass `--force`. Verify the
-binding before deploying:
+`set-db-id` refuses to clobber an already-set real id unless you pass `--force` — a wrong id points a
+live deployment at someone else's database. Verify the binding before deploying:
 
 ```sh
 facet config check --config apps/server/wrangler.jsonc
@@ -45,14 +62,18 @@ facet config check --config apps/server/wrangler.jsonc
 `check` exits nonzero if `database_id` is missing or still the placeholder, so it doubles as
 a pre-deploy guard.
 
-### 2. Set the admin token
+### 2. Create the ingest queue
 
-The admin endpoints (create sites, issue keys) are guarded by a bearer token compared in
-constant time. Store it as a Worker secret:
+The beacon enqueues events and a consumer batches the D1 writes off the hot path, so the queue must
+exist before the deploy binds to it:
 
 ```sh
-wrangler secret put ADMIN_TOKEN
+wrangler queues create facet-ingest
 ```
+
+Cloudflare Queues requires the **Workers Paid** plan. On the free plan, comment the `queues` block
+out of `apps/server/wrangler.jsonc` instead — with no `INGEST_QUEUE` binding the beacon writes to D1
+synchronously and everything else is unchanged. (`facet init` offers to do this for you.)
 
 ### 3. Apply migrations
 
@@ -68,7 +89,21 @@ The Worker serves the built dashboard from `apps/dashboard/dist` as static asset
 pnpm --filter @facet/dashboard build
 ```
 
-### 5. Deploy the Worker
+### 5. (Optional) Serve it on your own domain
+
+By default the Worker is reachable on the `*.workers.dev` URL that `deploy` prints, which is enough
+to get going. To put it on your own hostname, uncomment the `routes` line in
+`apps/server/wrangler.jsonc` and set your own:
+
+```jsonc
+"routes": [{ "pattern": "analytics.example.com", "custom_domain": true }],
+```
+
+The zone must already be on the Cloudflare account you are deploying to — `custom_domain` provisions
+the DNS record and certificate for you, but it cannot create a zone you do not own. Leave the line
+commented out if you are not ready; deploying without it changes nothing else.
+
+### 6. Deploy the Worker
 
 ```sh
 pnpm --filter @facet/server deploy
@@ -76,10 +111,27 @@ pnpm --filter @facet/server deploy
 
 Your Worker now serves the dashboard at its root and the API under `/api`.
 
+### 7. Set the admin token
+
+The admin endpoints (create sites, issue keys) are guarded by a bearer token compared in constant
+time. It is a Worker secret, and the Worker has to exist first — so this comes **after** the first
+deploy:
+
+```sh
+wrangler secret put ADMIN_TOKEN
+```
+
+It prompts for the value rather than taking it as an argument, so the token never reaches your shell
+history or `ps`. Piping works the same way: `printf '%s' "$TOKEN" | wrangler secret put ADMIN_TOKEN`.
+Until it is set, every admin endpoint fails closed with `401`.
+
+Generate one with `openssl rand -hex 32` (or let `facet init` do it — it pipes a fresh 32-byte token
+straight to wrangler and never prints it).
+
 ## Create a site and API key
 
-Sites and keys are created through the admin API, authenticated with the `ADMIN_TOKEN`
-you set above (`Authorization: Bearer <ADMIN_TOKEN>`).
+`facet init` does this for you. To do it by hand: sites and keys are created through the admin API,
+authenticated with the `ADMIN_TOKEN` you set above (`Authorization: Bearer <ADMIN_TOKEN>`).
 
 Create a site:
 
@@ -176,6 +228,18 @@ curl "http://localhost:8787/api/stats?site_id=11111111-1111-4111-8111-1111111111
   -H "Authorization: Bearer clk_localdevkey"
 ```
 
+`wrangler dev` reads local secrets from `apps/server/.dev.vars` (gitignored). `facet init` writes the
+`ADMIN_TOKEN` it generated there at mode 0600, so the admin endpoints work locally with the same
+token as the deployment; load it into your shell without printing it with:
+
+```sh
+export FACET_ADMIN_TOKEN=$(grep '^ADMIN_TOKEN=' apps/server/.dev.vars | cut -d= -f2-)
+```
+
+Outside a checkout — wiring the Worker into your own repository layout — `facet scaffold --dir <d>`
+writes a standalone `wrangler.jsonc` plus a `.dev.vars` with a fresh token, and makes no network
+calls.
+
 ## Public demo mode
 
 Facet can be turned into a **no-login, read-only demo** in two ways. Both seed a demo profile in
@@ -224,6 +288,18 @@ rollups are durable and never deleted. The purge runs on the hourly cron. See th
 
 ## Operations
 
+### Diagnosing an install
+
+```sh
+facet doctor
+```
+
+Reports what is configured and what is missing — node/wrangler versions, the Cloudflare account, the
+D1 binding, the ingest queue, whether `ADMIN_TOKEN` is set on the Worker and whether this machine has
+a copy, whether the deployment answers `/api/health`, and which sites exist — then lists the commands
+that would fix what it found. It prints no secret values and truncates account/database identifiers,
+so the output is safe to paste into a bug report.
+
 ### Backups (D1 export)
 
 Facet stores everything in D1. Export a full SQL snapshot with Wrangler:
@@ -270,6 +346,58 @@ baseline_mean, summary, delivered_at }`, signed (when a secret is set) with head
 time-bounded (5s) and best-effort; the hourly cadence means each anomalous `(site_id, bucket)` is
 sent at most once, but consumers should still dedupe on those fields. If you prefer polling, use
 `GET /api/stats/anomalies` instead.
+
+## Anomaly alerting
+
+Anomalies are scored on the hourly cron. To be told about them rather than having to open the
+dashboard, register a destination per site. These are admin endpoints, so they use `ADMIN_TOKEN`.
+
+```sh
+curl -X POST https://your-deployment.example.com/api/alerts \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"site_id":"YOUR_SITE_ID","kind":"webhook",
+       "target":"https://hooks.example.com/facet","min_severity":"critical"}'
+```
+
+The response carries a signing secret **once and never again** — store it before you close the
+terminal, the same way an API key works.
+
+Every webhook delivery is signed twice. `facet-alert-signature: v1=<hmac>` is an HMAC-SHA256 over
+`<timestamp>.<body>` using that secret, and is always present. `facet-signature-jws` is a detached
+JWS over the RFC 8785 canonical bytes and appears only when `FACET_SIGNING_JWK` is configured (see
+below). Verify the HMAC before trusting a payload. The timestamp is bound *into* the MAC, so a
+captured delivery cannot be replayed under a new date, and the body carries a `delivery_id` unique
+per attempt plus a `dedupe_key` stable per anomaly.
+
+Webhook targets are restricted to prevent the admin API becoming an SSRF primitive: HTTPS only,
+port 443 only, no credentials in the URL, and no private, loopback, link-local, CGNAT or
+metadata-service address. Redirects are not followed. The target is re-validated immediately before
+every delivery, not just at creation, so tightening the policy also covers destinations stored
+earlier.
+
+### Email delivery (optional)
+
+Email uses Cloudflare Email Routing and is **off unless you enable it**, because the binding fails
+the deploy on a zone that has not set Email Routing up — enabling it by default would break existing
+deployments. When the binding or `ALERT_EMAIL_FROM` is absent, an email destination records
+`email_unconfigured` and nothing else changes.
+
+To turn it on: enable Email Routing on the zone, verify the destination address, then add to
+`apps/server/wrangler.jsonc`:
+
+```jsonc
+"send_email": [{ "name": "SEND_EMAIL" }],
+"vars": { "ALERT_EMAIL_FROM": "facet@your-domain.example" }
+```
+
+> **Note:** `apps/server/wrangler.jsonc` is tracked with git's `skip-worktree` bit so a live
+> `database_id` never reaches the repository — the committed copy keeps
+> `PLACEHOLDER_D1_DATABASE_ID`. That means local edits to this file are **not staged or committed**.
+> Apply the block above to your own working copy; do not clear the bit to commit it, or you will push
+> your real database id. Check with `git ls-files -v apps/server/wrangler.jsonc` (a leading `S` means
+> the bit is set). `facet init` writes to this file — the database id and the route — which is exactly
+> what the bit exists for: the edits stay in your working copy and are never staged.
 
 ## Trust & provenance configuration
 

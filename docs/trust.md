@@ -16,23 +16,30 @@ shipped in the Node CLI instead — see [the split](#what-runs-where) below.
 
 ## What a deployment publishes
 
-All of these are unauthenticated GET endpoints (they describe the public deployment):
+Most of these are unauthenticated GET endpoints (they describe the public deployment); the two that
+write are admin- or key-authenticated:
 
-| Endpoint | What it is | Standard |
-| --- | --- | --- |
-| `/.well-known/security.txt` | Security contact + policy | RFC 9116 |
-| `/.well-known/jwks.json` | The deployment's signing public key(s) | RFC 7517 / 7638 (`kid` = JWK thumbprint) |
-| `/.well-known/did.json` | `did:web:<host>` DID document | W3C DID + Multikey |
-| `/.well-known/did-configuration.json` | Domain-linkage proof binding the DID to the origin | DIF Well-Known DID Configuration |
-| `/.well-known/facet-privacy.json` | Machine-readable privacy manifest | W3C DPV |
-| `/api/attestation/privacy` | Signed **PrivacyAttestationCredential** | W3C VC 2.0 Data Integrity (`eddsa-jcs-2022`) |
-| `/api/attestation/evidence` | Signed **RATS process-evidence EAT** (`?nonce=` for freshness) | EAT (RFC 9711) + `draft-condrey` / `draft-reddy` |
-| `/api/scitt/register` | Register a Signed Statement with the transparency log | IETF SCITT |
-| `/api/transparency/*` | The append-only MMR log + inclusion receipts | `draft-bryce-cose-receipts-mmr-profile` |
+| Endpoint | Method / auth | What it is | Standard |
+| --- | --- | --- | --- |
+| `/.well-known/security.txt` | GET, public | Your security contact + policy (`404` until you set `FACET_SECURITY_CONTACT`) | RFC 9116 |
+| `/.well-known/jwks.json` | GET, public | The deployment's signing public key(s) | RFC 7517 / 7638 (`kid` = JWK thumbprint) |
+| `/.well-known/did.json` | GET, public | `did:web:<host>` DID document | W3C DID + Multikey |
+| `/.well-known/did-configuration.json` | GET, public | Domain-linkage proof binding the DID to the origin | DIF Well-Known DID Configuration |
+| `/.well-known/facet-privacy.json` | GET, public | Machine-readable privacy manifest | W3C DPV |
+| `/api/attestation/privacy` | GET, public | Signed **PrivacyAttestationCredential** | W3C VC 2.0 Data Integrity (`eddsa-jcs-2022`) |
+| `/api/attestation/evidence` | GET, public | Signed **RATS process-evidence EAT** (`?nonce=` for freshness) | EAT (RFC 9711) + `draft-condrey` / `draft-reddy` |
+| `/api/scitt/register` | **POST, admin** | Register an arbitrary Signed Statement with the transparency log | IETF SCITT |
+| `/api/scitt/attestation` | **POST, admin** | Wrap the deployment's PrivacyAttestation as a Signed Statement and register it | IETF SCITT |
+| `/api/transparency/checkpoint`, `/consistency` | GET, public | Signed tree head + consistency proofs over the append-only MMR log | `draft-bryce-cose-receipts-mmr-profile` |
+| `/api/transparency/inclusion` | **GET, API key** | Inclusion receipt for one of the caller's own rollups (site-scoped) | `draft-bryce-cose-receipts-mmr-profile` |
 
 The signed endpoints require an Ed25519 signing key (see [Signing configuration](#signing-configuration));
-when no key is configured they return `501` / an empty JWKS and the deployment simply runs without
-provenance — every analytics feature works regardless.
+when no key is configured the deployment simply runs without provenance — every analytics feature
+works regardless. The unconfigured responses differ by endpoint: `/api/attestation/*` and
+`/api/scitt/*` return `501`, `/.well-known/did.json` and `/.well-known/did-configuration.json`
+return `404`, and `/.well-known/jwks.json` returns an empty key set. `/.well-known/security.txt` is
+separate: it needs no signing key, only a disclosure contact you choose (`FACET_SECURITY_CONTACT`),
+and returns `404` until you set one.
 
 ## Verifying a deployment
 
@@ -107,12 +114,15 @@ the signing **key**, which is supported above.
 
 ## Transparency (SCITT)
 
-Facet runs a local append-only transparency log — a Merkle Mountain Range profiled against
-`draft-bryce-cose-receipts-mmr-profile`, persisted in D1 — and issues real signed inclusion receipts
-(`/api/transparency/*`). Signed Statements can be registered locally (`/api/scitt/register`) or
-forwarded to an external SCITT Transparency Service by setting `SCITT_URL`; returned receipts are
-verified (signature + inclusion proof), not trusted blindly. Operating a *public* production SCITT
-service is an integration concern, not a service Facet hosts for you.
+Facet ships a **local Transparency-Service double**: an append-only log persisted in D1, a Merkle
+Mountain Range profiled against `draft-bryce-cose-receipts-mmr-profile`, and real signed inclusion
+receipts (`GET /api/transparency/checkpoint` and `/consistency` are public; `/inclusion` needs the
+site's API key). The receipts and proofs are genuine — the *service* is a double, not a production
+Transparency Service, and Facet does not operate a public log. Signed Statements are registered
+through `POST /api/scitt/register` (**admin token required**), and forwarded to an external SCITT
+Transparency Service when `SCITT_URL` is set; returned receipts are verified (signature + inclusion
+proof), not trusted blindly. Operating a *public* production SCITT service is an integration
+concern, not a service Facet hosts for you.
 
 ## What runs where
 
