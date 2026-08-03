@@ -3,13 +3,15 @@
 
 import type { EngagementSummary } from '@facet/shared';
 import type { ReactElement } from 'react';
-import { type MetricDirection, computeDelta, formatDuration, formatNumber } from '../lib/format.js';
+import {
+	type MetricDirection,
+	computeDelta,
+	exactHint,
+	formatDecimal,
+	formatDuration,
+	formatKpi,
+} from '../lib/format.js';
 import { KpiCard } from './KpiCard.js';
-
-const decimalFormat = new Intl.NumberFormat('en-US', {
-	minimumFractionDigits: 1,
-	maximumFractionDigits: 1,
-});
 
 export function EngagementCards({
 	engagement,
@@ -24,10 +26,18 @@ export function EngagementCards({
 		metric: number;
 		prev: number | undefined;
 		direction: MetricDirection;
+		hint?: string;
 	}[] = [
 		{
 			label: 'Sessions',
-			value: formatNumber(engagement.sessions),
+			// The only unbounded figure in this row of four, and the row shrinks to its widest member —
+			// so past six digits it abbreviates, with the exact count kept on the tile's tooltip. The
+			// other three are a percentage, a small decimal and a duration: all naturally short, and
+			// all values somebody quotes, so they stay exact.
+			value: formatKpi(engagement.sessions),
+			hint: exactHint(engagement.sessions)
+				? `${exactHint(engagement.sessions)} sessions`
+				: undefined,
 			metric: engagement.sessions,
 			prev: compare?.sessions,
 			direction: 'up',
@@ -41,7 +51,7 @@ export function EngagementCards({
 		},
 		{
 			label: 'Pages / Session',
-			value: decimalFormat.format(engagement.pages_per_session),
+			value: formatDecimal(engagement.pages_per_session),
 			metric: engagement.pages_per_session,
 			prev: compare?.pages_per_session,
 			direction: 'up',
@@ -62,6 +72,7 @@ export function EngagementCards({
 					key={card.label}
 					label={card.label}
 					value={card.value}
+					hint={card.hint}
 					delta={
 						card.prev != null
 							? computeDelta(card.metric, card.prev, card.direction)

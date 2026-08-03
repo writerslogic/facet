@@ -5,12 +5,17 @@
 // elevating widens the linkage window for returning-visitor/retention analysis but requires a
 // deployment signing key and visitor consent — and consent grants are server-to-server (site API key +
 // CMP), NOT a dashboard action. Server errors (501 signing-unconfigured, 404 site) get friendly copy.
+//
+// The tier control starts UNSET rather than on `anonymous`. Pre-selecting a real tier on a form with no
+// read-back is the trap here: the panel looked like it was reporting the site's current setting, when
+// in fact it knew nothing about it. An explicit "not read from the server" placeholder cannot be
+// mistaken for a reading, and it stops a stray submit from silently downgrading an elevated site.
 
 import type { IdentityTier, SaltWindow, SetIdentityInput } from '@facet/shared';
-import { ShieldCheck } from 'lucide-react';
+import { Info, ShieldCheck } from 'lucide-react';
 import { type FormEvent, type ReactElement, useState } from 'react';
 import { useSetIdentity } from '../../hooks/admin.js';
-import { MutationStatus, Panel } from './kit.js';
+import { BlockedReason, FormControls, MutationStatus, Panel, Select } from './kit.js';
 
 const TIERS: { value: IdentityTier; label: string; blurb: string }[] = [
 	{
@@ -54,7 +59,8 @@ export function IdentityPanel({
 }): ReactElement {
 	const setIdentity = useSetIdentity(token, siteId);
 
-	const [tier, setTier] = useState<IdentityTier>('anonymous');
+	// '' is "no tier chosen yet", not a tier the server understands — see the file header.
+	const [tier, setTier] = useState<IdentityTier | ''>('');
 	const [saltWindow, setSaltWindow] = useState<SaltWindow>('day');
 
 	// `anonymous` is always the day window (Tier 0); the server clamps it, and the UI mirrors that so the
@@ -62,95 +68,99 @@ export function IdentityPanel({
 	const anonymous = tier === 'anonymous';
 	const effectiveWindow: SaltWindow = anonymous ? 'day' : saltWindow;
 
-	function onTier(next: IdentityTier): void {
+	function onTier(next: IdentityTier | ''): void {
 		setTier(next);
 		if (next === 'anonymous') setSaltWindow('day');
 	}
 
 	function onSubmit(event: FormEvent): void {
 		event.preventDefault();
+		if (!tier) return;
 		const body: SetIdentityInput = { tier, salt_window: effectiveWindow };
 		setIdentity.mutate(body);
 	}
 
-	const activeBlurb = TIERS.find((t) => t.value === tier)?.blurb ?? '';
+	const activeBlurb = tier ? (TIERS.find((t) => t.value === tier)?.blurb ?? '') : '';
 	const applied = setIdentity.data?.identity ?? null;
 
 	return (
-		<Panel title="Identity & tier">
-			<p className="mb-4 text-xs leading-relaxed text-[color:var(--muted)]">
-				Controls how visitors are hashed. Anonymous is a daily-rotating hash with no linkage
-				and is recommended. Pseudonymous and identified widen the linkage window to enable
-				returning-visitor and retention analysis, but require a deployment signing key and
-				visitor consent. Consent grants are made server-to-server via the site&rsquo;s API
-				key and your CMP — never from this dashboard.
+		<Panel
+			title="Identity & tier"
+			description="Controls how visitors are hashed, and therefore what can be linked across visits."
+		>
+			<p className="alert-info mb-4 flex items-start gap-2 rounded-lg px-3 py-2 text-xs leading-relaxed">
+				<Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+				<span>
+					<strong>This form writes; it does not read.</strong> The API has no endpoint
+					that returns a site&rsquo;s current tier, so nothing below reflects what is
+					configured right now — submitting replaces whatever is set. Only the
+					confirmation after a successful save is a fact about the server.
+				</span>
 			</p>
 
-			<form onSubmit={onSubmit} className="space-y-3">
-				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<div>
-						<label
-							htmlFor="identity-tier"
-							className="block text-xs font-medium text-[color:var(--ink)]"
-						>
-							Tier
-						</label>
-						<select
+			<p className="mb-4 max-w-prose text-[color:var(--muted)] text-xs leading-relaxed">
+				Anonymous is a daily-rotating hash with no linkage and is recommended. Pseudonymous
+				and identified widen the linkage window to enable returning-visitor and retention
+				analysis, but require a deployment signing key and visitor consent. Consent grants
+				are made server-to-server via the site&rsquo;s API key and your CMP — never from
+				this dashboard.
+			</p>
+
+			<form onSubmit={onSubmit}>
+				<FormControls busy={setIdentity.isPending} className="space-y-3">
+					<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<Select
 							id="identity-tier"
+							label="Tier"
 							value={tier}
-							onChange={(e) => onTier(e.target.value as IdentityTier)}
-							className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
+							onChange={(next) => onTier(next as IdentityTier | '')}
 						>
+							<option value="">Choose a tier to apply…</option>
 							{TIERS.map((t) => (
 								<option key={t.value} value={t.value}>
 									{t.label}
 								</option>
 							))}
-						</select>
-					</div>
-					<div>
-						<label
-							htmlFor="identity-salt-window"
-							className="block text-xs font-medium text-[color:var(--ink)]"
-						>
-							Salt window
-						</label>
-						<select
+						</Select>
+						<Select
 							id="identity-salt-window"
+							label="Salt window"
 							value={effectiveWindow}
-							disabled={anonymous}
-							onChange={(e) => setSaltWindow(e.target.value as SaltWindow)}
-							className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))] disabled:bg-[color:rgb(var(--hover))] disabled:text-[color:var(--muted)]"
+							disabled={anonymous || !tier}
+							onChange={(next) => setSaltWindow(next as SaltWindow)}
+							hint={anonymous ? 'Anonymous forces the day window.' : undefined}
 						>
 							{SALT_WINDOWS.map((w) => (
 								<option key={w} value={w}>
 									{w}
 								</option>
 							))}
-						</select>
-						{anonymous ? (
-							<p className="mt-1 text-xs text-[color:var(--muted)]">
-								Anonymous forces the day window.
-							</p>
-						) : null}
+						</Select>
 					</div>
-				</div>
 
-				<p className="flex items-start gap-1.5 text-xs text-[color:var(--muted)]">
-					<ShieldCheck
-						className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--muted)]"
-						aria-hidden="true"
-					/>
-					<span>{activeBlurb}</span>
-				</p>
+					{activeBlurb ? (
+						<p className="flex items-start gap-1.5 text-[color:var(--muted)] text-xs">
+							<ShieldCheck
+								className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[color:var(--muted)]"
+								aria-hidden="true"
+							/>
+							<span>{activeBlurb}</span>
+						</p>
+					) : null}
 
-				<button
-					type="submit"
-					disabled={setIdentity.isPending}
-					className="rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-40"
-				>
-					Set identity
-				</button>
+					<div className="space-y-1">
+						<button
+							type="submit"
+							disabled={!tier}
+							className="btn-accent rounded-lg px-4 py-1.5 text-sm transition"
+						>
+							Set identity
+						</button>
+						<BlockedReason
+							reason={tier ? null : 'Choose a tier to apply to this site.'}
+						/>
+					</div>
+				</FormControls>
 			</form>
 
 			<MutationStatus
@@ -161,21 +171,17 @@ export function IdentityPanel({
 						? `Identity set to ${applied.tier} (${applied.salt_window} window).`
 						: null
 				}
+				pendingLabel="Applying identity config…"
 			/>
 			{setIdentity.error ? (
 				<p
 					role="alert"
 					aria-live="assertive"
-					className="mt-2 rounded-md bg-red-50 px-2 py-1 text-xs font-medium text-red-700"
+					className="alert-error mt-2 rounded-md px-2 py-1 font-medium text-xs"
 				>
 					{friendlyError(setIdentity.error)}
 				</p>
 			) : null}
-
-			<p className="mt-3 text-xs text-[color:var(--muted)]">
-				There is no read-back of the current config, so this form sets the tier rather than
-				reflecting it. The confirmation above shows the config the server just applied.
-			</p>
 		</Panel>
 	);
 }

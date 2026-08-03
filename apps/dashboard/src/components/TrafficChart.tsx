@@ -1,14 +1,39 @@
 // Time-series chart: a thin React wrapper around uPlot. Plots pageviews + visitors as area-filled
 // series with a hovering cursor, readable UTC date/number axes, and a subtle grid. Resizes with a
 // ResizeObserver. uPlot needs canvas; if the mount throws (e.g. under jsdom) it degrades gracefully.
+//
+// uPlot is ~145 kB of the bundle and is only needed once a chart actually mounts, so the library is
+// imported for its types only and its code is fetched on demand by `loadUPlot`. Its stylesheet stays a
+// static import: CSS is extracted into the separately-cached stylesheet, costs no JS, and having it
+// present up front stops the chart restyling a frame after it paints.
 
 import type { SeriesPoint } from '@facet/shared';
 import { type ReactElement, useEffect, useMemo, useRef } from 'react';
-import uPlot from 'uplot';
+import type uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
+import {
+	clockLabel,
+	clockZone,
+	formatDayShort,
+	formatStamp,
+	useClockMode,
+} from '../lib/datetime.js';
 import { formatCompact, formatNumber } from '../lib/format.js';
 import { type ThemeColors, useThemeColors } from '../theme.js';
 import { Card } from './Card.js';
+
+// uplot ships `export = uPlot` types over an ESM default export, so the constructor type comes from the
+// module type itself while the runtime value comes off `.default`.
+type UPlotCtor = typeof import('uplot');
+
+// One in-flight request shared by every chart on the page, so a board with several charts fetches the
+// library once and later mounts resolve on the next microtask.
+let uplotPending: Promise<UPlotCtor> | null = null;
+
+function loadUPlot(): Promise<UPlotCtor> {
+	uplotPending ??= import('uplot').then((m) => m.default);
+	return uplotPending;
+}
 
 /** A vertical event marker on the time axis (e.g. a detected anomaly). */
 export interface ChartAnnotation {
@@ -90,12 +115,7 @@ function annotationPlugin(get: () => ChartAnnotation[], mark: string): uPlot.Plu
 /** uPlot plugin: a floating hover readout (date + each series' exact value) that follows the cursor, so
  * the bare bento chart is explorable without the legend. Reads the hovered index from `u.cursor.idx`. */
 function tooltipPlugin(getEl: () => HTMLDivElement | null): uPlot.Plugin {
-	const fmtDate = (s: number): string =>
-		new Date(s * 1000).toLocaleDateString('en-US', {
-			month: 'short',
-			day: 'numeric',
-			timeZone: 'UTC',
-		});
+	const fmtDate = (s: number): string => formatDayShort(s * 1000);
 	return {
 		hooks: {
 			setCursor: (u: uPlot) => {
@@ -109,7 +129,7 @@ function tooltipPlugin(getEl: () => HTMLDivElement | null): uPlot.Plugin {
 				const t = u.data[0]?.[idx];
 				const pv = u.data[1]?.[idx];
 				const vis = u.data[2]?.[idx];
-				el.innerHTML = `<div class="mb-1 font-medium text-[11px] text-neutral-400">${t == null ? '' : fmtDate(t)}</div><div class="flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#f5f3ff"></span><span class="text-neutral-500">Pageviews</span><span class="tabular ml-auto font-semibold text-neutral-900">${pv == null ? '—' : formatNumber(pv)}</span></div><div class="mt-0.5 flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#818cf8"></span><span class="text-neutral-500">Visitors</span><span class="tabular ml-auto font-semibold text-neutral-900">${vis == null ? '—' : formatNumber(vis)}</span></div>`;
+				el.innerHTML = `<div class="mb-1 font-medium text-[11px] text-[color:var(--faint)]">${t == null ? '' : fmtDate(t)}</div><div class="flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#f5f3ff"></span><span class="text-[color:var(--muted)]">Pageviews</span><span class="tabular ml-auto font-semibold text-[color:var(--ink)]">${pv == null ? '—' : formatNumber(pv)}</span></div><div class="mt-0.5 flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#818cf8"></span><span class="text-[color:var(--muted)]">Visitors</span><span class="tabular ml-auto font-semibold text-[color:var(--ink)]">${vis == null ? '—' : formatNumber(vis)}</span></div>`;
 				const left = u.cursor.left;
 				const flip = left > u.width / 2;
 				el.style.opacity = '1';
@@ -214,6 +234,9 @@ function ChartCanvas({
 	const containerRef = useRef<HTMLDivElement>(null);
 	const tooltipRef = useRef<HTMLDivElement>(null);
 	const chartRef = useRef<uPlot | null>(null);
+	// A clock change alters the axis ticks, so the canvas has to be rebuilt — hence a dep below rather
+	// than a redraw. Toggling the clock is a deliberate, rare action; a chart rebuild is affordable.
+	const clock = useClockMode();
 	const annotationsRef = useRef(annotations);
 	annotationsRef.current = annotations;
 	const data = useMemo(() => buildData(series, trend), [series, trend]);
@@ -267,135 +290,160 @@ function ChartCanvas({
 	useEffect(() => {
 		const container = containerRef.current;
 		if (!container) return;
-		// Colours come from the active theme: pageviews on the primary data hue, visitors on the secondary,
-		// anomalies on the accent, over a faint token grid.
-		// Pageviews take the chosen accent (resolved to a concrete colour — canvas can't read var()); the
-		// other series keep the theme's secondary/accent hues.
-		const accentHex = accent ? resolveVar(container, accent) : null;
-		const pvColor = accentHex ?? colors.d1;
-		const P: Palette = {
-			ink: pvColor,
-			accent: colors.d2,
-			mark: colors.d3,
-			axis: colors.faint,
-			grid: colors.grid,
-			pvFill: [hexA(pvColor, 0.22), hexA(pvColor, 0)],
-			visFill: [hexA(colors.d2, 0.3), hexA(colors.d2, 0)],
-		};
-		const chartHeight = (): number =>
-			fillHeight && container.clientHeight > 0 ? container.clientHeight : height;
-
-		// Per-variant path builders: bars → grouped bars, smooth → splines, area/line → default linear.
-		const bars = uPlot.paths?.bars?.({ size: [0.68, 60] });
-		const spline = uPlot.paths?.spline?.();
-		const filled = variant === 'area' || variant === 'smooth';
-		const areaFill =
-			(from: string, to: string) =>
-			(u: uPlot): CanvasGradient =>
-				fill(u.ctx, from, to, u.bbox.top + u.bbox.height);
-
-		const seriesCfg: uPlot.Series[] = [
-			{
-				value: (_u, v) => (v == null ? '—' : new Date(v * 1000).toUTCString()),
-			},
-			{
-				label: 'Pageviews',
-				stroke: P.ink,
-				width: variant === 'bars' ? 0 : 2.25,
-				fill:
-					variant === 'bars'
-						? areaFill(hexA(pvColor, 0.6), hexA(pvColor, 0.2))
-						: filled
-							? areaFill(P.pvFill[0], P.pvFill[1])
-							: undefined,
-				paths: variant === 'bars' ? bars : variant === 'smooth' ? spline : undefined,
-				points: { show: false },
-				value: (_u, v) => (v == null ? '—' : formatNumber(v)),
-			},
-			{
-				label: 'Visitors',
-				stroke: P.accent,
-				width: 2.25,
-				fill: filled ? areaFill(P.visFill[0], P.visFill[1]) : undefined,
-				paths: variant === 'smooth' ? spline : undefined,
-				points: { show: false },
-				value: (_u, v) => (v == null ? '—' : formatNumber(v)),
-			},
-		];
-		if (trend) {
-			// A dashed trailing-average overlay of pageviews, so the trend reads through day-to-day noise.
-			seriesCfg.push({
-				label: 'Trend',
-				stroke: 'rgba(255,255,255,0.5)',
-				width: 1.5,
-				dash: [5, 4],
-				points: { show: false },
-				value: (_u, v) => (v == null ? '—' : formatNumber(v)),
-			});
-		}
-
-		const opts: uPlot.Options = {
-			width: container.clientWidth || 640,
-			height: chartHeight(),
-			padding: [12, 8, 0, 8],
-			plugins: [
-				annotationPlugin(() => annotationsRef.current, P.mark),
-				...(fillHeight ? [tooltipPlugin(() => tooltipRef.current)] : []),
-			],
-			cursor: {
-				y: false,
-				// A bold hover marker: a filled ring at the hovered value on each series.
-				points: { size: 9, width: 2 },
-				// Drag-to-zoom the time axis only in the expanded hero (compact click expands the tile);
-				// uPlot's built-in double-click resets the zoom.
-				drag: zoomable ? { x: true, y: false } : { x: false, y: false, setScale: false },
-			},
-			legend: { show: !fillHeight, live: true },
-			series: seriesCfg,
-			axes: [
-				{
-					stroke: P.axis,
-					grid: { show: false },
-					ticks: { stroke: P.grid, size: 4 },
-					font: '11px Inter, sans-serif',
-					space: 64,
-				},
-				{
-					stroke: P.axis,
-					grid: { stroke: P.grid, width: 1 },
-					ticks: { show: false },
-					font: '11px Inter, sans-serif',
-					size: 44,
-					values: (_u, splits) => splits.map((v) => formatCompact(v)),
-				},
-			],
-			// Log scale clamps to positive values (uPlot handles zero buckets by flooring them).
-			scales: {
-				x: { time: true },
-				y: { distr: scale === 'log' ? 3 : 1 },
-			},
-		};
-
+		// The chart is built once uPlot's chunk lands. Everything the cleanup has to undo is declared
+		// here so it is reachable whether or not the build has run by the time the effect tears down.
+		let disposed = false;
 		let chart: uPlot | null = null;
-		try {
-			chart = new uPlot(opts, dataRef.current, container);
-		} catch {
-			return;
-		}
-		chartRef.current = chart;
+		let observer: ResizeObserver | null = null;
 
-		const observer = new ResizeObserver((entries) => {
-			const entry = entries[0];
-			if (entry && chart)
-				chart.setSize({
-					width: entry.contentRect.width,
+		void loadUPlot()
+			.then((UPlot) => {
+				if (disposed) return;
+				// Colours come from the active theme: pageviews on the primary data hue, visitors on the secondary,
+				// anomalies on the accent, over a faint token grid.
+				// Pageviews take the chosen accent (resolved to a concrete colour — canvas can't read var()); the
+				// other series keep the theme's secondary/accent hues.
+				const accentHex = accent ? resolveVar(container, accent) : null;
+				const pvColor = accentHex ?? colors.d1;
+				const P: Palette = {
+					ink: pvColor,
+					accent: colors.d2,
+					mark: colors.d3,
+					axis: colors.faint,
+					grid: colors.grid,
+					pvFill: [hexA(pvColor, 0.22), hexA(pvColor, 0)],
+					visFill: [hexA(colors.d2, 0.3), hexA(colors.d2, 0)],
+				};
+				const chartHeight = (): number =>
+					fillHeight && container.clientHeight > 0 ? container.clientHeight : height;
+
+				// Per-variant path builders: bars → grouped bars, smooth → splines, area/line → default linear.
+				const bars = UPlot.paths?.bars?.({ size: [0.68, 60] });
+				const spline = UPlot.paths?.spline?.();
+				const filled = variant === 'area' || variant === 'smooth';
+				const areaFill =
+					(from: string, to: string) =>
+					(u: uPlot): CanvasGradient =>
+						fill(u.ctx, from, to, u.bbox.top + u.bbox.height);
+
+				const seriesCfg: uPlot.Series[] = [
+					{
+						// The legend's x readout: the reader's clock, and named, so a bucket can be
+						// matched against a server log without guessing which timezone it is in.
+						value: (_u, v) => (v == null ? '—' : formatStamp(v * 1000)),
+					},
+					{
+						label: 'Pageviews',
+						stroke: P.ink,
+						width: variant === 'bars' ? 0 : 2.25,
+						fill:
+							variant === 'bars'
+								? areaFill(hexA(pvColor, 0.6), hexA(pvColor, 0.2))
+								: filled
+									? areaFill(P.pvFill[0], P.pvFill[1])
+									: undefined,
+						paths:
+							variant === 'bars' ? bars : variant === 'smooth' ? spline : undefined,
+						points: { show: false },
+						value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+					},
+					{
+						label: 'Visitors',
+						stroke: P.accent,
+						width: 2.25,
+						fill: filled ? areaFill(P.visFill[0], P.visFill[1]) : undefined,
+						paths: variant === 'smooth' ? spline : undefined,
+						points: { show: false },
+						value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+					},
+				];
+				if (trend) {
+					// A dashed trailing-average overlay of pageviews, so the trend reads through day-to-day noise.
+					seriesCfg.push({
+						label: 'Trend',
+						stroke: 'rgba(255,255,255,0.5)',
+						width: 1.5,
+						dash: [5, 4],
+						points: { show: false },
+						value: (_u, v) => (v == null ? '—' : formatNumber(v)),
+					});
+				}
+
+				const opts: uPlot.Options = {
+					width: container.clientWidth || 640,
 					height: chartHeight(),
+					padding: [12, 8, 0, 8],
+					// The x-axis TICKS were the quietest instance of the two-clocks bug: uPlot's time
+					// axis renders in the browser's timezone by default, so the ticks were local while
+					// the readout above them said UTC. Both now follow the reader's chosen clock.
+					...(clock === 'utc'
+						? { tzDate: (ts: number) => UPlot.tzDate(new Date(ts * 1000), 'Etc/UTC') }
+						: {}),
+					plugins: [
+						annotationPlugin(() => annotationsRef.current, P.mark),
+						...(fillHeight ? [tooltipPlugin(() => tooltipRef.current)] : []),
+					],
+					cursor: {
+						y: false,
+						// A bold hover marker: a filled ring at the hovered value on each series.
+						points: { size: 9, width: 2 },
+						// Drag-to-zoom the time axis only in the expanded hero (compact click expands the tile);
+						// uPlot's built-in double-click resets the zoom.
+						drag: zoomable
+							? { x: true, y: false }
+							: { x: false, y: false, setScale: false },
+					},
+					legend: { show: !fillHeight, live: true },
+					series: seriesCfg,
+					axes: [
+						{
+							stroke: P.axis,
+							grid: { show: false },
+							ticks: { stroke: P.grid, size: 4 },
+							font: '11px Inter, sans-serif',
+							space: 64,
+						},
+						{
+							stroke: P.axis,
+							grid: { stroke: P.grid, width: 1 },
+							ticks: { show: false },
+							font: '11px Inter, sans-serif',
+							size: 44,
+							values: (_u, splits) => splits.map((v) => formatCompact(v)),
+						},
+					],
+					// Log scale clamps to positive values (uPlot handles zero buckets by flooring them).
+					scales: {
+						x: { time: true },
+						y: { distr: scale === 'log' ? 3 : 1 },
+					},
+				};
+
+				try {
+					chart = new UPlot(opts, dataRef.current, container);
+				} catch {
+					return;
+				}
+				chartRef.current = chart;
+
+				observer = new ResizeObserver((entries) => {
+					const entry = entries[0];
+					if (entry && chart)
+						chart.setSize({
+							width: entry.contentRect.width,
+							height: chartHeight(),
+						});
 				});
-		});
-		observer.observe(container);
+				observer.observe(container);
+			})
+			.catch(() => {
+				// The chunk could not be fetched. The container stays empty rather than throwing, and the
+				// surrounding Card / tile chrome (title, legend, empty + error states) still renders.
+			});
 
 		return () => {
-			observer.disconnect();
+			disposed = true;
+			observer?.disconnect();
 			chart?.destroy();
 			chartRef.current = null;
 		};
@@ -414,6 +462,7 @@ function ChartCanvas({
 		trend,
 		accent,
 		zoomable,
+		clock,
 	]);
 
 	return (
@@ -424,11 +473,14 @@ function ChartCanvas({
 					? 'uplot-container chart-hero relative h-full w-full'
 					: 'uplot-container w-full'
 			}
+			// uPlot now arrives a tick after mount, so the box it will occupy is reserved up front and
+			// nothing below the chart jumps when it lands. `fillHeight` is already sized by its parent.
+			style={fillHeight ? undefined : { minHeight: height }}
 		>
 			{fillHeight ? (
 				<div
 					ref={tooltipRef}
-					className="pointer-events-none absolute top-0 left-0 z-20 rounded-lg border border-neutral-200/70 bg-[color:rgb(var(--hover))] px-2.5 py-2 opacity-0 shadow-float ring-1 ring-neutral-900/5 backdrop-blur transition-opacity duration-100"
+					className="pointer-events-none absolute top-0 left-0 z-20 rounded-lg border border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] px-2.5 py-2 opacity-0 shadow-float ring-1 ring-[color:rgb(var(--border))] backdrop-blur transition-opacity duration-100"
 					aria-hidden="true"
 				/>
 			) : null}
@@ -451,10 +503,15 @@ export function TrafficChart({
 	zoomable = false,
 }: TrafficChartProps): ReactElement {
 	const colors = useThemeColors();
+	// The header states the clock, so it has to re-render when the clock changes.
+	useClockMode();
 	if (bare) {
 		return series.length === 0 ? (
-			<div className="flex h-full items-center justify-center text-sm text-[color:var(--faint)]">
-				No data yet
+			// "No data yet" said nothing a reader did not already know. An empty series here is a
+			// statement about the SELECTED RANGE, and naming that is what tells someone whether to
+			// widen the range or go looking for a broken snippet.
+			<div className="flex h-full items-center justify-center px-4 text-center text-[color:var(--faint)] text-sm">
+				No traffic recorded in the selected range
 			</div>
 		) : (
 			<ChartCanvas
@@ -474,28 +531,28 @@ export function TrafficChart({
 	return (
 		<Card>
 			<div className="mb-4 flex items-center justify-between">
-				<h3 className="text-[13px] font-semibold uppercase tracking-wide text-neutral-500">
+				<h3 className="text-[13px] font-semibold uppercase tracking-wide text-[color:var(--muted)]">
 					{title}
 				</h3>
-				<div className="flex items-center gap-3 text-xs text-neutral-400">
+				<div className="flex items-center gap-3 text-xs text-[color:var(--faint)]">
 					{annotations.length > 0 ? (
 						<span className="inline-flex items-center gap-1">
-							<span className="inline-block h-2 w-2 rounded-full bg-rose-500" />
+							<span className="inline-block h-2 w-2 rounded-full bg-[color:var(--neg)]" />
 							Anomaly
 						</span>
 					) : null}
-					<span>UTC</span>
+					<span title={`All times on this chart are ${clockZone()}`}>{clockLabel()}</span>
 				</div>
 			</div>
 			{loading ? (
 				<div
-					className="w-full animate-pulse rounded-xl bg-neutral-100"
+					className="w-full animate-pulse rounded-xl bg-[color:rgb(var(--hover))]"
 					style={{ height }}
 					aria-hidden="true"
 				/>
 			) : error ? (
 				<div
-					className="flex items-center justify-center text-sm text-red-600"
+					className="flex items-center justify-center text-sm text-neg"
 					style={{ height }}
 					role="alert"
 				>
@@ -503,10 +560,13 @@ export function TrafficChart({
 				</div>
 			) : series.length === 0 ? (
 				<div
-					className="flex items-center justify-center text-sm text-neutral-400"
+					className="flex flex-col items-center justify-center gap-1 px-4 text-center text-[color:var(--faint)] text-sm"
 					style={{ height }}
 				>
-					No data yet
+					<span>No traffic recorded in the selected range</span>
+					<span className="text-xs">
+						Widen the date range, or drop the segment filter if one is applied.
+					</span>
 				</div>
 			) : (
 				<ChartCanvas

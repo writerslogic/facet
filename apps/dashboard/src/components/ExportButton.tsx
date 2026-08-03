@@ -3,9 +3,10 @@
 
 import type { Interval } from '@facet/shared';
 import { Download } from 'lucide-react';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useId, useRef, useState } from 'react';
 import { cn } from '../lib/cn.js';
 import { type ExportKind, downloadExport } from '../lib/download.js';
+import { usePopoverDismiss } from '../lib/usePopoverDismiss.js';
 import type { Range } from '../state.js';
 
 const BREAKDOWN_DIMENSIONS = [
@@ -34,15 +35,12 @@ export function ExportButton({
 	const [busy, setBusy] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const ref = useRef<HTMLDivElement>(null);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const menuId = useId();
 
-	useEffect(() => {
-		if (!open) return;
-		function onDoc(ev: MouseEvent): void {
-			if (ref.current && !ref.current.contains(ev.target as Node)) setOpen(false);
-		}
-		document.addEventListener('mousedown', onDoc);
-		return () => document.removeEventListener('mousedown', onDoc);
-	}, [open]);
+	// Was outside-click only: Escape did not close it and focus never returned to the trigger.
+	const close = useCallback(() => setOpen(false), []);
+	usePopoverDismiss(open, close, ref, triggerRef);
 
 	async function run(kind: ExportKind, dimension?: string): Promise<void> {
 		setBusy(true);
@@ -68,9 +66,12 @@ export function ExportButton({
 	return (
 		<div className="relative" ref={ref}>
 			<button
+				ref={triggerRef}
 				type="button"
 				disabled={!siteId || busy}
 				aria-expanded={open}
+				aria-haspopup="menu"
+				aria-controls={open ? menuId : undefined}
 				onClick={() => setOpen((v) => !v)}
 				className={cn(
 					'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50',
@@ -84,29 +85,41 @@ export function ExportButton({
 			</button>
 			{open ? (
 				<div className="absolute right-0 z-20 mt-2 w-56 rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-1.5 shadow-lg">
-					<button
-						type="button"
-						onClick={() => run('series')}
-						className="block w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]"
-					>
-						Time series
-					</button>
-					<div className="my-1 border-t border-[color:rgb(var(--border))]" />
-					<p className="px-3 py-1 text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]">
-						Breakdown
-					</p>
-					{BREAKDOWN_DIMENSIONS.map((d) => (
+					{/* The trigger says aria-haspopup="menu", so this has to actually be one, and it
+					    may own nothing but menuitems — the error line therefore lives outside it. The
+					    breakdown items also need names that stand alone: "Top pages" on its own reads
+					    as a link to a report, not as "export a breakdown by page". */}
+					<div id={menuId} role="menu" aria-label="Export CSV">
 						<button
-							key={d.value}
 							type="button"
-							onClick={() => run('breakdown', d.value)}
+							role="menuitem"
+							onClick={() => run('series')}
 							className="block w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]"
 						>
-							{d.label}
+							Time series
 						</button>
-					))}
+						<hr className="my-1 border-[color:rgb(var(--border))] border-t" />
+						<p
+							role="presentation"
+							className="px-3 py-1 text-xs font-medium uppercase tracking-wide text-[color:var(--muted)]"
+						>
+							Breakdown
+						</p>
+						{BREAKDOWN_DIMENSIONS.map((d) => (
+							<button
+								key={d.value}
+								type="button"
+								role="menuitem"
+								aria-label={`Breakdown by ${d.label}`}
+								onClick={() => run('breakdown', d.value)}
+								className="block w-full rounded-lg px-3 py-2 text-left text-sm text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]"
+							>
+								{d.label}
+							</button>
+						))}
+					</div>
 					{error ? (
-						<p role="alert" className="px-3 py-1.5 text-xs text-red-600">
+						<p role="alert" className="px-3 py-1.5 text-neg text-xs">
 							Export failed: {error}
 						</p>
 					) : null}

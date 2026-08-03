@@ -24,7 +24,7 @@ const SPAN_LG: Record<SizeKey, Span> = {
 	lg: [3, 2],
 	short: [3, 1],
 	tall: [3, 3],
-	wide: [6, 2],
+	wide: [6, 3],
 	xl: [4, 3],
 };
 const SPAN_SM: Record<SizeKey, Span> = {
@@ -33,8 +33,8 @@ const SPAN_SM: Record<SizeKey, Span> = {
 	md: [1, 1],
 	lg: [2, 1],
 	short: [2, 1],
-	tall: [2, 1],
-	wide: [2, 1],
+	tall: [2, 2],
+	wide: [2, 2],
 	xl: [2, 2],
 };
 
@@ -162,33 +162,24 @@ export function useColumns(ref: RefObject<HTMLElement | null>): number {
 	return cols;
 }
 
-/** The resting per-row minimum height (px). Rows want a comfortable ~5rem floor, but the board must never
- * scroll: once `rowCount` floors would exceed the available height we shrink the floor so every row still
- * divides the viewport (tiles degrade via their container queries rather than spilling below the fold).
- * Measured from the grid element itself, which is flex-sized (height independent of the floor) so there is
- * no feedback loop. */
-export function useRowFloor(
-	ref: RefObject<HTMLElement | null>,
-	rowCount: number,
-	gap = 12,
-): string {
-	const [floor, setFloor] = useState('5rem');
-	useEffect(() => {
-		const el = ref.current;
-		if (!el) return;
-		const measure = (): void => {
-			const h = el.clientHeight;
-			if (h <= 0) return;
-			const per = (h - (rowCount - 1) * gap) / rowCount;
-			setFloor(`${Math.max(0, Math.min(80, Math.floor(per)))}px`);
-		};
-		measure();
-		const ro = new ResizeObserver(measure);
-		ro.observe(el);
-		return () => ro.disconnect();
-	}, [ref, rowCount, gap]);
-	return floor;
-}
+/**
+ * The resting per-row minimum height. This is a GENUINE minimum, not a divide-to-fit.
+ *
+ * It used to be `viewportHeight / rowCount`, which guaranteed the board never scrolled — and which
+ * silently became the board's biggest rendering defect as tiles were added. At fourteen rows the floor
+ * collapsed to 44px, so a one-row KPI tile had 12px of content box for a 34px readout and every chart
+ * lost roughly half the height it was drawn against. A board that fits by clipping does not fit.
+ *
+ * Rows are `minmax(floor, 1fr)` inside a flex-sized grid, so while the floors add up to less than the
+ * available height the `1fr` still distributes it exactly as before — nothing changes in the case the
+ * old behaviour was protecting. Past that point the grid scrolls INTERNALLY (the page still never
+ * scrolls), which is the honest outcome: five legible rows you scroll beat fourteen you cannot read.
+ *
+ * 88px is the smallest row in which the shortest tile (`kpi`, one row) fits its label, its 2rem
+ * numeral and its delta badge inside the tile's own 16px padding — measured, with ~6px of slack for
+ * a longer badge. It is the tightest slot on the board, so it is the one that sets the floor.
+ */
+export const ROW_FLOOR = '88px';
 
 /** True when the container is too narrow for the elastic grid to stay legible — below this the board
  * switches to a full-size box carousel. */

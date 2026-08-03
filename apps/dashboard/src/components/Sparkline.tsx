@@ -35,11 +35,15 @@ export function Sparkline({
 	if (values.length < 2) return null;
 	const max = Math.max(...values);
 	const min = Math.min(...values);
+	// A constant series has no span to normalise against. Falling back to span = 1 put every point at
+	// (v - min) / 1 = 0, i.e. a flat line glued to the BOTTOM edge — which reads as "this metric is at
+	// zero" when it may be steady at any value. Centre it instead: flat is flat, not floored.
+	const flat = max === min;
 	const span = max - min || 1;
 	const step = width / (values.length - 1);
 	const coords = values.map((v, i) => {
 		const x = i * step;
-		const y = height - ((v - min) / span) * (height - 2) - 1;
+		const y = flat ? height / 2 : height - ((v - min) / span) * (height - 2) - 1;
 		return [x, y] as const;
 	});
 	const line = coords.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');

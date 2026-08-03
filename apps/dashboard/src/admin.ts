@@ -91,6 +91,24 @@ export function useAdmin(): AdminStore {
 	return store;
 }
 
+/** The server's 401 code from requireAdmin. Surfaced by adminFetch/adminPost/adminPatch as-is. */
+export const INVALID_ADMIN_TOKEN = 'invalid_admin_token';
+
+export function isAdminAuthError(error: unknown): boolean {
+	return error instanceof Error && error.message === INVALID_ADMIN_TOKEN;
+}
+
+/**
+ * Retry policy for admin queries. React Query's default retries three times with backoff, so one
+ * wrong or rotated ADMIN_TOKEN meant every panel re-sent the rejected credential three more times
+ * before saying anything — noisy against the server and several seconds of silence for the operator.
+ * A rejected token will not become valid by asking again, so auth failures fail immediately.
+ */
+export function adminQueryRetry(failureCount: number, error: unknown): boolean {
+	if (isAdminAuthError(error)) return false;
+	return failureCount < 2;
+}
+
 /** GET/DELETE helper for admin endpoints only. Refuses non-admin paths so the token can't leak. */
 export async function adminFetch<T>(
 	path: string,

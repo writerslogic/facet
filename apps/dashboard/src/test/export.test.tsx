@@ -52,7 +52,7 @@ describe('ExportButton', () => {
 		);
 
 		fireEvent.click(screen.getByRole('button', { name: /Export CSV/ }));
-		fireEvent.click(screen.getByRole('button', { name: 'Time series' }));
+		fireEvent.click(screen.getByRole('menuitem', { name: 'Time series' }));
 
 		await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
 		const [url, init] = fetchMock.mock.calls[0] ?? [];

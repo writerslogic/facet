@@ -6,11 +6,19 @@ import { useQuery } from '@tanstack/react-query';
 import { apiFetch, qs } from '../api.js';
 import type { Range } from '../state.js';
 
-export function useStats(apiKey: string, query: StatsQuery) {
+/**
+ * The stats read. `enabled` is the caller's own gate, ANDed with the API key.
+ *
+ * It exists because the key alone is not enough to know the request is sendable: a caller whose
+ * window is derived from another response (the Realtime tab's trailing window, say) has no range on
+ * first render, and `start=0&end=0` is rejected by the server's `assertRange` with a 400 `bad_range`.
+ * Such a caller passes its own readiness here rather than forking a private copy of this hook.
+ */
+export function useStats(apiKey: string, query: StatsQuery, enabled = true) {
 	return useQuery({
 		queryKey: ['stats', query],
 		queryFn: () => apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, apiKey),
-		enabled: Boolean(apiKey),
+		enabled: Boolean(apiKey) && enabled,
 		// Keep the prior data on screen while the next query loads so a range/filter change never drops
 		// back to the BentoSkeleton (isLoading stays false; isPlaceholderData flags the swap). Scoped to
 		// the same site: switching sites must NOT flash the previous site's numbers under the new label,
@@ -32,7 +40,7 @@ export function useCompareStats(apiKey: string, query: StatsQuery, enabled: bool
 }
 
 /** Session-materialization freshness for a site/range, sourced from the main stats endpoint. */
-export function useFreshness(apiKey: string, siteId: string, range: Range) {
+export function useFreshness(apiKey: string, siteId: string, range: Range, enabled = true) {
 	return useQuery({
 		queryKey: ['freshness', siteId, range],
 		queryFn: async (): Promise<Freshness | null> => {
@@ -42,6 +50,6 @@ export function useFreshness(apiKey: string, siteId: string, range: Range) {
 			);
 			return res.meta ?? null;
 		},
-		enabled: Boolean(apiKey && siteId),
+		enabled: Boolean(apiKey && siteId) && enabled && range.end > range.start,
 	});
 }

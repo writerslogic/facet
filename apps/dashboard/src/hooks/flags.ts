@@ -5,13 +5,16 @@
 
 import type { FlagInput, FlagRecord } from '@facet/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { adminFetch, adminPatch, adminPost } from '../admin.js';
+import { adminFetch, adminPatch, adminPost, adminQueryRetry } from '../admin.js';
 
 export function useAdminFlags(token: string, siteId: string) {
 	return useQuery({
 		queryKey: ['admin', 'flags', siteId],
 		queryFn: () => adminFetch<{ flags: FlagRecord[] }>(`/api/flags?site_id=${siteId}`, token),
 		enabled: Boolean(token && siteId),
+		// Match the other admin queries: a refused admin token is never retried. Without this, a
+		// rotated or mistyped secret is re-sent three more times before the error surfaces.
+		retry: adminQueryRetry,
 	});
 }
 

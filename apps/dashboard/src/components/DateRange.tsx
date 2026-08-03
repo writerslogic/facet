@@ -2,8 +2,9 @@
 // the 90-day server max), and a "compare with previous period" toggle. All timestamps are UTC.
 
 import { CalendarRange } from 'lucide-react';
-import { type ReactElement, useEffect, useRef, useState } from 'react';
+import { type ReactElement, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { cn } from '../lib/cn.js';
+import { usePopoverDismiss } from '../lib/usePopoverDismiss.js';
 import {
 	RANGE_PRESETS,
 	type RangePreset,
@@ -20,8 +21,13 @@ const LABELS: Record<RangePreset, string> = {
 	'90d': '90d',
 };
 
-function CustomPopover({ onClose }: { onClose: () => void }): ReactElement {
+function CustomPopover({ id, onClose }: { id: string; onClose: () => void }): ReactElement {
 	const { selection, range, setCustomRange } = useDashboard();
+	const startRef = useRef<HTMLInputElement>(null);
+	// Land on the first field when the popover opens; Escape then hands focus back to the trigger.
+	useEffect(() => {
+		startRef.current?.focus();
+	}, []);
 	const [start, setStart] = useState(() =>
 		formatDateInput(selection.kind === 'custom' ? selection.start : range.start),
 	);
@@ -43,16 +49,26 @@ function CustomPopover({ onClose }: { onClose: () => void }): ReactElement {
 	}
 
 	return (
-		<div className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-4 shadow-lg">
-			<p className="mb-2 text-xs font-medium text-[color:var(--muted)]">Custom range (UTC)</p>
+		// A named group, not a bare div: the two date fields and the two actions are one control, and
+		// "Custom range (UTC)" is the only thing that says what applying them will do.
+		<fieldset
+			id={id}
+			className="absolute right-0 z-20 mt-2 w-72 rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-4 shadow-lg"
+		>
+			<legend className="mb-2 font-medium text-[color:var(--muted)] text-xs">
+				Custom range (UTC)
+			</legend>
 			<div className="flex flex-col gap-3">
 				<label className="text-xs font-medium text-[color:var(--ink)]">
 					Start
+					{/* `.input` rather than the hand-rolled border: these two were the last controls off
+					    the token, so they kept a ~1.2:1 boundary and a hardcoded accent focus ring. */}
 					<input
+						ref={startRef}
 						type="date"
 						value={start}
 						onChange={(ev) => setStart(ev.target.value)}
-						className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-2.5 py-1.5 text-sm text-[color:var(--ink)] outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+						className="input mt-1 block w-full rounded-lg px-2.5 py-1.5 text-sm"
 					/>
 				</label>
 				<label className="text-xs font-medium text-[color:var(--ink)]">
@@ -61,12 +77,12 @@ function CustomPopover({ onClose }: { onClose: () => void }): ReactElement {
 						type="date"
 						value={end}
 						onChange={(ev) => setEnd(ev.target.value)}
-						className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-2.5 py-1.5 text-sm text-[color:var(--ink)] outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500"
+						className="input mt-1 block w-full rounded-lg px-2.5 py-1.5 text-sm"
 					/>
 				</label>
 			</div>
 			{error ? (
-				<p role="alert" className="mt-2 text-xs text-red-600">
+				<p role="alert" className="mt-2 text-xs text-neg">
 					{error}
 				</p>
 			) : null}
@@ -81,12 +97,12 @@ function CustomPopover({ onClose }: { onClose: () => void }): ReactElement {
 				<button
 					type="button"
 					onClick={apply}
-					className="rounded-lg bg-accent-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-700"
+					className="rounded-lg btn-accent px-3 py-1.5 text-sm"
 				>
 					Apply
 				</button>
 			</div>
-		</div>
+		</fieldset>
 	);
 }
 
@@ -94,16 +110,14 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 	const { preset, setPreset, selection } = useDashboard();
 	const [open, setOpen] = useState(false);
 	const ref = useRef<HTMLDivElement>(null);
+	const triggerRef = useRef<HTMLButtonElement>(null);
+	const popoverId = useId();
 	const isCustom = selection.kind === 'custom';
 
-	useEffect(() => {
-		if (!open) return;
-		function onDoc(ev: MouseEvent): void {
-			if (ref.current && !ref.current.contains(ev.target as Node)) setOpen(false);
-		}
-		document.addEventListener('mousedown', onDoc);
-		return () => document.removeEventListener('mousedown', onDoc);
-	}, [open]);
+	// Shared dismissal: this popover only closed on an outside click, so a keyboard user who opened it
+	// had no way to back out — Escape did nothing and the trigger never got focus back.
+	const close = useCallback(() => setOpen(false), []);
+	usePopoverDismiss(open, close, ref, triggerRef);
 
 	const customLabel = isCustom
 		? `${formatDateInput(selection.start)} → ${formatDateInput(selection.end)}`
@@ -111,7 +125,10 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 
 	return (
 		<div className="flex flex-wrap items-center gap-2">
-			<div
+			{/* The four presets are one control with four states; without a group name they read to a
+			    screen reader as four unrelated toggles called "24h", "7d", "30d", "90d". */}
+			<fieldset
+				aria-label="Date range preset"
 				className={cn(
 					'inline-flex rounded-lg border p-0.5',
 					dark
@@ -125,11 +142,13 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 						type="button"
 						aria-pressed={preset === option}
 						onClick={() => setPreset(option)}
+						// No focus:outline-none: it beat the shell's token outline and left only a
+						// 40%-alpha ring, which measures 1.5–2.3:1 depending on the palette.
 						className={cn(
-							'tabular rounded-md px-3 py-1 text-sm font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
+							'tabular rounded-md px-3 py-1 text-sm font-semibold transition',
 							preset === option
 								? dark
-									? 'bg-accent-500/25 text-accent-100 ring-1 ring-accent-400/30'
+									? 'chip-active ring-1'
 									: 'bg-[var(--panel)] text-accent-700 shadow-sm ring-1 ring-[color:rgb(var(--border))]'
 								: dark
 									? 'text-[color:var(--muted)] hover:text-[color:var(--ink)]'
@@ -139,18 +158,20 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 						{LABELS[option]}
 					</button>
 				))}
-			</div>
+			</fieldset>
 
 			<div className="relative" ref={ref}>
 				<button
+					ref={triggerRef}
 					type="button"
 					aria-pressed={isCustom}
 					aria-expanded={open}
+					aria-controls={open ? popoverId : undefined}
 					onClick={() => setOpen((v) => !v)}
 					className={cn(
 						'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
 						isCustom
-							? 'border-accent-500 bg-accent-50 text-accent-700'
+							? 'chip-active'
 							: dark
 								? 'border-[color:rgb(var(--border))] text-[color:var(--faint)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
 								: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
@@ -159,7 +180,7 @@ export function DateRange({ dark = false }: { dark?: boolean }): ReactElement {
 					<CalendarRange className="h-4 w-4" aria-hidden="true" />
 					<span className="max-w-[16ch] truncate">{customLabel}</span>
 				</button>
-				{open ? <CustomPopover onClose={() => setOpen(false)} /> : null}
+				{open ? <CustomPopover id={popoverId} onClose={close} /> : null}
 			</div>
 		</div>
 	);

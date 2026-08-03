@@ -1,6 +1,7 @@
 // React Query hooks for the admin API (Bearer ADMIN_TOKEN). All calls go through adminFetch/adminPost
 // which refuse any non-admin path. Mutations invalidate the matching list query so panels refresh
-// without a full page reload. The admin token is never placed in a query key or URL.
+// without a full page reload. The admin token is never placed in a query key or URL. Queries use
+// `adminQueryRetry`, which refuses to re-send a token the deployment has already rejected.
 
 import type {
 	ApiKeyRecord,
@@ -16,12 +17,13 @@ import type {
 	Site,
 } from '@facet/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { adminFetch, adminPatch, adminPost } from '../admin.js';
+import { adminFetch, adminPatch, adminPost, adminQueryRetry } from '../admin.js';
 
 export function useSites(token: string) {
 	return useQuery({
 		queryKey: ['admin', 'sites'],
 		queryFn: () => adminFetch<{ sites: Site[] }>('/api/sites', token),
+		retry: adminQueryRetry,
 		enabled: Boolean(token),
 	});
 }
@@ -39,6 +41,7 @@ export function useKeys(token: string, siteId: string) {
 	return useQuery({
 		queryKey: ['admin', 'keys', siteId],
 		queryFn: () => adminFetch<{ keys: ApiKeyRecord[] }>(`/api/keys?site_id=${siteId}`, token),
+		retry: adminQueryRetry,
 		enabled: Boolean(token && siteId),
 	});
 }
@@ -67,6 +70,7 @@ export function useAdminGoals(token: string, siteId: string) {
 	return useQuery({
 		queryKey: ['admin', 'goals', siteId],
 		queryFn: () => adminFetch<{ goals: Goal[] }>(`/api/goals?site_id=${siteId}`, token),
+		retry: adminQueryRetry,
 		enabled: Boolean(token && siteId),
 	});
 }
@@ -94,6 +98,7 @@ export function useAdminFunnels(token: string, siteId: string) {
 	return useQuery({
 		queryKey: ['admin', 'funnels', siteId],
 		queryFn: () => adminFetch<{ funnels: Funnel[] }>(`/api/funnels?site_id=${siteId}`, token),
+		retry: adminQueryRetry,
 		enabled: Boolean(token && siteId),
 	});
 }
@@ -123,6 +128,7 @@ export function useAdminExperiments(token: string, siteId: string) {
 		queryKey: ['admin', 'experiments', siteId],
 		queryFn: () =>
 			adminFetch<{ experiments: Experiment[] }>(`/api/experiments?site_id=${siteId}`, token),
+		retry: adminQueryRetry,
 		enabled: Boolean(token && siteId),
 	});
 }

@@ -23,5 +23,5 @@ export const flowBox: TileDef = {
 			]),
 		};
 	},
-	render: (ctx, expanded) => <FlowTile cells={ctx.flowCells} dark expanded={expanded} />,
+	render: (ctx, expanded) => <FlowTile cells={ctx.flowCells} expanded={expanded} />,
 };

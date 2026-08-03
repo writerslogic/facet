@@ -14,16 +14,16 @@ import {
 	Settings2,
 	Trash2,
 } from 'lucide-react';
-import { type ReactElement, type RefObject, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
 import { readBoardLayout, useBoardLayout } from '../lib/boardLayout.js';
 import { cn } from '../lib/cn.js';
 import {
+	ROW_FLOOR,
 	packSlots,
 	trackTemplate,
 	useColumns,
 	useElasticTracks,
 	useNarrow,
-	useRowFloor,
 } from '../lib/elasticGrid.js';
 import {
 	CHART_CYCLE,
@@ -38,6 +38,7 @@ import {
 	newSlotUid,
 	resolveTileConfig,
 } from '../lib/tiles.js';
+import { usePopoverDismiss } from '../lib/usePopoverDismiss.js';
 import { BentoCarousel } from './BentoCarousel.js';
 import { BentoTile } from './BentoTile.js';
 import { DataTable } from './DataTable.js';
@@ -92,7 +93,6 @@ export function BentoBoard({
 		rowCount,
 		focusedIdx >= 0 ? (placements[focusedIdx] ?? null) : null,
 	);
-	const rowFloor = useRowFloor(gridRef, rowCount);
 
 	useEffect(() => {
 		if (!focusUid.current) return;
@@ -224,7 +224,7 @@ export function BentoBoard({
 										setEditing(false);
 										setAdding(false);
 									}}
-									className="inline-flex items-center rounded-lg bg-accent-600 px-3 py-1.5 font-medium text-white text-xs shadow-card transition hover:bg-accent-700"
+									className="inline-flex items-center rounded-lg btn-accent px-3 py-1.5 text-xs shadow-card transition"
 								>
 									Done
 								</button>
@@ -249,7 +249,7 @@ export function BentoBoard({
 						className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
 						style={{
 							gridTemplateColumns: trackTemplate(colFr),
-							gridTemplateRows: trackTemplate(rowFr, activeFocus ? '0' : rowFloor),
+							gridTemplateRows: trackTemplate(rowFr, activeFocus ? '0' : ROW_FLOOR),
 						}}
 						role={editing ? 'list' : undefined}
 						aria-label={editing ? 'Board tiles — use arrow keys to reorder' : undefined}
@@ -279,15 +279,23 @@ export function BentoBoard({
 											: undefined
 									}
 									tabIndex={editing ? 0 : undefined}
-									style={{
-										gridColumn: `${p.colStart} / span ${p.colSpan}`,
-										gridRow: `${p.rowStart} / span ${p.rowSpan}`,
-									}}
+									style={
+										{
+											gridColumn: `${p.colStart} / span ${p.colSpan}`,
+											gridRow: `${p.rowStart} / span ${p.rowSpan}`,
+											// Reading order, capped: the board should feel dealt
+											// out, not loaded. Past the tenth tile the delay stops
+											// growing, so the last tile is never late enough to
+											// read as a slow board.
+											'--tile-i': Math.min(i, 9),
+										} as CSSProperties
+									}
 									className={cn(
-										'min-h-0 rounded-2xl transition-[opacity,filter] duration-300',
+										'tile-enter min-h-0 rounded-2xl transition-[opacity,filter] duration-300',
 										isFocused && 'relative z-20',
-										editing &&
-											'cursor-grab focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500',
+										// No focus:outline-none: it suppressed the shell's token focus
+										// outline on the one draggable control that is a bare div.
+										editing && 'cursor-grab',
 										dragIndex === i && 'opacity-40',
 										isOver && 'ring-2 ring-accent-400 ring-offset-2',
 										dim && 'pointer-events-none opacity-40',
@@ -487,7 +495,7 @@ function TileControls({
 				type="button"
 				onClick={onRemove}
 				aria-label={`Remove ${title}`}
-				className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-rose-600"
+				className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-neg"
 			>
 				<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
 			</button>
@@ -642,14 +650,13 @@ export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
 	const gridRef = useRef<HTMLDivElement>(null);
 	const cols = useColumns(gridRef);
 	const { placements, rowCount } = packSlots(slots, cols);
-	const rowFloor = useRowFloor(gridRef, rowCount);
 	return (
 		<div
 			ref={gridRef}
 			className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
 			style={{
 				gridTemplateColumns: trackTemplate(new Array(cols).fill(1)),
-				gridTemplateRows: trackTemplate(new Array(rowCount).fill(1), rowFloor),
+				gridTemplateRows: trackTemplate(new Array(rowCount).fill(1), ROW_FLOOR),
 			}}
 		>
 			{placements.map((p, i) => (
@@ -666,31 +673,4 @@ export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
 			))}
 		</div>
 	);
-}
-
-/** Close a popover on Escape (returning focus to its toggle) or a pointer-down outside it. */
-function usePopoverDismiss(
-	open: boolean,
-	close: () => void,
-	wrapRef: RefObject<HTMLElement | null>,
-	toggleRef: RefObject<HTMLElement | null>,
-): void {
-	useEffect(() => {
-		if (!open) return;
-		const onKey = (e: KeyboardEvent): void => {
-			if (e.key === 'Escape') {
-				close();
-				toggleRef.current?.focus();
-			}
-		};
-		const onDown = (e: PointerEvent): void => {
-			if (!wrapRef.current?.contains(e.target as Node)) close();
-		};
-		document.addEventListener('keydown', onKey);
-		document.addEventListener('pointerdown', onDown);
-		return () => {
-			document.removeEventListener('keydown', onKey);
-			document.removeEventListener('pointerdown', onDown);
-		};
-	}, [open, close, wrapRef, toggleRef]);
 }

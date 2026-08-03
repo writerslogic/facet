@@ -2,6 +2,7 @@
 // top pages that drove it (click a page to cross-filter the board).
 
 import { KpiTile, type KpiVizName } from '../BentoTile.js';
+import { drillSpec } from './drill.js';
 import { ACCENT_OPTION, accentOf, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
@@ -34,6 +35,11 @@ export const pageviewsBox: TileDef = {
 				rows: ctx.data.top_paths,
 				onSelect: ctx.toggleServer('path'),
 				activeKey: ctx.serverFilter.path,
+				compare: {
+					current: ctx.data.top_paths ?? [],
+					select: (p) => p.top_paths,
+				},
+				drill: drillSpec(ctx, 'path'),
 			}}
 		/>
 	),

@@ -10,11 +10,9 @@ import { Sankey } from './Sankey.js';
 
 export function FlowTile({
 	cells,
-	dark,
 	expanded,
 }: {
 	cells: CubeCell[];
-	dark?: boolean;
 	/** Drill-down: auto-reveal the device → country third column so the focused flow shows the full
 	 * channel → device → country path, not just the compact two columns. */
 	expanded?: boolean;
@@ -52,18 +50,44 @@ export function FlowTile({
 
 	if (flow.links.length === 0) {
 		return (
-			<div className="flex h-full items-center justify-center text-neutral-400 text-sm">
+			<div className="flex h-full items-center justify-center text-[color:var(--faint)] text-sm">
 				No flow data yet
 			</div>
 		);
 	}
+	const labelOf = (id: string): string => flow.nodes.find((n) => n.id === id)?.label ?? id;
+
 	return (
-		<Sankey
-			nodes={flow.nodes}
-			links={flow.links}
-			onNodeClick={onNodeClick}
-			isolatedId={isolated}
-			dark={dark}
-		/>
+		<>
+			<Sankey
+				nodes={flow.nodes}
+				links={flow.links}
+				onNodeClick={onNodeClick}
+				isolatedId={isolated}
+			/>
+			{/* The flow was the one chart on the board with no text equivalent — the world map and the
+			    retention grid both ship an sr-only table, this shipped a single aria-label reading
+			    "Traffic flow diagram" and nothing else. Not data-chrome: these ARE the numbers, so they
+			    belong in a copy exactly like the other charts' tables. */}
+			<table className="sr-only">
+				<caption>Traffic flow, as a table of source to destination visitor counts</caption>
+				<thead>
+					<tr>
+						<th scope="col">From</th>
+						<th scope="col">To</th>
+						<th scope="col">Visitors</th>
+					</tr>
+				</thead>
+				<tbody>
+					{flow.links.map((link) => (
+						<tr key={`${link.source}->${link.target}`}>
+							<th scope="row">{labelOf(link.source)}</th>
+							<td>{labelOf(link.target)}</td>
+							<td>{link.value}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</>
 	);
 }

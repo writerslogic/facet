@@ -9,7 +9,7 @@ import {
 	useDeleteExperiment,
 } from '../../hooks/admin.js';
 import { CardSkeletons, EmptyState, ErrorState } from '../StatusStates.js';
-import { ConfirmDelete, Field, MutationStatus, Panel } from './kit.js';
+import { BlockedReason, ConfirmDelete, Field, FormControls, MutationStatus, Panel } from './kit.js';
 
 const emptyVariant = (): ExperimentVariant => ({ key: '', weight: 1 });
 
@@ -32,8 +32,16 @@ export function ExperimentsPanel({
 	]);
 
 	const filledVariants = variants.filter((v) => v.key.trim());
-	const canSubmit =
-		name.trim() && flagKey.trim() && filledVariants.length >= 2 && filledVariants.length <= 8;
+	const canSubmit = Boolean(
+		name.trim() && flagKey.trim() && filledVariants.length >= 2 && filledVariants.length <= 8,
+	);
+	const blocked = canSubmit
+		? null
+		: !name.trim()
+			? 'Enter a name for this experiment.'
+			: !flagKey.trim()
+				? 'Enter the flag key this experiment drives.'
+				: `Name at least 2 variants — ${filledVariants.length} of ${variants.length} have a key.`;
 
 	function updateVariant(index: number, patch: Partial<ExperimentVariant>): void {
 		setVariants((prev) => prev.map((v, i) => (i === index ? { ...v, ...patch } : v)));
@@ -66,101 +74,113 @@ export function ExperimentsPanel({
 	}
 
 	return (
-		<Panel title="Experiments">
-			<form onSubmit={onSubmit} className="space-y-3">
-				<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-					<Field
-						id="exp-name"
-						label="Name"
-						value={name}
-						onChange={setName}
-						placeholder="CTA color"
-					/>
-					<Field
-						id="exp-flag"
-						label="Flag key"
-						value={flagKey}
-						onChange={setFlagKey}
-						placeholder="cta_color"
-					/>
-				</div>
+		<Panel
+			title="Experiments"
+			description="Assigns visitors to variants of a flag and reports the result. Weights are relative, not percentages."
+		>
+			<form onSubmit={onSubmit}>
+				<FormControls busy={create.isPending} className="space-y-3">
+					<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+						<Field
+							id="exp-name"
+							label="Name"
+							value={name}
+							onChange={setName}
+							placeholder="CTA color"
+						/>
+						<Field
+							id="exp-flag"
+							label="Flag key"
+							value={flagKey}
+							onChange={setFlagKey}
+							placeholder="cta_color"
+							hint="Matches the flag your app evaluates."
+						/>
+					</div>
 
-				<fieldset className="space-y-2">
-					<legend className="text-xs font-medium text-[color:var(--ink)]">
-						Variants (2–8, first is control)
-					</legend>
-					{variants.map((variant, index) => (
-						// biome-ignore lint/suspicious/noArrayIndexKey: variants are positional
-						<div key={index} className="flex items-center gap-2">
-							<label className="sr-only" htmlFor={`exp-variant-key-${index}`}>
-								Variant {index + 1} key
-							</label>
-							<input
-								id={`exp-variant-key-${index}`}
-								type="text"
-								value={variant.key}
-								onChange={(e) =>
-									updateVariant(index, {
-										key: e.target.value,
-									})
-								}
-								placeholder={index === 0 ? 'control' : `variant ${index + 1}`}
-								className="flex-1 rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
-							/>
-							<label className="sr-only" htmlFor={`exp-variant-weight-${index}`}>
-								Variant {index + 1} weight
-							</label>
-							<input
-								id={`exp-variant-weight-${index}`}
-								type="number"
-								min={0}
-								step="any"
-								value={variant.weight}
-								onChange={(e) =>
-									updateVariant(index, {
-										weight: Number(e.target.value),
-									})
-								}
-								className="w-24 rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
-							/>
-							{variants.length > 2 ? (
-								<button
-									type="button"
-									onClick={() =>
-										setVariants((prev) => prev.filter((_, i) => i !== index))
+					<fieldset className="space-y-2">
+						<legend className="font-medium text-[color:var(--muted)] text-xs">
+							Variants (2–8, first is control)
+						</legend>
+						{variants.map((variant, index) => (
+							// biome-ignore lint/suspicious/noArrayIndexKey: variants are positional
+							<div key={index} className="flex items-center gap-2">
+								<label className="sr-only" htmlFor={`exp-variant-key-${index}`}>
+									Variant {index + 1} key
+								</label>
+								<input
+									id={`exp-variant-key-${index}`}
+									type="text"
+									value={variant.key}
+									onChange={(e) =>
+										updateVariant(index, {
+											key: e.target.value,
+										})
 									}
-									aria-label={`Remove variant ${index + 1}`}
-									className="rounded-md p-1 text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
-								>
-									<X className="h-4 w-4" aria-hidden="true" />
-								</button>
-							) : null}
-						</div>
-					))}
-					{variants.length < 8 ? (
-						<button
-							type="button"
-							onClick={() => setVariants((prev) => [...prev, emptyVariant()])}
-							className="inline-flex items-center gap-1 text-xs font-medium text-accent-600 hover:text-accent-800"
-						>
-							<Plus className="h-3.5 w-3.5" aria-hidden="true" />
-							Add variant
-						</button>
-					) : null}
-				</fieldset>
+									placeholder={index === 0 ? 'control' : `variant ${index + 1}`}
+									className="input min-w-0 flex-1 rounded-lg px-3 py-1.5 text-sm"
+								/>
+								<label className="sr-only" htmlFor={`exp-variant-weight-${index}`}>
+									Variant {index + 1} weight
+								</label>
+								<input
+									id={`exp-variant-weight-${index}`}
+									type="number"
+									min={0}
+									step="any"
+									value={variant.weight}
+									onChange={(e) =>
+										updateVariant(index, {
+											weight: Number(e.target.value),
+										})
+									}
+									className="input w-24 rounded-lg px-3 py-1.5 text-sm"
+								/>
+								{variants.length > 2 ? (
+									<button
+										type="button"
+										onClick={() =>
+											setVariants((prev) =>
+												prev.filter((_, i) => i !== index),
+											)
+										}
+										aria-label={`Remove variant ${index + 1}`}
+										className="rounded-md p-1 text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
+									>
+										<X className="h-4 w-4" aria-hidden="true" />
+									</button>
+								) : null}
+							</div>
+						))}
+						{variants.length < 8 ? (
+							<button
+								type="button"
+								onClick={() => setVariants((prev) => [...prev, emptyVariant()])}
+								className="inline-flex items-center gap-1 font-medium text-[color:var(--chip-ink)] text-xs"
+							>
+								<Plus className="h-3.5 w-3.5" aria-hidden="true" />
+								Add variant
+							</button>
+						) : null}
+					</fieldset>
 
-				<button
-					type="submit"
-					disabled={create.isPending || !canSubmit}
-					className="rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-40"
-				>
-					Create experiment
-				</button>
+					<div className="space-y-1">
+						<button
+							type="submit"
+							disabled={!canSubmit}
+							className="btn-accent rounded-lg px-4 py-1.5 text-sm transition"
+						>
+							Create experiment
+						</button>
+						<BlockedReason reason={blocked} />
+					</div>
+				</FormControls>
 			</form>
 			<MutationStatus
 				isPending={create.isPending}
 				error={create.error}
 				success={create.isSuccess ? 'Experiment created.' : null}
+				pendingLabel="Creating experiment…"
 			/>
 
 			<div className="mt-5">
@@ -184,11 +204,15 @@ export function ExperimentsPanel({
 									<p className="truncate font-medium text-[color:var(--ink)]">
 										{exp.name}
 									</p>
-									<p className="truncate text-xs text-[color:var(--muted)]">
+									<p className="truncate text-[color:var(--muted)] text-xs">
 										flag: {exp.flag_key} · {exp.variants.length} variants
 									</p>
 								</div>
-								<ConfirmDelete onConfirm={() => remove.mutate(exp.id)} />
+								<ConfirmDelete
+									onConfirm={() => remove.mutate(exp.id)}
+									consequence={`Delete "${exp.name}"? Its results are removed too.`}
+									busy={remove.isPending}
+								/>
 							</li>
 						))}
 					</ul>
@@ -198,7 +222,11 @@ export function ExperimentsPanel({
 					</EmptyState>
 				)}
 			</div>
-			<MutationStatus isPending={remove.isPending} error={remove.error} />
+			<MutationStatus
+				isPending={remove.isPending}
+				error={remove.error}
+				pendingLabel="Deleting experiment…"
+			/>
 		</Panel>
 	);
 }

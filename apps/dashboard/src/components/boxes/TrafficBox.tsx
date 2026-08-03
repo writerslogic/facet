@@ -3,6 +3,7 @@
 
 import type { SeriesPoint } from '@facet/shared';
 import type { ReactNode } from 'react';
+import { formatDayShort } from '../../lib/datetime.js';
 import { formatNumber } from '../../lib/format.js';
 import {
 	type ChartAnnotation,
@@ -99,14 +100,7 @@ function TrafficDetail({
 		(best, p) => (p.pageviews > best.pageviews ? p : best),
 		series[0] ?? { t: 0, pageviews: 0, visitors: 0 },
 	);
-	const peakDate =
-		peak.t > 0
-			? new Date(peak.t).toLocaleDateString('en-US', {
-					month: 'short',
-					day: 'numeric',
-					timeZone: 'UTC',
-				})
-			: '—';
+	const peakDate = peak.t > 0 ? formatDayShort(peak.t) : '—';
 	const avg = series.length > 0 ? Math.round(totalPv / series.length) : 0;
 	return (
 		<div className="flex h-full flex-col gap-3">
@@ -154,7 +148,7 @@ export const trafficBox: TileDef = {
 	action: (ctx) =>
 		ctx.annotations.length > 0 ? (
 			<span className="inline-flex items-center gap-1 text-[11px] text-[color:var(--muted)]">
-				<span className="inline-block h-1.5 w-1.5 rounded-full bg-rose-500" />
+				<span className="inline-block h-1.5 w-1.5 rounded-full bg-[color:var(--neg)]" />
 				Anomaly
 			</span>
 		) : null,

@@ -13,12 +13,13 @@ export function LivePill(): ReactElement | null {
 	const n = data.visitors;
 	return (
 		<span
+			data-chrome
 			className="inline-flex items-center gap-1.5 rounded-lg border border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] px-2.5 py-1.5 font-medium text-[color:var(--muted)] text-xs shadow-card"
 			title={`${n} active visitor${n === 1 ? '' : 's'} in the last few minutes`}
 		>
 			<span className="relative flex size-2">
-				<span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-70" />
-				<span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+				<span className="absolute inline-flex size-full animate-ping rounded-full bg-[color:var(--pos)] opacity-70" />
+				<span className="relative inline-flex size-2 rounded-full bg-[color:var(--pos)]" />
 			</span>
 			<span className="tabular font-semibold text-[color:var(--ink)]">{n}</span>
 			<span className="text-[color:var(--muted)]">online</span>

@@ -2,6 +2,7 @@
 // the top countries that drove it.
 
 import { KpiTile, type KpiVizName } from '../BentoTile.js';
+import { drillSpec } from './drill.js';
 import { ACCENT_OPTION, accentOf, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
@@ -39,6 +40,13 @@ export const visitorsBox: TileDef = {
 				rows: ctx.dimRows('country', ctx.data.top_countries),
 				onSelect: ctx.dimSelect('country'),
 				activeKey: ctx.cubeFilter.country,
+				// Cube rows on screen, server rows on BOTH sides of the comparison (see ChannelsBox).
+				compare: {
+					current: ctx.data.top_countries ?? [],
+					select: (p) => p.top_countries,
+					note: 'measured over all events for this country, not just the pageviews shown',
+				},
+				drill: drillSpec(ctx, 'country'),
 			}}
 		/>
 	),

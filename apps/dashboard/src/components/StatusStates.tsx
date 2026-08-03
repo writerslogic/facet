@@ -1,9 +1,10 @@
 // Shared, accessible status UI: loading skeleton, auth-error banner, general-error block with a
 // safe expandable detail (no secrets), empty state, and the hourly session-materialization notice.
-// Color is always paired with text/icon so status is never color-only.
+// Color is always paired with text/icon so status is never color-only, and every surface reads the
+// theme tokens so these states match the active palette in both light and dark.
 
-import { AlertTriangle, Clock, Inbox, KeyRound } from 'lucide-react';
-import type { ReactElement } from 'react';
+import { AlertTriangle, Clock, Inbox, KeyRound, RotateCw } from 'lucide-react';
+import type { ReactElement, ReactNode } from 'react';
 import { cn } from '../lib/cn.js';
 
 /** Animated placeholder block for a not-yet-loaded region. */
@@ -29,52 +30,74 @@ export function AuthErrorBanner(): ReactElement {
 		<div
 			role="alert"
 			aria-live="assertive"
-			className="flex items-start gap-3 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800 shadow-sm"
+			className="alert-error flex items-start gap-3 rounded-xl p-4 text-sm"
 		>
-			<KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-red-600" aria-hidden="true" />
+			<KeyRound className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
 			<div>
 				<p className="font-semibold">API key not recognized</p>
-				<p className="mt-0.5 text-red-700">
-					Check that the API key and site are correct for this profile, then update them
-					in the site switcher.
+				<p className="mt-0.5 opacity-90">
+					An API key is bound to one site. Check that this profile pairs the right key
+					with the right Site ID, then fix it from the site menu in the header.
 				</p>
 			</div>
 		</div>
 	);
 }
 
-/** General (non-auth) error with a safe, expandable technical detail — never a secret. */
+/**
+ * General (non-auth) error with a safe, expandable technical detail — never a secret.
+ *
+ * `onRetry` exists because most failed reads in this app dead-ended: the All-sites table grew a
+ * per-row retry, and every other tab left the reader with a sentence and a page refresh as the only
+ * way forward. A transient 5xx or a dropped connection is the common case, and it is one click.
+ */
 export function ErrorState({
 	message,
 	detail,
+	onRetry,
+	retrying = false,
 }: {
 	message?: string;
 	detail?: string | null;
+	/** Re-run the failed query. Omit when the failure is not retryable (a rejected key, say). */
+	onRetry?: () => void;
+	retrying?: boolean;
 }): ReactElement {
 	return (
-		<div
-			role="alert"
-			aria-live="polite"
-			className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800 shadow-sm"
-		>
+		<div role="alert" aria-live="polite" className="alert-warn rounded-xl p-4 text-sm">
 			<div className="flex items-start gap-3">
-				<AlertTriangle
-					className="mt-0.5 h-5 w-5 shrink-0 text-amber-600"
-					aria-hidden="true"
-				/>
-				<div className="min-w-0">
+				<AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" aria-hidden="true" />
+				<div className="min-w-0 flex-1">
 					<p className="font-semibold">{message ?? 'Something went wrong'}</p>
 					{detail ? (
 						<details className="mt-1">
-							<summary className="cursor-pointer text-xs text-amber-700 underline">
+							<summary className="cursor-pointer text-xs underline opacity-80">
 								Details
 							</summary>
-							<p className="mt-1 break-words font-mono text-xs text-amber-700">
+							<p
+								data-selectable
+								className="mt-1 break-words font-mono text-xs opacity-80"
+							>
 								{detail}
 							</p>
 						</details>
 					) : null}
 				</div>
+				{onRetry ? (
+					<button
+						type="button"
+						data-chrome
+						onClick={onRetry}
+						disabled={retrying}
+						className="btn-ghost inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 font-medium text-xs transition"
+					>
+						<RotateCw
+							className={cn('h-3.5 w-3.5', retrying && 'animate-spin')}
+							aria-hidden="true"
+						/>
+						{retrying ? 'Retrying…' : 'Retry'}
+					</button>
+				) : null}
 			</div>
 		</div>
 	);
@@ -84,19 +107,33 @@ export function ErrorState({
 export function EmptyState({
 	title = 'No data yet',
 	children,
+	action,
 }: {
 	title?: string;
-	children?: ReactElement | string;
+	children?: ReactNode;
+	/** Optional call-to-action so an empty tab points at the next step instead of dead-ending. */
+	action?: ReactNode;
 }): ReactElement {
 	return (
-		<div className="rounded-2xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-10 text-center shadow-card ring-1 ring-[color:rgb(var(--border))]">
-			<span className="mx-auto flex size-12 items-center justify-center rounded-full bg-accent-50 ring-1 ring-accent-100">
-				<Inbox className="h-6 w-6 text-accent-400" aria-hidden="true" />
+		<div className="surface rounded-2xl p-10 text-center">
+			<span
+				className="mx-auto flex size-12 items-center justify-center rounded-full"
+				style={{
+					backgroundColor: 'var(--chip-bg)',
+					boxShadow: 'inset 0 0 0 1px var(--chip-border)',
+				}}
+			>
+				<Inbox
+					className="h-6 w-6"
+					style={{ color: 'var(--chip-ink)' }}
+					aria-hidden="true"
+				/>
 			</span>
-			<p className="mt-3 text-sm font-semibold text-[color:var(--ink)]">{title}</p>
+			<p className="mt-3 font-semibold text-[color:var(--ink)] text-sm">{title}</p>
 			{children ? (
-				<div className="mt-1 text-sm text-[color:var(--muted)]">{children}</div>
+				<div className="mt-1 text-[color:var(--muted)] text-sm">{children}</div>
 			) : null}
+			{action ? <div className="mt-4 flex justify-center">{action}</div> : null}
 		</div>
 	);
 }
@@ -106,9 +143,9 @@ export function PendingNotice(): ReactElement {
 	return (
 		<div
 			aria-live="polite"
-			className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800"
+			className="alert-info flex items-start gap-2 rounded-lg p-3 text-sm"
 		>
-			<Clock className="mt-0.5 h-4 w-4 shrink-0 text-sky-600" aria-hidden="true" />
+			<Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
 			<span>
 				Session data materializes hourly. Recent sessions, channels, funnels, and
 				experiments may not appear yet.

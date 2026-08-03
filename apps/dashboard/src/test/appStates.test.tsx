@@ -147,8 +147,9 @@ describe('read state model', () => {
 		renderApp();
 		await waitFor(() => expect(screen.getByText('API key not recognized')).toBeInTheDocument());
 
-		// Open the edit dialog and fix the API key.
-		fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+		// Open the site menu, then the per-site edit dialog, and fix the API key.
+		fireEvent.click(screen.getByRole('button', { name: /Active site: Prod/ }));
+		fireEvent.click(screen.getByRole('menuitem', { name: 'Edit Prod' }));
 		fireEvent.change(screen.getByLabelText('API key'), {
 			target: { value: 'clk_good' },
 		});

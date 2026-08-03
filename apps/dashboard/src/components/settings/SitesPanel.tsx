@@ -1,12 +1,13 @@
 // Sites panel: create a site and list existing sites. Selecting a site scopes the key/goal/funnel/
-// experiment panels below. Uses admin react-query hooks; the create form refreshes the list on success.
+// experiment/flag/identity panels below. Uses admin react-query hooks; the create form refreshes the
+// list on success. Site ids stay selectable — they are the value the tracker snippet needs.
 
 import type { Site } from '@facet/shared';
 import { type FormEvent, type ReactElement, useState } from 'react';
 import { useCreateSite, useSites } from '../../hooks/admin.js';
 import { cn } from '../../lib/cn.js';
 import { CardSkeletons, EmptyState, ErrorState } from '../StatusStates.js';
-import { Field, MutationStatus, Panel } from './kit.js';
+import { BlockedReason, Field, FormControls, MutationStatus, Panel } from './kit.js';
 
 export function SitesPanel({
 	token,
@@ -22,9 +23,19 @@ export function SitesPanel({
 	const [name, setName] = useState('');
 	const [domain, setDomain] = useState('');
 
+	const canSubmit = Boolean(name.trim() && domain.trim());
+	// Named so the disabled submit explains itself instead of just sitting there dead.
+	const blocked = canSubmit
+		? null
+		: !name.trim() && !domain.trim()
+			? 'Enter a name and a domain to create a site.'
+			: !name.trim()
+				? 'Enter a name to create a site.'
+				: 'Enter a domain to create a site.';
+
 	function onSubmit(event: FormEvent): void {
 		event.preventDefault();
-		if (!name.trim() || !domain.trim()) return;
+		if (!canSubmit) return;
 		create.mutate(
 			{ name: name.trim(), domain: domain.trim() },
 			{
@@ -37,40 +48,58 @@ export function SitesPanel({
 		);
 	}
 
+	const count = sites.data?.sites.length ?? 0;
+
 	return (
-		<Panel title="Sites">
-			<form
-				onSubmit={onSubmit}
-				className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]"
-			>
-				<Field
-					id="site-name"
-					label="Name"
-					value={name}
-					onChange={setName}
-					placeholder="My blog"
-				/>
-				<Field
-					id="site-domain"
-					label="Domain"
-					value={domain}
-					onChange={setDomain}
-					placeholder="example.com"
-				/>
-				<div className="flex items-end">
-					<button
-						type="submit"
-						disabled={create.isPending || !name.trim() || !domain.trim()}
-						className="w-full rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-40 sm:w-auto"
-					>
-						Create site
-					</button>
-				</div>
+		<Panel
+			title="Sites"
+			description="Every site in this deployment. The admin token covers all of them; pick one to manage its keys and configuration."
+			action={
+				count > 0 ? (
+					<span data-chrome className="badge-neutral rounded-full px-2 py-0.5 text-xs">
+						{count} {count === 1 ? 'site' : 'sites'}
+					</span>
+				) : null
+			}
+		>
+			<form onSubmit={onSubmit}>
+				<FormControls
+					busy={create.isPending}
+					className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_1fr_auto]"
+				>
+					<Field
+						id="site-name"
+						label="Name"
+						value={name}
+						onChange={setName}
+						placeholder="My blog"
+					/>
+					<Field
+						id="site-domain"
+						label="Domain"
+						value={domain}
+						onChange={setDomain}
+						placeholder="example.com"
+					/>
+					<div className="flex items-start pt-5">
+						<button
+							type="submit"
+							disabled={!canSubmit}
+							className="btn-accent w-full rounded-lg px-4 py-1.5 text-sm transition sm:w-auto"
+						>
+							Create site
+						</button>
+					</div>
+				</FormControls>
 			</form>
+			<div className="mt-2">
+				<BlockedReason reason={blocked} />
+			</div>
 			<MutationStatus
 				isPending={create.isPending}
 				error={create.error}
-				success={create.isSuccess ? 'Site created.' : null}
+				success={create.isSuccess ? 'Site created and selected below.' : null}
+				pendingLabel="Creating site…"
 			/>
 
 			<div className="mt-5">
@@ -113,8 +142,11 @@ function SiteRow({
 		<li className="flex items-center justify-between gap-3 py-2 text-sm">
 			<div className="min-w-0">
 				<p className="truncate font-medium text-[color:var(--ink)]">{site.name}</p>
-				<p className="truncate text-xs text-[color:var(--muted)]">
-					{site.domain} · {site.id}
+				<p className="truncate text-[color:var(--muted)] text-xs">
+					{site.domain} ·{' '}
+					<code data-selectable className="font-mono">
+						{site.id}
+					</code>
 				</p>
 			</div>
 			<button
@@ -122,9 +154,9 @@ function SiteRow({
 				onClick={onManage}
 				aria-pressed={active}
 				className={cn(
-					'shrink-0 rounded-md border px-3 py-1 text-xs font-medium transition',
+					'shrink-0 rounded-md border px-3 py-1 font-medium text-xs transition',
 					active
-						? 'border-accent-500 bg-accent-50 text-accent-700'
+						? 'chip-active'
 						: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
 				)}
 			>

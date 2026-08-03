@@ -14,7 +14,10 @@ describe('KpiTile', () => {
 		expect(screen.queryByText('Peak')).toBeNull();
 	});
 
-	it('shows the delta magnitude without a sign (direction is carried by the arrow)', () => {
+	// The tile used to print the magnitude unsigned and let the arrow carry direction, which is not
+	// what any other delta on the dashboard does. It now renders the shared DeltaBadge: signed text,
+	// arrow AND colour, identical everywhere (see components/Delta.tsx).
+	it('shows the delta signed, through the shared badge', () => {
 		render(
 			<KpiTile
 				label="Visitors"
@@ -24,8 +27,10 @@ describe('KpiTile', () => {
 				spark={SPARK}
 			/>,
 		);
-		expect(screen.getByText('12%')).toBeInTheDocument();
+		expect(screen.getByText('−12%')).toBeInTheDocument();
+		// A real minus sign (U+2212), never a hyphen, and never an unsigned magnitude.
 		expect(screen.queryByText('-12%')).toBeNull();
+		expect(screen.queryByText('12%')).toBeNull();
 	});
 
 	it('expanded mode reveals the Avg/Peak/Low detail from the series', () => {

@@ -3,6 +3,7 @@
 // is computed server-side over aggregate, day-scoped channel paths — no persistent cross-session id.
 
 import type { AttributionModel } from '@facet/shared';
+import { drillSpec } from './drill.js';
 import { LIST_OPTIONS, ListBody, rowsTable } from './shared.js';
 import type { TileDef, TileVariant } from './types.js';
 
@@ -33,11 +34,23 @@ export const attributionBox: TileDef = {
 	table: (ctx) => rowsTable('Channel', modelRows(ctx, 'last')),
 	render: (ctx, expanded, config) => {
 		const model = (config?.variant as AttributionModel) ?? 'last';
-		return ListBody({
-			title: 'Attribution',
-			rows: modelRows(ctx, model),
-			expanded,
-			config,
-		});
+		return (
+			<ListBody
+				title="Attribution"
+				rows={modelRows(ctx, model)}
+				expanded={expanded}
+				config={config}
+				// Compared model-for-model: credit under `last` in this window against credit under
+				// `last` in the preceding one. Comparing across models would measure the model choice,
+				// not the period. Credit is currency, so the delta is a change in attributed revenue.
+				compare={{
+					current: modelRows(ctx, model),
+					select: (p) => p.attribution?.models?.[model],
+				}}
+				// The rows are channels, so the cube can compose them — but the panel measures
+				// pageviews/events, not credited revenue, and labels every figure it draws.
+				drill={drillSpec(ctx, 'channel')}
+			/>
+		);
 	},
 };

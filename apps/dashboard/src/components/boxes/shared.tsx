@@ -1,13 +1,33 @@
 // Shared building blocks for boxes. `ListBody` is the ranked-list body used by every dimension box
 // (pages, referrers, devices, channels, events): compact it is a bare, dark, size-fitting TopList;
 // expanded it becomes `ListDetail` — a full, filterable, sortable drill-down over every row.
+//
+// `ListBody` is a COMPONENT (rendered as <ListBody/>, not called as a function) because it now owns a
+// hook: the per-key comparison against the equal-length preceding window. That window is already
+// fetched for the Overview's KPI deltas, so every list on the board reads it from the same cache
+// entry — see hooks/compare.ts. Boxes that pass no `compare` render exactly as before.
 
 import type { CountRow } from '@facet/shared';
 import { Search } from 'lucide-react';
-import { type ReactNode, useDeferredValue, useMemo, useState } from 'react';
+import {
+	type ReactElement,
+	type ReactNode,
+	useDeferredValue,
+	useEffect,
+	useId,
+	useMemo,
+	useRef,
+	useState,
+} from 'react';
+import { type CompareSource, useBreakdownComparison } from '../../hooks/compare.js';
 import { cn } from '../../lib/cn.js';
-import { formatNumber } from '../../lib/format.js';
-import { TopList } from '../TopList.js';
+import type { DroppedRow } from '../../lib/compare.js';
+import { type Movement, formatNumber } from '../../lib/format.js';
+import { DroppedRows } from '../CompareList.js';
+import { DeltaBadge } from '../Delta.js';
+import { InspectButton, TopList, hueForTitle } from '../TopList.js';
+import { ChartEmpty } from '../charts/ChartChrome.js';
+import { DrillPanel, type DrillSpec, type DrillState, undrillableNote, useDrill } from './drill.js';
 import type { TableData, TileConfig, TileOption, TileVariant } from './types.js';
 
 /** A shared "Color" option: pick one of the active palette's data colours for a box; boxes apply it to
@@ -87,6 +107,9 @@ export function ListBody({
 	activeKey,
 	expanded,
 	config,
+	compare,
+	drill: spec,
+	noun,
 }: {
 	title: string;
 	rows: CountRow[];
@@ -94,28 +117,65 @@ export function ListBody({
 	activeKey?: string;
 	expanded?: boolean;
 	config?: TileConfig;
-}): ReactNode {
-	if (expanded) {
-		return <ListDetail title={title} rows={rows} onSelect={onSelect} activeKey={activeKey} />;
-	}
+	/** The same list over the equal-length preceding window. Omitted ⇒ no deltas anywhere in this box. */
+	compare?: CompareSource | null;
+	/** Enables in-tile drill-down: each row can reveal its own composition. A spec whose `axis` is null
+	 * declares the dimension undrillable and explains why instead of offering a control. Omitted
+	 * entirely ⇒ the list behaves exactly as it did before drill-down existed. */
+	drill?: DrillSpec;
+	/** Singular noun for a row of this list ("page", "browser"), used in the undrillable note. */
+	noun?: string;
+}): ReactElement {
+	const { movements, dropped } = useBreakdownComparison(compare);
+	const drill = useDrill(spec);
+	const panelId = useId();
 	const limit = rowLimitOf(config);
 	const accent = accentOf(config);
-	if (config?.variant === 'donut') {
-		return (
-			<DonutList
-				rows={rows}
-				onSelect={onSelect}
-				activeKey={activeKey}
-				accent={accent}
-				limit={limit ?? 5}
-			/>
-		);
-	}
-	if (config?.variant === 'table') {
-		return <MiniTable title={title} rows={rows} activeKey={activeKey} limit={limit} />;
-	}
-	// Default 'bars': the ranked TopList. With no explicit cap it height-fits; a cap disables fit.
-	return (
+	// The panel wears the list's own colour: an explicit accent when the user picked one, else the
+	// dimension hue TopList would have drawn its bars in.
+	const hue = accent ?? hueForTitle(title);
+	// A list whose dimension the API cannot filter says so — but only where there is room to read it.
+	const note = spec && !spec.axis && noun ? undrillableNote(noun) : undefined;
+	const inspect = drill.enabled
+		? {
+				onInspect: drill.inspect,
+				inspectedKey: drill.rowKey,
+				inspectControls: panelId,
+			}
+		: {};
+
+	const list = expanded ? (
+		<ListDetail
+			title={title}
+			rows={rows}
+			onSelect={onSelect}
+			activeKey={activeKey}
+			deltas={movements}
+			dropped={dropped}
+			note={note}
+			inspect={inspect}
+		/>
+	) : config?.variant === 'donut' ? (
+		<DonutList
+			rows={rows}
+			onSelect={onSelect}
+			activeKey={activeKey}
+			accent={accent}
+			limit={limit ?? 5}
+			deltas={movements}
+			inspect={drill.enabled ? drill : undefined}
+			panelId={panelId}
+		/>
+	) : config?.variant === 'table' ? (
+		<MiniTable
+			title={title}
+			rows={rows}
+			activeKey={activeKey}
+			limit={limit}
+			deltas={movements}
+		/>
+	) : (
+		// Default 'bars': the ranked TopList. With no explicit cap it height-fits; a cap disables fit.
 		<TopList
 			bare
 			dark
@@ -125,7 +185,107 @@ export function ListBody({
 			rows={rows}
 			onSelect={onSelect}
 			activeKey={activeKey}
+			accent={accent}
+			deltas={movements}
+			{...inspect}
 		/>
+	);
+
+	if (!drill.enabled) return list;
+	return (
+		<DrillFrame
+			drill={drill}
+			spec={spec as DrillSpec}
+			title={title}
+			hue={hue}
+			expanded={Boolean(expanded)}
+			panelId={panelId}
+		>
+			{list}
+		</DrillFrame>
+	);
+}
+
+/**
+ * Hosts a list and its drill panel.
+ *
+ * Progressive disclosure, sized honestly: a COMPACT tile has no room for both, so the panel takes the
+ * body and the breadcrumb is the way back — the list is one click away and the tile never grows. An
+ * EXPANDED tile is where the reader is investigating, so the list stays put and the panel opens beside
+ * it (below it on a narrow expansion), keeping the row you came from in view.
+ */
+function DrillFrame({
+	drill,
+	spec,
+	title,
+	hue,
+	expanded,
+	panelId,
+	children,
+}: {
+	drill: DrillState;
+	spec: DrillSpec;
+	title: string;
+	hue: string;
+	expanded: boolean;
+	panelId: string;
+	children: ReactElement;
+}): ReactElement {
+	const hostRef = useRef<HTMLDivElement>(null);
+	// The row whose panel is open, remembered across the close so focus can go back to its control.
+	const cameFrom = useRef<string | undefined>(undefined);
+	const wasOpen = useRef(false);
+
+	// Keyboard continuity. On a COMPACT tile the panel replaces the list, so the inspect control that
+	// was just activated is unmounted and the browser drops focus on <body> — the reader loses their
+	// place in the tab order entirely. Move focus onto the panel's Close on open, and back onto the row
+	// it came from on close (the same handoff BentoBoard performs when a tile expands). An EXPANDED
+	// tile keeps the list mounted, so nothing is lost and nothing is moved.
+	useEffect(() => {
+		const host = hostRef.current;
+		if (!host || expanded) {
+			wasOpen.current = drill.open;
+			return;
+		}
+		if (drill.open && !wasOpen.current) {
+			cameFrom.current = drill.rowKey;
+			host.querySelector<HTMLElement>('[data-drill-focus]')?.focus();
+		} else if (!drill.open && wasOpen.current) {
+			const key = cameFrom.current;
+			if (key !== undefined) {
+				host.querySelector<HTMLElement>(`[data-inspect-key="${CSS.escape(key)}"]`)?.focus();
+			}
+		}
+		wasOpen.current = drill.open;
+	}, [drill.open, drill.rowKey, expanded]);
+
+	const panel = (
+		<DrillPanel
+			id={panelId}
+			spec={spec}
+			drill={drill}
+			title={title}
+			hue={hue}
+			expanded={expanded}
+		/>
+	);
+	return (
+		<div ref={hostRef} className="flex h-full min-h-0 flex-col">
+			{/* Drill transitions are a state change with no focus move, so they need announcing. */}
+			<output data-chrome className="sr-only" aria-live="polite">
+				{drill.announcement}
+			</output>
+			{!drill.open ? (
+				<div className="min-h-0 flex-1">{children}</div>
+			) : expanded ? (
+				<div className="grid min-h-0 flex-1 grid-rows-2 gap-3 @[34rem]/tile:grid-cols-2 @[34rem]/tile:grid-rows-1">
+					<div className="min-h-0 overflow-hidden">{children}</div>
+					<div className="min-h-0">{panel}</div>
+				</div>
+			) : (
+				<div className="min-h-0 flex-1">{panel}</div>
+			)}
+		</div>
 	);
 }
 
@@ -147,13 +307,20 @@ function DonutList({
 	activeKey,
 	accent,
 	limit,
+	deltas,
+	inspect,
+	panelId,
 }: {
 	rows: CountRow[];
 	onSelect?: (key: string) => void;
 	activeKey?: string;
 	accent?: string;
 	limit: number;
-}): ReactNode {
+	deltas?: ReadonlyMap<string, Movement>;
+	/** Drill state, when this list's dimension is drillable — the legend grows an inspect control. */
+	inspect?: DrillState;
+	panelId?: string;
+}): ReactElement {
 	const total = rows.reduce((sum, r) => sum + r.count, 0);
 	const top = rows.slice(0, limit);
 	const otherCount = total - top.reduce((sum, r) => sum + r.count, 0);
@@ -163,7 +330,7 @@ function DonutList({
 			? `color-mix(in srgb, ${accent} ${Math.max(28, 100 - i * 16)}%, transparent)`
 			: (SLICE_COLORS[i % SLICE_COLORS.length] ?? 'var(--c1)');
 	if (total === 0) {
-		return <p className="py-6 text-center text-sm text-neutral-500">No data yet</p>;
+		return <ChartEmpty reason="range" compact />;
 	}
 	let acc = 0;
 	return (
@@ -225,7 +392,9 @@ function DonutList({
 							<span
 								className={cn(
 									'min-w-0 truncate font-medium',
-									active ? 'text-accent-200' : 'text-[color:var(--ink)]',
+									active
+										? 'text-[color:var(--chip-ink)]'
+										: 'text-[color:var(--ink)]',
 								)}
 								title={s.key}
 							>
@@ -234,28 +403,47 @@ function DonutList({
 							<span className="ml-auto shrink-0 text-[color:var(--muted)] tabular-nums">
 								{pct}%
 							</span>
+							{/* "Other" is an aggregate of whatever fell outside the top slices, so
+							    its membership differs between periods — never compared. */}
+							{s.key === 'Other' ? null : (
+								<DeltaBadge
+									movement={deltas?.get(s.key)}
+									variant="text"
+									size="sm"
+									className="shrink-0"
+								/>
+							)}
 						</>
 					);
 					const cls =
 						'flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-[13px]';
-					return (
-						<li key={s.key}>
-							{clickable ? (
-								<button
-									type="button"
-									aria-pressed={active}
-									onClick={() => onSelect?.(s.key)}
-									className={cn(
-										cls,
-										'transition-colors hover:bg-[color:rgb(var(--hover))]',
-										active && 'bg-[color:rgb(var(--hover))]',
-									)}
-								>
-									{inner}
-								</button>
-							) : (
-								<div className={cls}>{inner}</div>
+					const body = clickable ? (
+						<button
+							type="button"
+							aria-pressed={active}
+							onClick={() => onSelect?.(s.key)}
+							className={cn(
+								cls,
+								'transition-colors hover:bg-[color:rgb(var(--hover))]',
+								active && 'bg-[color:rgb(var(--hover))]',
 							)}
+						>
+							{inner}
+						</button>
+					) : (
+						<div className={cls}>{inner}</div>
+					);
+					// "Other" is a bucket, not a value: no filter names it, so it cannot be composed.
+					if (!inspect || s.key === 'Other') return <li key={s.key}>{body}</li>;
+					return (
+						<li key={s.key} className="group/row flex items-stretch gap-0.5">
+							<div className="min-w-0 flex-1">{body}</div>
+							<InspectButton
+								rowKey={s.key}
+								open={inspect.rowKey === s.key}
+								controls={panelId}
+								onClick={() => inspect.inspect(s.key)}
+							/>
 						</li>
 					);
 				})}
@@ -271,16 +459,18 @@ function MiniTable({
 	rows,
 	activeKey,
 	limit,
+	deltas,
 }: {
 	title: string;
 	rows: CountRow[];
 	activeKey?: string;
 	limit?: number;
-}): ReactNode {
+	deltas?: ReadonlyMap<string, Movement>;
+}): ReactElement {
 	const total = rows.reduce((sum, r) => sum + r.count, 0);
 	const shown = limit ? rows.slice(0, limit) : rows;
 	if (shown.length === 0) {
-		return <p className="py-6 text-center text-sm text-neutral-500">No data yet</p>;
+		return <ChartEmpty reason="range" compact />;
 	}
 	return (
 		<div className="h-full overflow-auto">
@@ -301,14 +491,23 @@ function MiniTable({
 								key={r.key}
 								className={cn(
 									'border-[color:rgb(var(--border))] border-t',
-									active ? 'text-accent-200' : 'text-[color:var(--ink)]',
+									active
+										? 'text-[color:var(--chip-ink)]'
+										: 'text-[color:var(--ink)]',
 								)}
 							>
 								<td className="max-w-0 truncate py-1 pr-2" title={r.key}>
 									{r.key}
 								</td>
 								<td className="px-2 py-1 text-right font-semibold tabular-nums">
-									{formatNumber(r.count)}
+									<span className="inline-flex items-baseline gap-1">
+										{formatNumber(r.count)}
+										<DeltaBadge
+											movement={deltas?.get(r.key)}
+											variant="text"
+											size="sm"
+										/>
+									</span>
 								</td>
 								<td className="py-1 pl-2 text-right text-[color:var(--muted)] tabular-nums">
 									{pct}%
@@ -351,12 +550,27 @@ function ListDetail({
 	rows,
 	onSelect,
 	activeKey,
+	deltas,
+	dropped,
+	note,
+	inspect,
 }: {
 	title: string;
 	rows: CountRow[];
 	onSelect?: (key: string) => void;
 	activeKey?: string;
-}): ReactNode {
+	deltas?: ReadonlyMap<string, Movement>;
+	dropped?: readonly DroppedRow[];
+	/** Why this list offers no drill-down. Shown only here: a compact tile has no room to read it, and
+	 * a limitation stated where it cannot be read is not stated at all. */
+	note?: string;
+	/** Row inspect wiring, spread onto the list. */
+	inspect?: {
+		onInspect?: (key: string) => void;
+		inspectedKey?: string;
+		inspectControls?: string;
+	};
+}): ReactElement {
 	const [query, setQuery] = useState('');
 	const [alpha, setAlpha] = useState(false);
 	const deferredQuery = useDeferredValue(query);
@@ -402,9 +616,14 @@ function ListDetail({
 					</button>
 				</div>
 			</div>
+			{note ? (
+				<p className="shrink-0 text-[11px] text-[color:var(--muted)] leading-snug">
+					{note}
+				</p>
+			) : null}
 			<div className="min-h-0 flex-1 overflow-y-auto">
 				{view.length === 0 ? (
-					<p className="py-6 text-center text-sm text-neutral-500">No matches</p>
+					<p className="py-6 text-center text-sm text-[color:var(--muted)]">No matches</p>
 				) : (
 					<TopList
 						bare
@@ -413,6 +632,17 @@ function ListDetail({
 						rows={view}
 						onSelect={onSelect}
 						activeKey={activeKey}
+						deltas={deltas}
+						{...inspect}
+						// Only in the drill-down: a compact tile is height-fitted, and a key that
+						// LEFT the list still deserves to be seen rather than silently missing.
+						// Suppressed while filtering/sorting, where the list is no longer the list
+						// those keys dropped out of.
+						trailing={
+							dropped && dropped.length > 0 && view.length === rows.length ? (
+								<DroppedRows rows={dropped} />
+							) : null
+						}
 					/>
 				)}
 			</div>

@@ -74,11 +74,29 @@ afterEach(() => {
 });
 
 describe('IdentityPanel', () => {
-	it('defaults to anonymous with the salt window forced to day', () => {
+	// The panel has no read-back endpoint, so it must not open on a real tier: that reads as a
+	// report of the site's current config and a stray submit would silently downgrade an
+	// elevated site to anonymous.
+	it('opens with no tier selected and submit blocked', () => {
 		renderPanel();
 		const tier = screen.getByLabelText('Tier') as HTMLSelectElement;
+		expect(tier.value).toBe('');
+		expect(screen.getByRole('button', { name: 'Set identity' })).toBeDisabled();
+		expect(screen.getByText(/does not read/i)).toBeInTheDocument();
+	});
+
+	it('does not PATCH while no tier is chosen', () => {
+		renderPanel();
+		fireEvent.click(screen.getByRole('button', { name: 'Set identity' }));
+		expect(calls).toHaveLength(0);
+	});
+
+	it('forces the salt window to day once anonymous is chosen', () => {
+		renderPanel();
+		fireEvent.change(screen.getByLabelText('Tier'), {
+			target: { value: 'anonymous' },
+		});
 		const window = screen.getByLabelText('Salt window') as HTMLSelectElement;
-		expect(tier.value).toBe('anonymous');
 		expect(window.value).toBe('day');
 		expect(window).toBeDisabled();
 	});

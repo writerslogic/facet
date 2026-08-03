@@ -3,8 +3,14 @@
 // fetched lazily — only when a proof drawer opens — so they never weigh down initial page load. Types
 // mirror the JSON the Worker returns; we keep them local (not `@facet/trust`) so the trust package's
 // jose/cborg never enter the browser bundle.
+//
+// `useProvenance` goes further: it actually RUNS the verification. The code that does so
+// (lib/provenance.ts, which pulls in the MMR primitives and `jose`) is reached only through a dynamic
+// import inside the query function, so none of it is in the initial chunk — a page that never opens a
+// proof drawer never downloads a byte of it.
 
 import { useQuery } from '@tanstack/react-query';
+import type { LeafClaim, ProvenanceResult } from '../lib/provenance.js';
 
 /** A signed MMR checkpoint (tree head), from GET /api/transparency/checkpoint. Null when the log is
  * unconfigured (no deployment signing key). */
@@ -91,6 +97,35 @@ export function useInclusionProof(apiKey: string, siteId: string, ref: ProofRef 
 			return fetchMaybe<InclusionProof>(`/api/transparency/inclusion?${params}`, apiKey);
 		},
 		enabled: Boolean(apiKey && siteId && ref),
+		staleTime: 5 * 60 * 1000,
+	});
+}
+
+export type { LeafClaim, ProvenanceResult } from '../lib/provenance.js';
+
+/**
+ * Run the full chain-of-custody verification for one metric. Enabled only while a proof panel is
+ * open, so the crypto bundle and the three network round-trips are paid for on demand.
+ *
+ * `runProvenance` never rejects — every failure mode is a described state in the result — so the
+ * query has no error branch to render and `retry` is off: re-running a cryptographic check that
+ * already returned a verdict would only reproduce it.
+ */
+export function useProvenance(
+	apiKey: string,
+	siteId: string,
+	ref: ProofRef | null,
+	claim: LeafClaim | null,
+	enabled: boolean,
+) {
+	return useQuery<ProvenanceResult>({
+		queryKey: ['provenance', siteId, ref, claim],
+		queryFn: async () => {
+			const { runProvenance } = await import('../lib/provenance.js');
+			return runProvenance({ apiKey, siteId, ref, claim });
+		},
+		enabled: enabled && Boolean(apiKey),
+		retry: false,
 		staleTime: 5 * 60 * 1000,
 	});
 }

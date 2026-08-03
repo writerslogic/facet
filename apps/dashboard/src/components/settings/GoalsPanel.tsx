@@ -3,7 +3,15 @@
 import { type FormEvent, type ReactElement, useState } from 'react';
 import { useAdminGoals, useCreateGoal, useDeleteGoal } from '../../hooks/admin.js';
 import { CardSkeletons, EmptyState, ErrorState } from '../StatusStates.js';
-import { ConfirmDelete, Field, MutationStatus, Panel } from './kit.js';
+import {
+	BlockedReason,
+	ConfirmDelete,
+	Field,
+	FormControls,
+	MutationStatus,
+	Panel,
+	Select,
+} from './kit.js';
 
 export function GoalsPanel({
 	token,
@@ -20,9 +28,18 @@ export function GoalsPanel({
 	const [type, setType] = useState<'event' | 'path'>('event');
 	const [matchValue, setMatchValue] = useState('');
 
+	const canSubmit = Boolean(name.trim() && matchValue.trim());
+	const blocked = canSubmit
+		? null
+		: !name.trim() && !matchValue.trim()
+			? 'Enter a name and the value to match.'
+			: !name.trim()
+				? 'Enter a name for this goal.'
+				: `Enter the ${type} to match.`;
+
 	function onSubmit(event: FormEvent): void {
 		event.preventDefault();
-		if (!name.trim() || !matchValue.trim()) return;
+		if (!canSubmit) return;
 		create.mutate(
 			{
 				site_id: siteId,
@@ -40,56 +57,57 @@ export function GoalsPanel({
 	}
 
 	return (
-		<Panel title="Goals">
-			<form
-				onSubmit={onSubmit}
-				className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr_auto]"
-			>
-				<Field
-					id="goal-name"
-					label="Name"
-					value={name}
-					onChange={setName}
-					placeholder="Signup"
-				/>
-				<div>
-					<label
-						htmlFor="goal-type"
-						className="block text-xs font-medium text-[color:var(--ink)]"
-					>
-						Type
-					</label>
-					<select
+		<Panel
+			title="Goals"
+			description="A goal counts a conversion whenever an event name or a page path matches exactly."
+		>
+			<form onSubmit={onSubmit}>
+				<FormControls
+					busy={create.isPending}
+					className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto_1fr_auto]"
+				>
+					<Field
+						id="goal-name"
+						label="Name"
+						value={name}
+						onChange={setName}
+						placeholder="Signup"
+					/>
+					<Select
 						id="goal-type"
+						label="Type"
 						value={type}
-						onChange={(e) => setType(e.target.value as 'event' | 'path')}
-						className="mt-1 block w-full rounded-lg border border-[color:rgb(var(--border))] px-3 py-1.5 text-sm outline-none focus:border-[color:rgb(var(--border))] focus:ring-1 focus:ring-[color:rgb(var(--border))]"
+						onChange={(next) => setType(next as 'event' | 'path')}
 					>
 						<option value="event">event</option>
 						<option value="path">path</option>
-					</select>
-				</div>
-				<Field
-					id="goal-match"
-					label="Match value"
-					value={matchValue}
-					onChange={setMatchValue}
-					placeholder={type === 'event' ? 'signup' : '/thank-you'}
-				/>
-				<div className="flex items-end">
-					<button
-						type="submit"
-						disabled={create.isPending || !name.trim() || !matchValue.trim()}
-						className="w-full rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-40 sm:w-auto"
-					>
-						Add goal
-					</button>
-				</div>
+					</Select>
+					<Field
+						id="goal-match"
+						label="Match value"
+						value={matchValue}
+						onChange={setMatchValue}
+						placeholder={type === 'event' ? 'signup' : '/thank-you'}
+					/>
+					<div className="flex items-start pt-5">
+						<button
+							type="submit"
+							disabled={!canSubmit}
+							className="btn-accent w-full rounded-lg px-4 py-1.5 text-sm transition sm:w-auto"
+						>
+							Add goal
+						</button>
+					</div>
+				</FormControls>
 			</form>
+			<div className="mt-2">
+				<BlockedReason reason={blocked} />
+			</div>
 			<MutationStatus
 				isPending={create.isPending}
 				error={create.error}
 				success={create.isSuccess ? 'Goal created.' : null}
+				pendingLabel="Creating goal…"
 			/>
 
 			<div className="mt-5">
@@ -111,11 +129,15 @@ export function GoalsPanel({
 									<p className="truncate font-medium text-[color:var(--ink)]">
 										{g.name}
 									</p>
-									<p className="truncate text-xs text-[color:var(--muted)]">
+									<p className="truncate text-[color:var(--muted)] text-xs">
 										{g.type}: {g.match_value}
 									</p>
 								</div>
-								<ConfirmDelete onConfirm={() => remove.mutate(g.id)} />
+								<ConfirmDelete
+									onConfirm={() => remove.mutate(g.id)}
+									consequence={`Delete "${g.name}" and its conversion history?`}
+									busy={remove.isPending}
+								/>
 							</li>
 						))}
 					</ul>
@@ -123,7 +145,11 @@ export function GoalsPanel({
 					<EmptyState title="No goals yet">Add a goal to track conversions.</EmptyState>
 				)}
 			</div>
-			<MutationStatus isPending={remove.isPending} error={remove.error} />
+			<MutationStatus
+				isPending={remove.isPending}
+				error={remove.error}
+				pendingLabel="Deleting goal…"
+			/>
 		</Panel>
 	);
 }

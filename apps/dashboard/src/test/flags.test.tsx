@@ -131,11 +131,43 @@ describe('FlagsPanel', () => {
 		expect((patch?.body as { enabled: boolean }).enabled).toBe(true);
 	});
 
-	it('deletes a flag after confirmation', async () => {
+	it('names the unmet requirement instead of leaving a dead submit', async () => {
+		renderPanel();
+		await waitFor(() => expect(screen.getByText('New checkout')).toBeInTheDocument());
+		expect(screen.getByText('Enter a flag key.')).toBeInTheDocument();
+		fireEvent.change(screen.getByLabelText('Flag key'), { target: { value: 'promo' } });
+		fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Promo' } });
+		fireEvent.change(screen.getByLabelText('Variant 1 weight'), { target: { value: '4000' } });
+		expect(
+			screen.getByText('Variant weights must sum to exactly 10000 (currently 9000).'),
+		).toBeInTheDocument();
+	});
+
+	it('says which flag an edit will overwrite', async () => {
+		renderPanel();
+		await waitFor(() => expect(screen.getByText('New checkout')).toBeInTheDocument());
+		fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+		expect(screen.getByText(/Saving overwrites the live flag/)).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Save flag' })).toBeInTheDocument();
+	});
+
+	it('deletes a flag only after the consequence is shown and confirmed', async () => {
 		renderPanel();
 		await waitFor(() => expect(screen.getByText('New checkout')).toBeInTheDocument());
 		fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+		// Arming states what is lost and offers a way out before the second click.
+		expect(screen.getByText(/fall back to their own default/)).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
 		fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
 		await waitFor(() => expect(calls.some((c) => c.method === 'DELETE')).toBe(true));
+	});
+
+	it('cancels an armed delete without firing it', async () => {
+		renderPanel();
+		await waitFor(() => expect(screen.getByText('New checkout')).toBeInTheDocument());
+		fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+		fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+		expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+		expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
 	});
 });

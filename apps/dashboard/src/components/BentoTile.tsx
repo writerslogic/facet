@@ -3,20 +3,25 @@
 // a count-up hook so metrics animate in "alive"; and a compact KPI readout for a tile.
 
 import type { CountRow } from '@facet/shared';
-import { ArrowDown, ArrowUp, Maximize2, TableProperties, X } from 'lucide-react';
+import { Maximize2, TableProperties, X } from 'lucide-react';
 import {
 	type ReactElement,
 	type MouseEvent as ReactMouseEvent,
 	type ReactNode,
 	useEffect,
+	useId,
 	useRef,
 	useState,
 } from 'react';
+import type { CompareSource } from '../hooks/compare.js';
 import { cn } from '../lib/cn.js';
-import { formatNumber } from '../lib/format.js';
+import { type DeltaSense, formatNumber } from '../lib/format.js';
+import { BreakdownList } from './CompareList.js';
+import { DeltaBadge } from './Delta.js';
 import { ColumnSpark, HorizonSpark, RadialGauge } from './KpiViz.js';
 import { Sparkline } from './Sparkline.js';
-import { TopList } from './TopList.js';
+import type { DrillSpec } from './boxes/drill.js';
+import { ListBody } from './boxes/shared.js';
 
 /** The "what drove this metric" breakdown revealed when a KPI tile is expanded — its top contributors,
  * clickable to cross-filter the whole board from inside the drill-down. */
@@ -25,6 +30,13 @@ export interface KpiBreakdown {
 	rows: CountRow[];
 	onSelect?: (key: string) => void;
 	activeKey?: string;
+	/** The same list over the preceding window, so the contributors carry deltas too. Omitted ⇒ none. */
+	compare?: CompareSource | null;
+	/** Enables in-tile drill-down on the contributors: a KPI's top pages are the same rows the Pages
+	 * box draws, so they compose the same way rather than being a second, weaker copy of that list. */
+	drill?: DrillSpec;
+	/** Singular noun for a contributor, for the undrillable explanation (see ListBody). */
+	noun?: string;
 }
 
 /** The compact KPI mini-viz styles a box can switch between (its selectable chart-style variants). */
@@ -107,6 +119,9 @@ export function BentoTile({
 }): ReactElement {
 	// The whole board is dark now, so every tile carries light header text + controls.
 	const dark = true;
+	const headingId = useId();
+	// The caller signals a scrolling body by passing an overflow utility (see BentoBoard).
+	const scrolls = Boolean(bodyClassName?.includes('overflow-y-auto'));
 	// Expand on a click anywhere in the tile EXCEPT on its own interactive content (list rows cross-filter,
 	// flow nodes drill — those must not also expand). The corner Maximize button remains the keyboard path.
 	const onTileClick = onExpand
@@ -124,6 +139,9 @@ export function BentoTile({
 		<section
 			data-focused={focused}
 			onClick={onTileClick}
+			// Named from its own heading, so each tile is an addressable region rather than an
+			// anonymous <section> the accessibility tree drops on the floor.
+			aria-labelledby={label ? headingId : undefined}
 			className={cn(
 				'tile-dark facet-glint group relative flex min-h-0 flex-col overflow-hidden rounded-2xl p-4',
 				'transition-all duration-300 ease-out',
@@ -141,7 +159,7 @@ export function BentoTile({
 					aria-pressed={tableActive}
 					aria-label={`${tableActive ? 'Hide' : 'Show'} ${label ?? 'box'} data table`}
 					className={cn(
-						'absolute right-9 top-2.5 z-20 rounded-md p-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 group-hover:opacity-100',
+						'absolute right-9 top-2.5 z-20 rounded-md p-1 transition group-hover:opacity-100',
 						tableActive
 							? 'text-accent-300 opacity-100'
 							: 'text-[color:var(--muted)] opacity-40 hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]',
@@ -157,10 +175,10 @@ export function BentoTile({
 					onClick={onClose}
 					aria-label={`Close ${label ?? 'tile'} detail`}
 					className={cn(
-						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40',
+						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 transition',
 						dark
 							? 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
-							: 'text-[color:var(--muted)] hover:bg-neutral-100 hover:text-neutral-700',
+							: 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]',
 					)}
 				>
 					<X className="h-3.5 w-3.5" aria-hidden="true" />
@@ -173,10 +191,10 @@ export function BentoTile({
 					aria-label={`Expand ${label ?? 'tile'}`}
 					// Faintly visible at rest so every tile signals it can be expanded; solid on hover/focus.
 					className={cn(
-						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 opacity-40 transition focus:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/40 group-hover:opacity-100',
+						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 opacity-40 transition focus:opacity-100 group-hover:opacity-100',
 						dark
 							? 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
-							: 'text-[color:var(--muted)] hover:bg-neutral-100 hover:text-neutral-700',
+							: 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]',
 					)}
 				>
 					<Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
@@ -185,21 +203,32 @@ export function BentoTile({
 			{label || action ? (
 				<header className="relative z-10 mb-2 flex shrink-0 items-center justify-between gap-2 pr-7">
 					{label ? (
-						<h3
+						// h2, not h3: a tile is a top-level section of the Overview, directly under
+						// the view's h1. At h3 every tile label was a skipped level.
+						<h2
+							id={headingId}
 							className={cn(
 								'text-[11px] font-semibold uppercase tracking-[0.08em]',
 								dark ? 'text-[color:var(--muted)]' : 'text-[color:var(--faint)]',
 							)}
 						>
 							{label}
-						</h3>
+						</h2>
 					) : (
 						<span />
 					)}
 					{action ? <div className="flex items-center gap-1.5">{action}</div> : null}
 				</header>
 			) : null}
-			<div className={cn('@container/tile relative z-10 min-h-0 flex-1', bodyClassName)}>
+			{/* When the body scrolls it is a scrollable region, and a scrollable region that no key can
+			    reach traps its content away from keyboard users entirely (WCAG 2.1.1). tabindex only
+			    when it actually scrolls, so the board does not grow a tab stop per tile at rest. */}
+			<div
+				className={cn('@container/tile relative z-10 min-h-0 flex-1', bodyClassName)}
+				{...(scrolls
+					? { tabIndex: 0, role: 'group', 'aria-label': `${label ?? 'Tile'} contents` }
+					: {})}
+			>
 				{children}
 			</div>
 		</section>
@@ -243,7 +272,7 @@ export function KpiTile({
 	label: string;
 	value: number;
 	deltaPct?: number | null;
-	deltaSense?: 'improvement' | 'regression' | 'neutral';
+	deltaSense?: DeltaSense;
 	spark?: number[];
 	stroke?: string;
 	/** The user-chosen data-palette accent; recolours the mini-viz + line + tint. Unset = prism default. */
@@ -259,33 +288,25 @@ export function KpiTile({
 	gaugeLabel?: string;
 }): ReactElement {
 	const shown = useCountUp(value);
-	const tone =
-		deltaSense === 'improvement'
-			? 'bg-emerald-50 text-emerald-700 ring-emerald-600/15'
-			: deltaSense === 'regression'
-				? 'bg-rose-50 text-rose-700 ring-rose-600/15'
-				: 'bg-neutral-100 text-[color:var(--faint)] ring-neutral-600/10';
 	const hasSpark = Boolean(spark && spark.length > 1);
 	const hasBreakdown = Boolean(breakdown && breakdown.rows.length > 0);
 	// The accent (when the user picks one) drives the line + tint; otherwise the box's default stroke does.
 	const line = accent ?? stroke;
 	// color-mix (not a hex-alpha suffix) so the tint works whether `line` is a hex or a palette var().
 	const tint = `radial-gradient(120% 80% at 100% 0%, color-mix(in srgb, ${line} 8%, transparent), transparent 60%)`;
+	// The board hands deltas down as whole percents (see `pct` in App.tsx); the shared badge works in
+	// fractions, so this is the one place that converts. Everything else — sign, arrow, colour,
+	// tooltip, screen-reader phrasing — now comes from the same rules as every other surface.
 	const chip =
 		deltaPct != null ? (
-			<span
-				className={cn(
-					'tabular inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ring-1',
-					tone,
-				)}
-			>
-				{deltaPct >= 0 ? (
-					<ArrowUp className="h-2.5 w-2.5" aria-hidden="true" />
-				) : (
-					<ArrowDown className="h-2.5 w-2.5" aria-hidden="true" />
-				)}
-				{Math.abs(deltaPct)}%
-			</span>
+			<DeltaBadge
+				movement={{
+					kind: 'pct',
+					value: deltaPct / 100,
+					sense: deltaSense ?? 'neutral',
+				}}
+				size="sm"
+			/>
 		) : null;
 
 	if (expanded) {
@@ -341,15 +362,33 @@ export function KpiTile({
 						) : null}
 						{hasBreakdown && breakdown ? (
 							<div className="min-h-0 flex-1 overflow-hidden">
-								<TopList
-									bare
-									dark
-									limit={5}
-									title={breakdown.title}
-									rows={breakdown.rows}
-									onSelect={breakdown.onSelect}
-									activeKey={breakdown.activeKey}
-								/>
+								{breakdown.drill ? (
+									// Same list, same drill model as the dimension boxes — a KPI's
+									// contributors are not a second-class copy of that list.
+									// `expanded` is left off deliberately: this column is short, so
+									// the compact bars + panel-in-place layout is the one that fits.
+									<ListBody
+										title={breakdown.title}
+										rows={breakdown.rows}
+										onSelect={breakdown.onSelect}
+										activeKey={breakdown.activeKey}
+										compare={breakdown.compare}
+										drill={breakdown.drill}
+										noun={breakdown.noun}
+										config={{ variant: 'bars', rows: '5' }}
+									/>
+								) : (
+									<BreakdownList
+										bare
+										dark
+										limit={5}
+										title={breakdown.title}
+										rows={breakdown.rows}
+										onSelect={breakdown.onSelect}
+										activeKey={breakdown.activeKey}
+										compare={breakdown.compare}
+									/>
+								)}
 							</div>
 						) : null}
 					</div>
@@ -361,7 +400,9 @@ export function KpiTile({
 	return (
 		<div className="flex h-full items-center gap-3" style={{ background: tint }}>
 			<div className="flex min-w-0 flex-col justify-center">
-				<div className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted)]">
+				{/* leading-none: an 11px uppercase label was sitting in a 16.5px line box, which is
+				    loose typography AND was 5px of the budget in the shortest tile on the board. */}
+				<div className="text-[11px] font-semibold uppercase leading-none tracking-[0.08em] text-[color:var(--muted)]">
 					{label}
 				</div>
 				<div className="mt-0.5 flex items-baseline gap-1.5">

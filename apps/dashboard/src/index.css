@@ -46,15 +46,18 @@ html {
    white background). Default (no attribute) = Prism dark, so an un-themed render still looks right. */
 :root,
 [data-palette='prism'] {
-	--bg: #0a0a0f;
-	--panel: #16161d;
-	--border: 255 255 255 / 0.08;
-	--hover: 255 255 255 / 0.045;
-	--ink: #f5f4fb;
-	--muted: #9ca3b8;
-	--faint: #6b7192;
-	--bloom1: 124 92 255 / 0.3;
-	--bloom2: 232 92 255 / 0.2;
+	--bg: #08080d;
+	--panel: #17171f;
+	--panel-2: #1f1f2b;
+	--border: 173 168 255 / 0.16;
+	--border-strong: 173 168 255 / 0.3;
+	--hover: 173 168 255 / 0.1;
+	--ink: #f7f6ff;
+	--muted: #c3c6dd;
+	--faint: #9ba0c0;
+	--accent-rgb: 129 140 248;
+	--bloom1: 124 92 255 / 0.2;
+	--bloom2: 232 92 255 / 0.14;
 	--d1: #8b8dff;
 	--d2: #c58bff;
 	--d3: #f45cff;
@@ -68,19 +71,24 @@ html {
 	--c6: #2ee6a6;
 }
 [data-palette='bio'] {
-	--bg: #0b0c10;
-	--panel: #1f2833;
-	--border: 200 240 240 / 0.1;
-	--hover: 200 240 240 / 0.06;
-	--ink: #eaf6f6;
-	--muted: #9aa8ad;
-	--faint: #66757f;
-	--bloom1: 102 252 241 / 0.16;
-	--bloom2: 240 0 255 / 0.12;
+	--bg: #080a0d;
+	--panel: #18212b;
+	--panel-2: #22303c;
+	--border: 120 250 240 / 0.18;
+	--border-strong: 120 250 240 / 0.34;
+	--hover: 120 250 240 / 0.1;
+	--ink: #eefdfd;
+	--muted: #b6cbcf;
+	--faint: #8ba1a8;
+	--accent-rgb: 102 252 241;
+	--bloom1: 102 252 241 / 0.14;
+	--bloom2: 240 0 255 / 0.1;
 	--d1: #66fcf1;
 	--d2: #f000ff;
 	--d3: #45a29e;
-	--pos: #45a29e;
+	/* One step lighter than --d3, which this used to reuse verbatim: at #45a29e the status text sat at
+	   4.48:1 on its own badge tint. The data hue is unchanged; only the status ink moves. */
+	--pos: #4fb3ae;
 	--neg: #ff5470;
 	--c1: #66fcf1;
 	--c2: #f000ff;
@@ -88,17 +96,30 @@ html {
 	--c4: #ffd166;
 	--c5: #ff6b6b;
 	--c6: #45a29e;
+	--accent-50: #e8fffd;
+	--accent-100: #c5fffa;
+	--accent-200: #99fff4;
+	--accent-300: #66fcf1;
+	--accent-400: #3ae8dd;
+	--accent-500: #17c9be;
+	--accent-600: #0ea79d;
+	--accent-700: #0d857e;
+	--accent-800: #106a65;
+	--accent-900: #115753;
 }
 [data-palette='aurora'] {
-	--bg: #121420;
-	--panel: #1e2235;
-	--border: 200 200 255 / 0.1;
-	--hover: 200 200 255 / 0.06;
-	--ink: #f2f1f9;
-	--muted: #9aa0b8;
-	--faint: #6b7192;
-	--bloom1: 255 107 107 / 0.16;
-	--bloom2: 255 209 102 / 0.12;
+	--bg: #0e101a;
+	--panel: #1d2133;
+	--panel-2: #262b41;
+	--border: 190 200 255 / 0.18;
+	--border-strong: 190 200 255 / 0.34;
+	--hover: 190 200 255 / 0.1;
+	--ink: #f6f5ff;
+	--muted: #bcc2dc;
+	--faint: #939ac0;
+	--accent-rgb: 255 138 138;
+	--bloom1: 255 107 107 / 0.14;
+	--bloom2: 255 209 102 / 0.1;
 	--d1: #ff6b6b;
 	--d2: #ffd166;
 	--d3: #06d6a0;
@@ -110,47 +131,77 @@ html {
 	--c4: #4d96ff;
 	--c5: #c77dff;
 	--c6: #ff9f1c;
+	--accent-50: #fff1f1;
+	--accent-100: #ffdede;
+	--accent-200: #ffc2c2;
+	--accent-300: #ff9d9d;
+	--accent-400: #ff8a8a;
+	--accent-500: #ff6b6b;
+	--accent-600: #e64f4f;
+	--accent-700: #c03a3a;
+	--accent-800: #9a3030;
+	--accent-900: #7d2a2a;
 }
 [data-palette='fintech'] {
-	--bg: #1a1a1d;
-	--panel: #2b2b30;
-	--border: 255 255 255 / 0.09;
-	--hover: 255 255 255 / 0.05;
-	--ink: #ececed;
-	--muted: #a0a0a8;
-	--faint: #74747e;
-	--bloom1: 77 143 172 / 0.16;
-	--bloom2: 181 131 141 / 0.12;
-	--d1: #4d8fac;
-	--d2: #b5838d;
-	--d3: #81b29a;
-	--pos: #81b29a;
-	--neg: #c98a91;
-	--c1: #4d8fac;
-	--c2: #b5838d;
-	--c3: #81b29a;
-	--c4: #e0b589;
-	--c5: #6d8299;
-	--c6: #a5a58d;
+	--bg: #141417;
+	--panel: #26262c;
+	--panel-2: #31313a;
+	--border: 210 220 235 / 0.16;
+	--border-strong: 210 220 235 / 0.32;
+	--hover: 210 220 235 / 0.09;
+	--ink: #f4f4f6;
+	--muted: #c0c0cb;
+	/* Lifted one step: at #9797a4 this palette's faint text landed on 4.46:1 over its own --panel-2,
+	   the only dark palette below 4.5:1 (this surface is a shade lighter than the others). */
+	--faint: #9d9dab;
+	--accent-rgb: 109 179 209;
+	--bloom1: 77 143 172 / 0.14;
+	--bloom2: 181 131 141 / 0.1;
+	--d1: #5fa9c9;
+	--d2: #d1949f;
+	--d3: #93cfae;
+	--pos: #7fd6a8;
+	--neg: #ef8f98;
+	--c1: #5fa9c9;
+	--c2: #d1949f;
+	--c3: #93cfae;
+	--c4: #e8c59a;
+	--c5: #8ba3bd;
+	--c6: #bfc0a3;
+	--accent-50: #eff8fc;
+	--accent-100: #d8eef6;
+	--accent-200: #b2dcec;
+	--accent-300: #8bc7de;
+	--accent-400: #6db3d1;
+	--accent-500: #4d8fac;
+	--accent-600: #3d7590;
+	--accent-700: #335f75;
+	--accent-800: #2d4f60;
+	--accent-900: #294351;
 }
 /* Cloudflare: graphite "edge" surfaces + the signature orange as the UI-chrome accent (the only palette
    that overrides --accent-*). Data stays vibrant + independent — orange/blue/teal categorical ramp with a
    distinct green/rose for pos/neg, so the accent never competes with or muddies the metrics. */
 [data-palette='cloudflare'] {
-	--bg: #0b0d0e;
-	--panel: #16191c;
-	--border: 255 255 255 / 0.08;
-	--hover: 255 255 255 / 0.05;
-	--ink: #f2f4f5;
-	--muted: #9aa4ad;
-	--faint: #6b747c;
-	--bloom1: 246 130 31 / 0.16;
-	--bloom2: 43 127 255 / 0.1;
+	--bg: #090b0c;
+	--panel: #171b1e;
+	--panel-2: #21262a;
+	--border: 255 205 160 / 0.16;
+	--border-strong: 255 205 160 / 0.32;
+	--hover: 255 205 160 / 0.09;
+	--ink: #f6f8f9;
+	--muted: #bcc6ce;
+	--faint: #939ea7;
+	--accent-rgb: 255 150 64;
+	--bloom1: 246 130 31 / 0.14;
+	--bloom2: 43 127 255 / 0.09;
 	--d1: #f6821f;
 	--d2: #3b82f6;
 	--d3: #00b3b3;
 	--pos: #22c55e;
-	--neg: #f43f5e;
+	/* Lifted off rose-500: at rose-500 the badge/alert text sat at 4.2:1 on its own tint, the only
+	   dark-mode status colour in any palette that missed 4.5:1. */
+	--neg: #fb5a75;
 	--c1: #f6821f;
 	--c2: #3b82f6;
 	--c3: #00b3b3;
@@ -174,23 +225,40 @@ html {
 [data-mode='light'] {
 	--bg: #f6f7f9;
 	--panel: #ffffff;
-	--border: 15 23 42 / 0.08;
-	--hover: 15 23 42 / 0.035;
+	--panel-2: #f2f4f8;
+	--border: 15 23 42 / 0.1;
+	--border-strong: 15 23 42 / 0.34;
+	--hover: 15 23 42 / 0.045;
 	--ink: #0f172a;
 	--muted: #475569;
-	--faint: #94a3b8;
+	/* slate-500 (#64748b) missed 4.5:1 on EVERY light surface — 4.44 on --bg, 4.32 on --panel-2, 3.95
+	   on an active chip — which made it the single largest source of contrast failures in the app.
+	   This value clears 4.5:1 on all four while staying visibly lighter than --muted. */
+	--faint: #556173;
+	--accent-rgb: 99 102 241;
 	--bloom1: 99 102 241 / 0.07;
 	--bloom2: 217 70 239 / 0.05;
+	/* Fallback for the frame before initTheme() stamps data-palette; each palette overrides below. */
+	--pos: #097352;
+	--neg: #be1b4e;
 }
+/* --pos/--neg used to be dark-only: light mode inherited the dark palette's values, so every status
+   badge, alert, delta and inline error rendered a bright mint/rose on white at 1.6–3.7:1. Each palette
+   gets a deepened version of its OWN pos/neg hue, so the status colour still belongs to the theme. */
 [data-mode='light'][data-palette='prism'] {
 	--d1: #5b4bff;
 	--d2: #8b2ff0;
 	--d3: #d61ee0;
+	--pos: #097352;
+	--neg: #be1b4e;
 }
 [data-mode='light'][data-palette='bio'] {
 	--d1: #0891b2;
 	--d2: #c026d3;
 	--d3: #0f766e;
+	--pos: #0f766e;
+	--neg: #b8283f;
+	--accent-rgb: 14 167 157;
 	--bloom1: 8 145 178 / 0.07;
 	--bloom2: 192 38 211 / 0.05;
 }
@@ -198,6 +266,9 @@ html {
 	--d1: #ea580c;
 	--d2: #d97706;
 	--d3: #059669;
+	--pos: #047857;
+	--neg: #b91c3c;
+	--accent-rgb: 224 79 79;
 	--bloom1: 234 88 12 / 0.07;
 	--bloom2: 217 119 6 / 0.05;
 }
@@ -205,6 +276,9 @@ html {
 	--d1: #2f6f8f;
 	--d2: #9d6b74;
 	--d3: #4a7c59;
+	--pos: #2b6a4d;
+	--neg: #9c3a44;
+	--accent-rgb: 61 117 144;
 	--bloom1: 47 111 143 / 0.07;
 	--bloom2: 157 107 116 / 0.05;
 }
@@ -212,8 +286,276 @@ html {
 	--d1: #ea6a0a;
 	--d2: #2563eb;
 	--d3: #0f766e;
+	--pos: #13712f;
+	--neg: #b01138;
+	--accent-rgb: 224 108 15;
 	--bloom1: 246 130 31 / 0.08;
 	--bloom2: 37 99 235 / 0.05;
+}
+
+/* --- Chrome accents ---------------------------------------------------------------------------
+   Selected tabs, active chips, primary buttons and focus rings previously hardcoded the light-mode
+   Tailwind ramp (`bg-accent-50 text-accent-700`), which renders a near-white pill with dark text on
+   the dark UI — the single biggest reason the dark shell read as washed-out and inconsistent. These
+   semantic tokens are late-bound to `--accent-rgb`, so one rule set works in both modes and every
+   palette: a saturated translucent fill, a lit border, and text bright enough to actually pop. */
+:root {
+	--chip-bg: rgb(var(--accent-rgb) / 0.16);
+	--chip-bg-hover: rgb(var(--accent-rgb) / 0.26);
+	--chip-border: rgb(var(--accent-rgb) / 0.55);
+	/* The raw accent on its own 16% tint measured 3.9–4.2:1 in prism/aurora/fintech — an active tab or
+	   chip is body-sized text, so it owes 4.5:1. Lifting it toward white clears every palette. */
+	--chip-ink: color-mix(in srgb, rgb(var(--accent-rgb)) 78%, #ffffff);
+	--accent-glow: 0 0 0 1px rgb(var(--accent-rgb) / 0.35), 0 6px 20px -6px rgb(var(--accent-rgb) / 0.45);
+	/* The keyboard focus indicator. The bare accent is a data hue first: on bio it lands at 2.8:1 over
+	   the page, under the 3:1 that WCAG 1.4.11 requires of a focus ring. Pulling it toward --ink darkens
+	   it on light and brightens it on dark, so one expression clears 3:1 in every palette and mode. */
+	--focus-ring: color-mix(in srgb, rgb(var(--accent-rgb)) 70%, var(--ink));
+	/* The visible boundary of a text control. --border is a hairline at 0.10–0.18 alpha (≈1.2:1), which
+	   is decoration, not the 3:1 boundary an input owes under 1.4.11. */
+	--control-border: color-mix(in srgb, var(--ink) 52%, var(--panel-2));
+	/* Alpha of the wash behind a status badge/alert. The text on it is the palette's own pos/neg hue, so
+	   the wash cannot be so strong that it eats the 4.5:1 that hue has against the bare panel. */
+	--status-tint: 12%;
+}
+[data-mode='light'] {
+	/* On white the same alphas wash out, and the pure accent is too light for body-sized text. */
+	--chip-bg: rgb(var(--accent-rgb) / 0.1);
+	--chip-bg-hover: rgb(var(--accent-rgb) / 0.16);
+	--chip-border: rgb(var(--accent-rgb) / 0.45);
+	/* 78% left bio at 3.6:1 and cloudflare at 4.0:1 on the chip fill; 62% clears 4.5:1 everywhere. */
+	--chip-ink: color-mix(in srgb, rgb(var(--accent-rgb)) 62%, #0f172a);
+	/* White surfaces darken a tint far less than near-black ones lighten it, so the wash has to be
+	   lighter here to leave the deepened pos/neg hues their 4.5:1. */
+	--status-tint: 8%;
+}
+
+/* An active/selected chrome element (tab, filter chip, "Managing" pill, toggle). */
+.chip-active {
+	background-color: var(--chip-bg);
+	border-color: var(--chip-border);
+	color: var(--chip-ink);
+}
+.chip-active:hover {
+	background-color: var(--chip-bg-hover);
+}
+/* The one primary action per surface. Solid accent, legible on both modes, lit on hover. */
+.btn-accent {
+	background-image: linear-gradient(
+		135deg,
+		rgb(var(--accent-rgb)),
+		color-mix(in srgb, rgb(var(--accent-rgb)) 55%, var(--c3, #d946ef))
+	);
+	color: #0b0b12;
+	font-weight: 600;
+}
+/* White on the bare accent is 3.0:1 on bio, 3.9:1 on aurora and 4.3:1 on cloudflare — the primary
+   action of every surface, failing in three of five palettes. Deepening the fill (rather than darkening
+   the label, which would then fail against the accent's light end) keeps one legible treatment. */
+[data-mode='light'] .btn-accent {
+	background-image: linear-gradient(
+		135deg,
+		color-mix(in srgb, rgb(var(--accent-rgb)) 70%, #0f172a),
+		color-mix(
+			in srgb,
+			color-mix(in srgb, rgb(var(--accent-rgb)) 55%, var(--c3, #d946ef)) 70%,
+			#0f172a
+		)
+	);
+	color: #ffffff;
+}
+.btn-accent:hover {
+	filter: brightness(1.12) saturate(1.1);
+	box-shadow: var(--accent-glow);
+}
+/* Text painted in the palette's live data hues — for headline metrics that should read as data. */
+.text-data {
+	color: var(--d1);
+}
+/* Keyboard focus that is visible against a near-black surface. `:where()` keeps this at zero
+   specificity so a component's own `focus-visible:` utility can still layer on top — but it also means
+   any `focus:outline-none` beats it, which is why no component may set that (several used to, and
+   replaced this with a 40%-alpha ring measuring 1.5–2.3:1). */
+:where(
+		a,
+		button,
+		[role='tab'],
+		[role='menuitem'],
+		[role='menuitemradio'],
+		[role='button'],
+		input,
+		select,
+		textarea,
+		summary,
+		[tabindex]
+	):focus-visible {
+	outline: 2px solid var(--focus-ring);
+	outline-offset: 2px;
+	border-radius: 0.5rem;
+}
+
+/* --- Surface primitives ------------------------------------------------------------------------
+   The Overview was migrated to the theme tokens; every other tab still hardcoded the light Tailwind
+   ramp (`bg-white`, `border-neutral-200`, `bg-neutral-900` buttons), so those pages rendered as white
+   islands on the dark shell — and any `text-neutral-900` that landed on a themed panel was black on
+   black. These primitives are the migration target: one class per recurring surface, all token-driven,
+   correct in both modes. */
+/* Radius is deliberately NOT set here: these classes are unlayered, so they would beat Tailwind's
+   `rounded-*` utilities (which live in @layer utilities) and freeze every card to one corner size.
+   Callers keep their own `rounded-*`. */
+.surface {
+	background-color: var(--panel);
+	border: 1px solid rgb(var(--border));
+	box-shadow: 0 1px 2px -1px rgb(0 0 0 / 0.4);
+}
+.surface-2 {
+	background-color: var(--panel-2);
+	border: 1px solid rgb(var(--border));
+}
+/* Secondary action: reads as a control, not as page text. */
+.btn-ghost {
+	background-color: transparent;
+	border: 1px solid rgb(var(--border));
+	color: var(--ink);
+	transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.btn-ghost:hover:not(:disabled) {
+	background-color: rgb(var(--hover));
+	border-color: rgb(var(--border-strong));
+}
+.btn-ghost:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+}
+.btn-accent:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
+	filter: none;
+	box-shadow: none;
+}
+/* Text inputs, selects and textareas across settings + dialogs. */
+.input {
+	background-color: var(--panel-2);
+	/* A control's boundary is what identifies it as a control, so it owes 3:1 (WCAG 1.4.11) — the
+	   hairline --border is ~1.2:1 and was the only thing separating every input from its panel. */
+	border: 1px solid var(--control-border);
+	color: var(--ink);
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.input::placeholder {
+	color: var(--faint);
+}
+/* Pointer focus keeps the soft ring; KEYBOARD focus gets the same 2px token outline as every other
+   control, because the 22%-alpha ring alone measured well under 3:1. */
+.input:focus {
+	outline: none;
+	border-color: rgb(var(--accent-rgb));
+	box-shadow: 0 0 0 3px rgb(var(--accent-rgb) / 0.22);
+}
+.input:focus-visible {
+	outline: 2px solid var(--focus-ring);
+	outline-offset: 1px;
+}
+/* Status pills + inline banners, tinted from the palette's own pos/neg hues rather than the fixed
+   emerald/red ramp, so they belong to the active theme. */
+.badge-pos {
+	background-color: color-mix(in srgb, var(--pos) var(--status-tint), transparent);
+	color: var(--pos);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--pos) 34%, transparent);
+}
+.badge-neg {
+	background-color: color-mix(in srgb, var(--neg) var(--status-tint), transparent);
+	color: var(--neg);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--neg) 34%, transparent);
+}
+.badge-warn {
+	background-color: color-mix(in srgb, var(--warn) var(--status-tint), transparent);
+	color: var(--warn);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--warn) 34%, transparent);
+}
+.badge-info {
+	background-color: color-mix(in srgb, var(--info) var(--status-tint), transparent);
+	color: var(--info);
+	box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--info) 34%, transparent);
+}
+/* --muted, not --faint: this is a status badge, the same job as badge-pos/neg, and --faint is the
+   weakest ink in the system — on the fintech surfaces it left the badge at 4.49:1 on its own fill. */
+.badge-neutral {
+	background-color: rgb(var(--hover));
+	color: var(--muted);
+	box-shadow: inset 0 0 0 1px rgb(var(--border));
+}
+/* Warn/info are deliberately palette-independent: status meaning shouldn't shift hue with the theme. */
+:root {
+	--warn: #f5a524;
+	--info: #56b8ff;
+}
+[data-mode='light'] {
+	/* amber-700 measured 4.49:1 on its own alert wash — a hundredth short, and the only remaining
+	   contrast failure on the light surfaces after the pos/neg/faint fixes. */
+	--warn: #a84d08;
+	--info: #0369a1;
+}
+.alert-error {
+	background-color: color-mix(in srgb, var(--neg) var(--status-tint), var(--panel));
+	border: 1px solid color-mix(in srgb, var(--neg) 40%, transparent);
+	color: var(--neg);
+}
+.alert-ok {
+	background-color: color-mix(in srgb, var(--pos) var(--status-tint), var(--panel));
+	border: 1px solid color-mix(in srgb, var(--pos) 40%, transparent);
+	color: var(--pos);
+}
+.alert-warn {
+	background-color: color-mix(in srgb, var(--warn) var(--status-tint), var(--panel));
+	border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+	color: var(--warn);
+}
+.alert-info {
+	background-color: color-mix(in srgb, var(--info) var(--status-tint), var(--panel));
+	border: 1px solid color-mix(in srgb, var(--info) 40%, transparent);
+	color: var(--info);
+}
+/* Inline error text under a field. */
+.text-neg {
+	color: var(--neg);
+}
+.text-pos {
+	color: var(--pos);
+}
+
+/* --- Text selection ---------------------------------------------------------------------------
+   Cmd+A should hand you the data, not the furniture. Chrome (buttons, tabs, menus, form labels,
+   the header/nav, chart axis ticks and legends, decorative glyphs) opts OUT of selection; the
+   default stays selectable, so metrics, table cells, ids, keys and prose still copy cleanly. */
+:where(
+		button,
+		[role='tab'],
+		[role='tablist'],
+		[role='menu'],
+		[role='menuitem'],
+		[role='menuitemradio'],
+		[role='radiogroup'],
+		label,
+		select,
+		option,
+		nav,
+		summary,
+		.uplot,
+		svg
+	),
+[data-chrome] {
+	-webkit-user-select: none;
+	user-select: none;
+}
+/* Inside chrome, anything explicitly marked as data stays copyable (e.g. a site id in a menu row). */
+[data-selectable] {
+	-webkit-user-select: text;
+	user-select: text;
+}
+::selection {
+	background-color: rgb(var(--accent-rgb) / 0.35);
+	color: var(--ink);
 }
 
 /* Brand logo (README faceted starburst): show the white mark on the dark UI, the black on light. Default
@@ -291,23 +633,27 @@ body {
    stay light. Fixed so the bloom doesn't scroll under the board. */
 .facet-dark {
 	background-color: var(--bg);
+	/* Two tight corner blooms only. The old full-surface conic gradient tinted every pixel violet,
+	   which is what made the whole shell read as "dark and purple" — colour now comes from the tiles
+	   and the data, not from a wash over the page. The facet lattice stays; it's structure, not hue. */
 	background-image:
-		radial-gradient(72rem 46rem at 28% -6%, rgb(var(--bloom1)), transparent 60%),
-		radial-gradient(56rem 40rem at 104% 0%, rgb(var(--bloom2)), transparent 55%),
-		conic-gradient(from 210deg at 36% 22%, rgb(var(--bloom1)), rgb(var(--bloom2)), transparent 42%),
-		repeating-linear-gradient(30deg, rgb(var(--border)) 0 1px, transparent 1px 48px),
-		repeating-linear-gradient(150deg, rgb(var(--border)) 0 1px, transparent 1px 48px);
+		radial-gradient(48rem 30rem at 12% -10%, rgb(var(--bloom1)), transparent 62%),
+		radial-gradient(40rem 26rem at 100% -6%, rgb(var(--bloom2)), transparent 58%),
+		repeating-linear-gradient(30deg, rgb(var(--accent-rgb) / 0.05) 0 1px, transparent 1px 52px),
+		repeating-linear-gradient(150deg, rgb(var(--accent-rgb) / 0.05) 0 1px, transparent 1px 52px);
 	background-attachment: fixed;
 	background-repeat: no-repeat;
 }
 
 /* A single dark tile: opaque ink face (blur fights the canvas charts), hairline lilac border, and a
-   bevel — top-left light, bottom-right dark — read as a cut facet rather than a floating card. */
+   bevel — top-left light, bottom-right dark — read as a cut facet rather than a floating card.
+   The face is lifted clear of the page so tiles read as distinct objects on the near-black board. */
 .tile-dark {
 	background-color: var(--panel);
+	background-image: linear-gradient(160deg, rgb(var(--accent-rgb) / 0.05), transparent 46%);
 	border: 1px solid rgb(var(--border));
 	box-shadow:
-		inset 1px 1px 0 rgb(255 255 255 / 0.05),
+		inset 1px 1px 0 rgb(255 255 255 / 0.06),
 		inset -1px -1px 0 rgb(0 0 0 / 0.35),
 		0 12px 34px -14px rgb(0 0 0 / 0.55);
 }
@@ -331,6 +677,54 @@ body {
 .tile-dark:hover::before,
 .tile-dark[data-focused='true']::before {
 	opacity: 0.9;
+}
+
+/* --- Breakdown bars ---------------------------------------------------------------------------
+   A TopList publishes its dimension's hue as `--bar` on the card; every bar state is derived from
+   that one variable, so Pages / Referrers / Countries / Devices each read as a distinct colour
+   instead of eight tiles of identical indigo. `data-soft` is the calmer weight used off the bento
+   board. Falls back to the chrome accent when no `--bar` is set. */
+/* A flat alpha wash of a warm hue over a near-black panel composites to mud (amber → brown), which is
+   exactly the "dark and muted" failure mode. So a bar is a GRADIENT — strongest at its origin, fading
+   along its length — with a full-strength leading edge. That reads as emitted light rather than tinted
+   ink, and it keeps every hue in the ramp vivid on the dark surface. */
+.bar-fill {
+	--bar-color: var(--bar, rgb(var(--accent-rgb)));
+	--bar-head: 48%;
+	--bar-tail: 18%;
+	background-image: linear-gradient(
+		90deg,
+		color-mix(in srgb, var(--bar-color) var(--bar-head), transparent),
+		color-mix(in srgb, var(--bar-color) var(--bar-tail), transparent)
+	);
+	box-shadow: inset -1.5px 0 0 color-mix(in srgb, var(--bar-color) 85%, transparent);
+	/* Unregistered custom properties can't tween, so the head/tail steps land instantly on hover —
+	   only the width animates, which is the motion that actually carries meaning here. */
+	transition: width 0.5s ease-out;
+}
+.group:hover > .bar-fill {
+	--bar-head: 68%;
+	--bar-tail: 28%;
+}
+.bar-fill[data-active='true'] {
+	--bar-head: 82%;
+	--bar-tail: 38%;
+	box-shadow:
+		inset -1.5px 0 0 var(--bar-color),
+		0 0 20px -6px var(--bar-color);
+}
+/* The calmer weight used off the bento board. */
+.bar-fill[data-soft='true'] {
+	--bar-head: 34%;
+	--bar-tail: 12%;
+}
+.group:hover > .bar-fill[data-soft='true'] {
+	--bar-head: 52%;
+	--bar-tail: 20%;
+}
+.bar-fill[data-soft='true'][data-active='true'] {
+	--bar-head: 66%;
+	--bar-tail: 26%;
 }
 
 /* Metrics: consistent-width figures so numbers don't jitter as they update. */
@@ -374,9 +768,45 @@ body {
 	*::after {
 		animation-duration: 0.01ms !important;
 		animation-iteration-count: 1 !important;
+		/* Zeroing the DURATION alone is not enough for a staggered entrance: a `both`-filled animation
+		   holds its `from` keyframe for the whole DELAY, so a 400ms stagger would leave the board
+		   invisible for 400ms — the exact motion the preference asked not to happen. */
+		animation-delay: 0ms !important;
 		transition-duration: 0.01ms !important;
+		transition-delay: 0ms !important;
 		scroll-behavior: auto !important;
 	}
+}
+
+/* --- Board entrance ---------------------------------------------------------------------------
+   Tiles are dealt in reading order rather than appearing at once, which gives the eye somewhere to
+   start. `--tile-i` is the tile's capped index (see BentoBoard); reduced motion drops the whole thing
+   via the rule above — duration AND delay — so the board simply is there. */
+@keyframes facet-tile-in {
+	from {
+		opacity: 0;
+		transform: translate3d(0, 12px, 0) scale(0.985);
+	}
+	to {
+		opacity: 1;
+		transform: translate3d(0, 0, 0) scale(1);
+	}
+}
+.tile-enter {
+	animation: facet-tile-in 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+	animation-delay: calc(var(--tile-i, 0) * 40ms);
+}
+
+/* A light travelling along a highlighted Sankey ribbon, source → target. The dash pattern is mostly
+   gap, so what moves is a short highlight rather than a marching-ants outline. One period per
+   ribbon regardless of length, so the whole subgraph reads as one flow. */
+@keyframes facet-flow {
+	to {
+		stroke-dashoffset: -64;
+	}
+}
+.facet-flow {
+	animation: facet-flow 1.5s linear infinite;
 }
 
 /* The hero traffic chart: a soft indigo glow under the plotted line + fills, and a left-to-right
@@ -404,9 +834,11 @@ body {
 	font-family: var(--font-sans);
 }
 
+/* The legend names the series, so it is content, not decoration. It was pinned to a fixed neutral-600
+   that measured ~2.5:1 on the dark board; --muted tracks the active theme in both modes. */
 .uplot .u-legend {
 	font-size: 12px;
-	color: #525252;
+	color: var(--muted);
 }
 
 .uplot .u-legend .u-marker {

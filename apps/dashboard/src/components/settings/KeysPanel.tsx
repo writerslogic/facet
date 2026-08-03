@@ -1,12 +1,28 @@
-// API keys panel: issue a key (plaintext shown ONCE with a copy affordance + "won't be shown again"
-// warning, and an offer to save it as a site profile), list keys without their hash, and revoke.
+// API keys panel: issue a key (plaintext shown ONCE, then discarded), list keys without their hash,
+// and revoke.
+//
+// The plaintext key exists only in this component's state. It is never written to storage by this
+// panel; the one path that persists it — "Save in this browser" — writes to the site-profile store,
+// so that consequence is now stated at the point of the click instead of being implied by the word
+// "profile". "Done" wipes it from state so it stops sitting on screen for the rest of the session.
+// The banner also carries the site id it was issued for and refuses to render against another site,
+// so a mid-flow site switch cannot pair site A's key with site B's id.
 
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, KeyRound } from 'lucide-react';
 import { type FormEvent, type ReactElement, useState } from 'react';
 import { useIssueKey, useKeys, useRevokeKey } from '../../hooks/admin.js';
+import { formatDay } from '../../lib/datetime.js';
 import { useDashboard } from '../../state.js';
 import { CardSkeletons, EmptyState, ErrorState } from '../StatusStates.js';
-import { ConfirmDelete, Field, MutationStatus, Panel } from './kit.js';
+import { ConfirmDelete, Field, FormControls, MutationStatus, Panel } from './kit.js';
+
+interface IssuedKey {
+	id: string;
+	key: string;
+	label: string;
+	/** The site the key authenticates. Guards against the panel being reused for another site. */
+	siteId: string;
+}
 
 export function KeysPanel({
 	token,
@@ -21,12 +37,9 @@ export function KeysPanel({
 	const { addProfile } = useDashboard();
 
 	const [label, setLabel] = useState('');
-	const [issued, setIssued] = useState<{
-		id: string;
-		key: string;
-		label: string;
-	} | null>(null);
+	const [issued, setIssued] = useState<IssuedKey | null>(null);
 	const [copied, setCopied] = useState(false);
+	const [copyFailed, setCopyFailed] = useState(false);
 	const [savedProfile, setSavedProfile] = useState(false);
 
 	function onSubmit(event: FormEvent): void {
@@ -40,9 +53,11 @@ export function KeysPanel({
 						id: res.id,
 						key: res.key,
 						label: trimmed || 'Key',
+						siteId,
 					});
 					setLabel('');
 					setCopied(false);
+					setCopyFailed(false);
 					setSavedProfile(false);
 				},
 			},
@@ -54,75 +69,129 @@ export function KeysPanel({
 		try {
 			await navigator.clipboard.writeText(issued.key);
 			setCopied(true);
+			setCopyFailed(false);
 		} catch {
+			// Clipboard access is denied outside a secure context; say so rather than silently
+			// leaving a Copy button that appears to do nothing on an unrecoverable secret.
 			setCopied(false);
+			setCopyFailed(true);
 		}
 	}
 
-	return (
-		<Panel title="API keys">
-			<form onSubmit={onSubmit} className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
-				<Field
-					id="key-label"
-					label="Label (optional)"
-					value={label}
-					onChange={setLabel}
-					placeholder="Production key"
-				/>
-				<div className="flex items-end">
-					<button
-						type="submit"
-						disabled={issue.isPending}
-						className="w-full rounded-lg bg-neutral-900 px-4 py-1.5 text-sm font-medium text-white transition hover:bg-neutral-700 disabled:opacity-40 sm:w-auto"
-					>
-						Issue key
-					</button>
-				</div>
-			</form>
-			<MutationStatus isPending={issue.isPending} error={issue.error} />
+	const showIssued = issued && issued.siteId === siteId ? issued : null;
 
-			{issued ? (
-				<div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4">
-					<p className="text-sm font-semibold text-amber-800">
+	return (
+		<Panel
+			title="API keys"
+			description="Keys authenticate read access to this site's stats. The key text is shown once, at issue time, and is never recoverable afterwards."
+		>
+			<form onSubmit={onSubmit}>
+				<FormControls
+					busy={issue.isPending}
+					className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]"
+				>
+					<Field
+						id="key-label"
+						label="Label (optional)"
+						value={label}
+						onChange={setLabel}
+						placeholder="Production key"
+						hint="Names the key in this list. It is not part of the secret."
+					/>
+					<div className="flex items-start pt-5">
+						<button
+							type="submit"
+							className="btn-accent w-full rounded-lg px-4 py-1.5 text-sm transition sm:w-auto"
+						>
+							Issue key
+						</button>
+					</div>
+				</FormControls>
+			</form>
+			<MutationStatus
+				isPending={issue.isPending}
+				error={issue.error}
+				pendingLabel="Issuing key…"
+			/>
+
+			{showIssued ? (
+				<div className="alert-warn mt-4 rounded-lg p-4">
+					<p className="flex items-center gap-1.5 font-semibold text-[color:var(--warn)] text-sm">
+						<KeyRound className="h-4 w-4 shrink-0" aria-hidden="true" />
 						Copy this key now — it will not be shown again.
 					</p>
-					<div className="mt-2 flex items-center gap-2">
-						<code className="flex-1 truncate rounded-md bg-[var(--panel)] px-3 py-1.5 font-mono text-sm text-[color:var(--ink)]">
-							{issued.key}
+					<p className="mt-1 text-[color:var(--muted)] text-xs">
+						Only the hash is stored server-side. If you lose this value the key cannot
+						be recovered; you would have to issue a new one and revoke this one.
+					</p>
+					<div className="mt-2 flex flex-wrap items-start gap-2">
+						<code
+							data-selectable
+							className="min-w-0 flex-1 break-all rounded-md bg-[var(--panel)] px-3 py-1.5 font-mono text-[color:var(--ink)] text-sm"
+						>
+							{showIssued.key}
 						</code>
 						<button
 							type="button"
 							onClick={copyKey}
-							className="inline-flex items-center gap-1 rounded-md border border-amber-300 bg-[var(--panel)] px-2 py-1.5 text-xs font-medium text-amber-800 transition hover:bg-amber-100"
+							className="btn-ghost inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1.5 font-medium text-xs"
 						>
 							{copied ? (
 								<Check className="h-3.5 w-3.5" aria-hidden="true" />
 							) : (
 								<Copy className="h-3.5 w-3.5" aria-hidden="true" />
 							)}
-							{copied ? 'Copied' : 'Copy'}
+							{copied ? 'Copied' : 'Copy key'}
 						</button>
 					</div>
-					{savedProfile ? (
-						<p aria-live="polite" className="mt-2 text-xs font-medium text-emerald-700">
-							Saved as a site profile.
+					<p aria-live="polite" className="sr-only">
+						{copied ? 'API key copied to clipboard.' : ''}
+					</p>
+					{copyFailed ? (
+						<p role="alert" className="mt-2 font-medium text-neg text-xs">
+							Could not write to the clipboard. Select the key above and copy it
+							manually.
 						</p>
-					) : (
+					) : null}
+
+					<div className="mt-3 flex flex-wrap items-center gap-2">
+						{savedProfile ? (
+							<p aria-live="polite" className="font-medium text-pos text-xs">
+								Saved as a site profile in this browser.
+							</p>
+						) : (
+							<button
+								type="button"
+								onClick={() => {
+									addProfile({
+										label: showIssued.label,
+										siteId,
+										apiKey: showIssued.key,
+									});
+									setSavedProfile(true);
+								}}
+								className="btn-ghost rounded-md px-3 py-1 font-medium text-xs transition"
+							>
+								Save in this browser
+							</button>
+						)}
 						<button
 							type="button"
 							onClick={() => {
-								addProfile({
-									label: issued.label,
-									siteId,
-									apiKey: issued.key,
-								});
-								setSavedProfile(true);
+								setIssued(null);
+								setCopied(false);
+								setCopyFailed(false);
 							}}
-							className="mt-3 rounded-md border border-[color:rgb(var(--border))] bg-[var(--panel)] px-3 py-1 text-xs font-medium text-[color:var(--ink)] transition hover:bg-[color:rgb(var(--hover))]"
+							className="btn-ghost rounded-md px-3 py-1 font-medium text-[color:var(--muted)] text-xs transition"
 						>
-							Save as site profile
+							Done — hide key
 						</button>
-					)}
+					</div>
+					<p className="mt-2 text-[color:var(--faint)] text-xs">
+						&ldquo;Save in this browser&rdquo; stores the key in this browser&rsquo;s
+						local storage as a site profile so the dashboard can read this site. Skip it
+						on a shared machine.
+					</p>
 				</div>
 			) : null}
 
@@ -145,17 +214,21 @@ export function KeysPanel({
 									<p className="truncate font-medium text-[color:var(--ink)]">
 										{k.label ?? 'Unlabeled key'}
 									</p>
-									<p className="truncate text-xs text-[color:var(--muted)]">
-										{k.id}
+									<p className="truncate text-[color:var(--muted)] text-xs">
+										<code data-selectable className="font-mono">
+											{k.id}
+										</code>
 										{k.last_used
-											? ` · last used ${new Date(k.last_used).toLocaleDateString()}`
+											? ` · last used ${formatDay(k.last_used)}`
 											: ' · never used'}
 									</p>
 								</div>
 								<ConfirmDelete
 									onConfirm={() => revoke.mutate(k.id)}
 									label="Revoke"
-									confirmLabel="Confirm revoke"
+									confirmLabel="Revoke key"
+									consequence="Anything using this key stops reading immediately."
+									busy={revoke.isPending}
 								/>
 							</li>
 						))}
@@ -166,7 +239,11 @@ export function KeysPanel({
 					</EmptyState>
 				)}
 			</div>
-			<MutationStatus isPending={revoke.isPending} error={revoke.error} />
+			<MutationStatus
+				isPending={revoke.isPending}
+				error={revoke.error}
+				pendingLabel="Revoking key…"
+			/>
 		</Panel>
 	);
 }

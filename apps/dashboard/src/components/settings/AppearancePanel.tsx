@@ -11,7 +11,7 @@ const MODES: Mode[] = ['dark', 'light'];
 export function AppearancePanel(): ReactElement {
 	const { palette, mode, setPalette, setMode } = useTheme();
 	return (
-		<div className="rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-4 shadow-sm">
+		<div className="surface rounded-xl p-4">
 			<h2 className="font-semibold text-[color:var(--ink)] text-sm">Appearance</h2>
 			<p className="mt-1 text-[color:var(--muted)] text-xs">
 				The interface stays neutral; the palette colours are used only for data — charts,
@@ -26,8 +26,11 @@ export function AppearancePanel(): ReactElement {
 						onClick={() => setPalette(p)}
 						className={cn(
 							'flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition',
+							// `chip-active` is the token-layer selected state; the old accent-400/500/200
+							// Tailwind ramp was fixed indigo, so it stayed indigo under every palette
+							// this control exists to switch between.
 							palette === p
-								? 'border-accent-400 bg-accent-500/15 text-accent-200 ring-1 ring-accent-400/30'
+								? 'chip-active'
 								: 'border-[color:rgb(var(--border))] text-[color:var(--ink)] hover:bg-[color:rgb(var(--hover))]',
 						)}
 					>
@@ -54,10 +57,10 @@ export function AppearancePanel(): ReactElement {
 							aria-pressed={mode === m}
 							onClick={() => setMode(m)}
 							className={cn(
-								'rounded-md px-3 py-1 font-medium text-sm capitalize transition',
+								'rounded-md border px-3 py-1 font-medium text-sm capitalize transition',
 								mode === m
-									? 'bg-accent-500/20 text-accent-200 ring-1 ring-accent-400/30'
-									: 'text-[color:var(--muted)] hover:text-[color:var(--ink)]',
+									? 'chip-active'
+									: 'border-transparent text-[color:var(--muted)] hover:text-[color:var(--ink)]',
 							)}
 						>
 							{m}

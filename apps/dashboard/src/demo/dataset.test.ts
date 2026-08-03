@@ -64,14 +64,45 @@ describe('demo dataset', () => {
 
 	it('builds the remaining tab fixtures without degenerate values', () => {
 		expect(buildRealtime().visitors).toBeGreaterThan(0);
-		expect(buildAnomalies().anomalies.length).toBeGreaterThan(0);
-		const ret = buildRetention('week');
+		expect(buildAnomalies(start, end).anomalies.length).toBeGreaterThan(0);
+		const ret = buildRetention('week', start, end);
 		expect(ret.cohorts.length).toBeGreaterThan(0);
 		expect(ret.cohorts[0]?.retention[0]).toBe(1);
-		expect(buildExperimentResult().variants.length).toBe(2);
-		const funnel = buildFunnelReport();
+		expect(buildExperimentResult(start, end).variants.length).toBe(2);
+		const funnel = buildFunnelReport(start, end);
 		expect(funnel.overall_rate).toBeGreaterThan(0);
 		expect(funnel.overall_rate).toBeLessThan(1);
-		expect(buildNlQuery('where are my visitors?').answer).toContain('You asked');
+		expect(buildNlQuery('where are my visitors?', start, end).result.kind).toBe('breakdown');
+	});
+
+	it('keeps every range-scoped fixture inside the window it was asked for', () => {
+		// A marker or cohort outside the queried window is something the real API cannot return.
+		const [anomaly] = buildAnomalies(start, end).anomalies;
+		expect(anomaly?.bucket).toBeGreaterThanOrEqual(start);
+		expect(anomaly?.bucket).toBeLessThan(end);
+		for (const cohort of buildRetention('day', start, end).cohorts) {
+			const t = Date.parse(`${cohort.cohort}T00:00:00.000Z`);
+			expect(t).toBeGreaterThanOrEqual(start - DAY_MS);
+			expect(t).toBeLessThanOrEqual(end);
+		}
+		// A window too short to hold one weekly cohort must not invent six of them.
+		expect(buildRetention('week', end - 3 * DAY_MS, end).cohorts.length).toBe(1);
+	});
+
+	it('narrows every derived number when a dimension filter is applied', () => {
+		const all = buildStats(start, end, 'day');
+		const mobile = buildStats(start, end, 'day', { device: 'mobile' });
+		expect(mobile.summary.pageviews).toBeGreaterThan(0);
+		expect(mobile.summary.pageviews).toBeLessThan(all.summary.pageviews);
+		expect(mobile.top_devices.map((r) => r.key)).toEqual(['mobile']);
+		// A country filter narrows the same way, and leaves the country list on that country alone.
+		const us = buildStats(start, end, 'day', { country: 'US' });
+		expect(us.summary.pageviews).toBeLessThan(all.summary.pageviews);
+		expect(us.top_countries.map((r) => r.key)).toEqual(['US']);
+		// A high-cardinality path filter collapses its own breakdown to the matched row.
+		const path = all.top_paths[1]?.key ?? '/pricing';
+		const filtered = buildStats(start, end, 'day', { path });
+		expect(filtered.top_paths.map((r) => r.key)).toEqual([path]);
+		expect(filtered.summary.pageviews).toBeLessThan(all.summary.pageviews);
 	});
 });

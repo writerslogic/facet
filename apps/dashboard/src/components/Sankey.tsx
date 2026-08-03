@@ -196,15 +196,12 @@ export function Sankey({
 	links,
 	onNodeClick,
 	isolatedId,
-	dark,
 	className,
 }: {
 	nodes: SankeyNode[];
 	links: SankeyLink[];
 	onNodeClick?: (id: string) => void;
 	isolatedId?: string | null;
-	/** Draw on a dark surface: end-column labels lighten so they read over the inked tile. */
-	dark?: boolean;
 	className?: string;
 }): ReactElement | null {
 	const gid = useId();
@@ -261,7 +258,14 @@ export function Sankey({
 		pendingTween.current = false;
 		const start = performance.now();
 		const tick = (now: number): void => {
-			setProgress(Math.min(1, (now - start) / TWEEN_MS));
+			// Clamped at BOTH ends. A rAF callback is handed the frame's start time, which can
+			// precede the `performance.now()` taken when this effect ran — so `now - start` is
+			// occasionally negative on the first tick. Progress then went negative, the eased
+			// `t = 1 - (1 - progress) ** 3` went negative with it, and `lerp(0, h, t)` for a node
+			// that is new in this target produced a NEGATIVE height: five "<rect> attribute height:
+			// A negative value is not valid" errors per mount. Reproduced on the Overview's Traffic
+			// flow tile at 375px, where the carousel re-measures often enough to hit it every time.
+			setProgress(Math.max(0, Math.min(1, (now - start) / TWEEN_MS)));
 			if (now - start < TWEEN_MS) raf.current = requestAnimationFrame(tick);
 		};
 		raf.current = requestAnimationFrame(tick);
@@ -282,7 +286,11 @@ export function Sankey({
 			viewBox={`-64 -8 ${W + 128} ${vbH + 16}`}
 			preserveAspectRatio="xMidYMid meet"
 			className={cn('h-full w-full', className)}
-			role="img"
+			// role="img" makes the entire subtree presentational, so with clickable nodes this diagram
+			// was hiding its own controls from assistive tech (axe: nested-interactive). An interactive
+			// diagram is a group of controls; only the static variant is an image. Either way the
+			// numbers are carried by the sr-only flow table the caller renders alongside.
+			role={clickable ? 'group' : 'img'}
 			aria-label="Traffic flow diagram"
 			onMouseLeave={() => setHovered(null)}
 		>
@@ -307,6 +315,32 @@ export function Sankey({
 					<title>{r.key.replace('->', ' → ')}</title>
 				</path>
 			))}
+			{/* A ribbon is a QUANTITY OF TRAFFIC, and the one thing a static band cannot show is that it
+			    has a direction. On hover the highlighted subgraph gets a light travelling down it —
+			    source to target, at one speed for every ribbon, so the eye reads the path rather than
+			    the width. Only while highlighted: a board that shimmers at rest is worse than a still
+			    one, and this is the moment the reader has actually asked "where does this go".
+			    Decoration on top of paths that already carry the title and the sr-only table, so it is
+			    pointer-transparent and simply not rendered when motion is not wanted. */}
+			{hi && !reducedMotion()
+				? display.ribbons.filter(ribbonOn).map((r) => (
+						<path
+							key={`${r.key}-flow`}
+							d={ribbonPath(r)}
+							fill="none"
+							stroke="var(--c3)"
+							strokeOpacity={0.55}
+							strokeWidth={Math.min(r.width * 0.5, 2.5)}
+							strokeLinecap="round"
+							strokeDasharray="8 56"
+							// No aria-hidden: this path carries no title, no role and no tab
+							// stop, so it is already nothing to the accessibility tree — and
+							// the attribute trips the focusable-hidden rule on a graphic
+							// inside an interactive group.
+							className="facet-flow pointer-events-none"
+						/>
+					))
+				: null}
 			{display.nodes.map((n) => {
 				const first = n.column === 0;
 				const last = n.column === display.lastColumn;
@@ -314,8 +348,10 @@ export function Sankey({
 				return (
 					<g
 						key={n.id}
+						// No focus:outline-none: it suppressed the shell's token focus outline and left
+						// only a stroke recolour on the rect, which is a colour-alone indicator.
 						className={cn(
-							'transition-opacity duration-200 focus:outline-none focus-visible:[&>rect]:stroke-accent-700',
+							'transition-opacity duration-200 focus-visible:[&>rect]:stroke-accent-700',
 							clickable && 'cursor-pointer',
 						)}
 						style={{ opacity: on ? 1 : DIM }}
@@ -353,7 +389,7 @@ export function Sankey({
 								dominantBaseline="central"
 								className={cn(
 									'text-[11px] font-medium',
-									dark ? 'fill-neutral-300' : 'fill-neutral-500',
+									'fill-[color:var(--muted)]',
 								)}
 							>
 								{n.label}

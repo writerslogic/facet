@@ -98,13 +98,52 @@ describe('multi-site profiles', () => {
 		renderApp();
 		await waitFor(() => expect(screen.getByText('111')).toBeInTheDocument());
 
-		fireEvent.change(screen.getByLabelText('Active site'), {
-			target: { value: 'b' },
-		});
+		fireEvent.click(screen.getByRole('button', { name: /Active site: Site A/ }));
+		fireEvent.click(screen.getByRole('menuitemradio', { name: /Site B/ }));
 
 		await waitFor(() => expect(screen.getByText('222')).toBeInTheDocument());
 		// Site A's data must be gone (no stale flash under Site B's label).
 		expect(screen.queryByText('111')).not.toBeInTheDocument();
+	});
+
+	it('switches with the Alt+N shortcut without opening the menu', async () => {
+		seedTwoProfiles();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: RequestInfo | URL) => {
+				const url = typeof input === 'string' ? input : String(input);
+				const siteId = url.includes(SITE_B) ? SITE_B : SITE_A;
+				return { ok: true, json: async () => statsFor(siteId) };
+			}),
+		);
+		renderApp();
+		await waitFor(() => expect(screen.getByText('111')).toBeInTheDocument());
+
+		fireEvent.keyDown(window, { key: '2', altKey: true });
+
+		await waitFor(() => expect(screen.getByText('222')).toBeInTheDocument());
+		expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+	});
+
+	it('offers adding another site rather than overwriting the current one', async () => {
+		seedTwoProfiles();
+		vi.stubGlobal(
+			'fetch',
+			vi.fn().mockResolvedValue({
+				ok: true,
+				json: async () => statsFor(SITE_A),
+			}),
+		);
+		renderApp();
+		await waitFor(() => expect(screen.getByText('111')).toBeInTheDocument());
+
+		fireEvent.click(screen.getByRole('button', { name: /Active site: Site A/ }));
+		// Both saved sites are listed, and adding is a distinct action from editing.
+		expect(screen.getAllByRole('menuitemradio')).toHaveLength(2);
+		fireEvent.click(screen.getByRole('menuitem', { name: 'Add a site' }));
+		expect(screen.getByRole('dialog', { name: 'Add a site' })).toBeInTheDocument();
+		// The add form starts empty — it never pre-fills (and so never overwrites) the active profile.
+		expect((screen.getByLabelText('Site ID') as HTMLInputElement).value).toBe('');
 	});
 
 	it('surfaces the auth banner for a profile with an invalid key', async () => {
@@ -134,13 +173,21 @@ describe('multi-site profiles', () => {
 			}),
 		);
 		const { unmount } = renderApp();
-		await waitFor(() => expect(screen.getByLabelText('Active site')).toBeInTheDocument());
+		await waitFor(() =>
+			expect(screen.getByRole('button', { name: /Active site: Site A/ })).toBeInTheDocument(),
+		);
 		unmount();
 
-		// Fresh mount reads from storage.
+		// Fresh mount reads from storage: A is still active and B is still offered.
 		renderApp();
-		const select = (await screen.findByLabelText('Active site')) as HTMLSelectElement;
-		expect(select.value).toBe('a');
-		expect(screen.getByRole('option', { name: 'Site B' })).toBeInTheDocument();
+		fireEvent.click(await screen.findByRole('button', { name: /Active site: Site A/ }));
+		expect(screen.getByRole('menuitemradio', { name: /Site A/ })).toHaveAttribute(
+			'aria-checked',
+			'true',
+		);
+		expect(screen.getByRole('menuitemradio', { name: /Site B/ })).toHaveAttribute(
+			'aria-checked',
+			'false',
+		);
 	});
 });
