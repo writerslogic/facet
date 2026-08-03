@@ -5,8 +5,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-07-01",
   "compatibility_flags": ["nodejs_compat"],
-  // Public custom domain (provisions the DNS record + cert on deploy). Zone must be on the account.
-  "routes": [{ "pattern": "facet.writerslogic.com", "custom_domain": true }],
+  // Optional: serve on your own domain. Uncomment and set your hostname; the zone must already be on
+  // the deploying Cloudflare account, and deploy provisions the DNS record and cert. Left commented
+  // so a fresh clone deploys to its workers.dev URL instead of failing on a zone it does not own.
+  // "routes": [{ "pattern": "analytics.example.com", "custom_domain": true }],
   "observability": {
     "enabled": true
   },
@@ -59,6 +61,17 @@
     ]
   }
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // OPTIONAL — email alert delivery via Cloudflare Email Routing.
+  // Alerting works out of the box over signed webhooks; email is strictly additive. It stays
+  // commented out because enabling it is a ZONE-level prerequisite, not just a config line: Email
+  // Routing must be enabled on the zone and each recipient verified, and deploying this binding
+  // without that fails the deploy. Uncomment BOTH the binding and the ALERT_EMAIL_FROM var (a
+  // verified sender on that zone) to turn the email transport on; with either missing, an email
+  // destination records `email_unconfigured` and nothing else changes.
+  //   "send_email": [{ "name": "SEND_EMAIL" }],
+  //   "vars": { "ALERT_EMAIL_FROM": "alerts@your-zone.example" },
+  //
   // ─────────────────────────────────────────────────────────────────────────
   // POST-v1 SCALE PATH — Cloudflare-native bindings, intentionally disabled.
   // Uncomment a block only when adopting that capability; each is out of v1 scope.
