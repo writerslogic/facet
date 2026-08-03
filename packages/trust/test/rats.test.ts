@@ -20,7 +20,7 @@ const EVIDENCE: ProcessEvidence = {
 		'daily-rotating-salted-sha256',
 		'no-raw-ip-storage',
 		'cookieless',
-		'gpc-honored',
+		'gpc-forces-anonymous-identity',
 	],
 };
 
