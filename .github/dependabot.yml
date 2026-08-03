@@ -69,6 +69,11 @@ updates:
       prefix: "ci(deps)"
       include: "scope"
     groups:
+      # init and analyze must move as one: CodeQL aborts the run if the config
+      # was written by a different version than the one analyzing.
+      codeql:
+        patterns:
+          - "github/codeql-action*"
       github-actions:
         patterns:
           - "actions/*"
