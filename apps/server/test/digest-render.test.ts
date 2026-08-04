@@ -4,6 +4,20 @@
 import { describe, expect, it } from 'vitest';
 import { type DigestInput, delta, renderDigest, sanitizeKey } from '../src/lib/digest.js';
 
+/** Delimiters a markdown reader would act on. `\` consumes the next character, so neither an escaped
+ * pipe nor an escaped backslash can be miscounted as a column break. */
+function bareDelimiters(row: string): number {
+	let count = 0;
+	for (let i = 0; i < row.length; i++) {
+		if (row[i] === '\\') {
+			i++;
+		} else if (row[i] === '|') {
+			count++;
+		}
+	}
+	return count;
+}
+
 const BASE: DigestInput = {
 	siteName: 'Acme',
 	siteDomain: 'acme.com',
@@ -149,7 +163,18 @@ describe('renderDigest', () => {
 		const out = renderDigest({ ...BASE, topReferrers: [{ key: 'a | b | c', count: 7 }] });
 		const row = out.split('\n').find((l) => l.includes('a \\| b \\| c'));
 		// Two columns means three unescaped delimiters, however many the key itself contained.
-		expect(row?.match(/(?<!\\)\|/g)?.length).toBe(3);
+		expect(bareDelimiters(row ?? '')).toBe(3);
+	});
+
+	it('escapes the backslash too, so a key cannot re-open a column', () => {
+		// `a\|b` used to render as `a\\|b`: escaping only the pipe turned the key's own backslash
+		// into an ESCAPED backslash followed by a live delimiter, reintroducing the injection through
+		// the escape itself. A lookbehind for `\` cannot see this — it reads the same as a safely
+		// escaped pipe — so the count below walks the row the way a markdown reader does.
+		const out = renderDigest({ ...BASE, topReferrers: [{ key: 'a\\|b', count: 7 }] });
+		const row = out.split('\n').find((l) => l.includes('a\\\\'));
+		expect(row).toBeDefined();
+		expect(bareDelimiters(row ?? '')).toBe(3);
 	});
 
 	it('strips invisible and bidi characters that hide text from a reviewer', () => {
