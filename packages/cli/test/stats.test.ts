@@ -61,6 +61,27 @@ describe('runStats', () => {
 		expect(stdout).toContain('/pricing');
 	});
 
+	it('refuses a plain-http host without sending the key', async () => {
+		const fetchImpl = vi.fn(() => Promise.resolve(RESPONSE));
+		const code = await runStats(
+			['--host', 'http://a.example.com', '--key', 'clk_x', '--site', 'site-1'],
+			fetchImpl as never,
+		);
+		expect(code).toBe(1);
+		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(stderr).toContain('unencrypted');
+	});
+
+	it('encodes the site id into the query rather than interpolating it', async () => {
+		const fetchImpl = vi.fn(() => Promise.resolve(RESPONSE));
+		await runStats(
+			['--host', 'https://a.example.com', '--key', 'clk_x', '--site', 'a&b=c'],
+			fetchImpl as never,
+		);
+		const url = new URL(fetchImpl.mock.calls[0]?.[0] as unknown as string);
+		expect(url.searchParams.get('site_id')).toBe('a&b=c');
+	});
+
 	it('returns 1 when the request fails', async () => {
 		const fetchImpl = vi.fn(() => Promise.reject(new Error('invalid_api_key')));
 		const code = await runStats(

@@ -3,6 +3,7 @@
 import { parseArgs } from 'node:util';
 import type { StatsResponse } from '@facet/shared';
 import pc from 'picocolors';
+import { normalizeHost } from '../admin.js';
 import { fetchJson, printError } from '../util.js';
 
 type FetchJson = <T>(url: string, init?: RequestInit) => Promise<T>;
@@ -35,11 +36,24 @@ export async function runStats(args: string[], fetchImpl: FetchJson = fetchJson)
 		return 1;
 	}
 
+	let origin: string;
+	try {
+		origin = normalizeHost(host);
+	} catch (err) {
+		printError(err instanceof Error ? err.message : String(err));
+		return 1;
+	}
+
 	const range = values.range ?? '7d';
 	const days = RANGE_DAYS[range] ?? 7;
 	const end = Date.now();
 	const start = end - days * DAY_MS;
-	const url = `${host.replace(/\/$/, '')}/api/stats?site_id=${site}&start=${start}&end=${end}`;
+	const query = new URLSearchParams({
+		site_id: site,
+		start: String(start),
+		end: String(end),
+	});
+	const url = `${origin}/api/stats?${query}`;
 
 	try {
 		const data = await fetchImpl<StatsResponse>(url, {

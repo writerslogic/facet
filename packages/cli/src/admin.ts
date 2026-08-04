@@ -14,13 +14,53 @@ export function isUuid(value: string): boolean {
 /** Thrown for a user-facing validation/usage failure (missing flag, bad UUID). */
 export class UsageError extends Error {}
 
-/** Resolve the deployment host from a flag or FACET_HOST, trimming a trailing slash. */
+function isLoopback(hostname: string): boolean {
+	return hostname === 'localhost' || hostname === '[::1]' || /^127\./.test(hostname);
+}
+
+/**
+ * Validate a deployment host and reduce it to a bare origin.
+ *
+ * WHY this is strict: every caller hands the result to `adminClient`, which puts an ADMIN_TOKEN or an
+ * API key in an `Authorization` header. A host that is plain http, or that carries a path or userinfo,
+ * therefore decides where a live credential is sent and whether it crosses the wire in the clear. http
+ * is allowed only for loopback, which is what `wrangler dev` serves.
+ */
+export function normalizeHost(host: string): string {
+	let url: URL;
+	try {
+		url = new URL(host);
+	} catch {
+		throw new UsageError(
+			`Invalid host "${host}": expected an absolute URL, e.g. https://facet.example.workers.dev.`,
+		);
+	}
+	if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+		throw new UsageError(`Invalid host "${host}": only http and https URLs are supported.`);
+	}
+	if (url.username !== '' || url.password !== '') {
+		throw new UsageError(`Invalid host "${host}": remove the credentials from the URL.`);
+	}
+	if (url.protocol === 'http:' && !isLoopback(url.hostname)) {
+		throw new UsageError(
+			`Refusing to use "${host}": the access token would be sent unencrypted. Use https, or a loopback address for \`wrangler dev\`.`,
+		);
+	}
+	if (url.pathname !== '/' || url.search !== '' || url.hash !== '') {
+		throw new UsageError(
+			`Invalid host "${host}": pass only the origin, with no path, query or fragment.`,
+		);
+	}
+	return url.origin;
+}
+
+/** Resolve the deployment host from a flag or FACET_HOST. */
 export function resolveHost(flag: string | undefined): string {
 	const host = flag ?? process.env.FACET_HOST;
 	if (!host) {
 		throw new UsageError('Missing deployment host: pass --host <url> or set FACET_HOST.');
 	}
-	return host.replace(/\/$/, '');
+	return normalizeHost(host);
 }
 
 /** Resolve the admin token from a flag or FACET_ADMIN_TOKEN. Never logged or echoed. */
