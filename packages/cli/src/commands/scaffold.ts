@@ -3,9 +3,10 @@
 // people wiring the Worker into their own repository layout.
 
 import { randomBytes } from 'node:crypto';
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
+import { writeDevVar } from '../lib/store.js';
 
 function wranglerJsonc(name: string, db: string): string {
 	return `{
@@ -57,10 +58,11 @@ export async function runScaffold(args: string[]): Promise<number> {
 
 	mkdirSync(dir, { recursive: true });
 	writeFileSync(join(dir, 'wrangler.jsonc'), wranglerJsonc(name, db));
-	// The dev admin token is a secret even locally: 0600, and never echoed to the terminal.
-	const devVars = join(dir, '.dev.vars');
-	writeFileSync(devVars, `ADMIN_TOKEN=${randomBytes(32).toString('hex')}\n`, { mode: 0o600 });
-	chmodSync(devVars, 0o600);
+	// The dev admin token is a secret even locally: 0600, and never echoed to the terminal. Go
+	// through `writeDevVar` for the 0600 guarantee rather than repeating it — and so scaffolding
+	// into a directory that already has a .dev.vars upserts the token instead of destroying
+	// whatever else (FACET_SIGNING_JWK) was in it.
+	writeDevVar(join(dir, '.dev.vars'), 'ADMIN_TOKEN', randomBytes(32).toString('hex'));
 
 	process.stdout.write(
 		`Wrote wrangler.jsonc and .dev.vars (mode 0600) to ${dir}.\nNext: run \`facet init\` from a Facet checkout, or \`wrangler d1 create ${db}\` followed by \`facet config set-db-id --id <id>\`.\n`,
