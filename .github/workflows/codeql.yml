@@ -8,6 +8,9 @@ on:
     branches: [main]
   schedule:
     - cron: '31 4 * * 1'
+  # On demand: an alert only clears once a new analysis lands on the default branch, so a fix that
+  # merges without a push-triggered run needs a way to re-scan without an empty commit.
+  workflow_dispatch:
 
 permissions:
   contents: read
