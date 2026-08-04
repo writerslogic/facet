@@ -29,9 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
-        with:
-          version: 11.12.0
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -56,9 +54,12 @@ jobs:
           cp apps/dashboard/dist/index.html apps/dashboard/dist/404.html
           touch apps/dashboard/dist/.nojekyll
 
-      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+      # include-hidden-files: v4 of this action started excluding dotfiles from the tarball, which
+      # would silently drop the .nojekyll written above.
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: apps/dashboard/dist
+          include-hidden-files: true
 
   deploy:
     needs: build
