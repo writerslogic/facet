@@ -6,6 +6,7 @@
 import type { EventProps } from '@facet/shared';
 import { type NewEvent, type NewSession, persistEvents } from '../db/queries.js';
 import type { Env } from '../env.js';
+import { writeEvent } from './ae.js';
 import { isBot } from './bots.js';
 import { classifyChannel } from './channel.js';
 import { findActiveConsent } from './consent.js';
@@ -116,9 +117,9 @@ export interface DerivedEvent {
 }
 
 /** Derive a complete event row + session from a request-time input — bot drop, privacy-safe visitor
- * hash, channel classification, segmentation — WITHOUT touching the database, so the result is safe to
- * enqueue and persist later. Returns null for bots (dropped). This is the CPU/derivation half of ingest;
- * the D1 writes live in `persistDerived`, which the beacon hot path defers to the queue consumer. */
+ * hash, channel classification, segmentation — WITHOUT touching D1, so the result is safe to enqueue
+ * and persist later. Returns null for bots (dropped). This is the CPU/derivation half of ingest; the
+ * D1 writes live in `persistDerived`, which the beacon hot path defers to the queue consumer. */
 export async function deriveEvent(env: Env, input: IngestInput): Promise<DerivedEvent | null> {
 	if (isBot(input.ua)) {
 		return null;
@@ -175,6 +176,12 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 		value,
 		currency,
 	};
+	// Mirror into the columnar store HERE rather than alongside the D1 write. Derivation runs exactly
+	// once per accepted event, whereas the queue redelivers a batch at-least-once and Analytics Engine
+	// has no idempotent insert — writing on the persist path would inflate every retried batch. This is
+	// a fire-and-forget, non-blocking sink that no-ops when the binding is absent, so `deriveEvent`
+	// still touches no database and its result is still safe to enqueue.
+	writeEvent(env, row);
 	// The id is minted HERE (not at insert) so an at-least-once queue redelivery re-inserts the same id
 	// as a no-op — the persist path is idempotent, so a retry can never duplicate the event.
 	return {

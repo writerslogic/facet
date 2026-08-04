@@ -12,8 +12,8 @@ export interface Env {
 	ASSETS: Fetcher;
 	/** Cloudflare native rate-limit binding. */
 	RATE_LIMITER: RateLimit;
-	/** Analytics Engine dataset sink for high-cardinality performance samples. Optional: the binding is
-	 * on the commented-out post-v1 scale path in wrangler.jsonc, so it is absent at runtime today. */
+	/** Analytics Engine dataset — the columnar analytical store every accepted event is mirrored into
+	 * (see lib/ae.ts). Optional: with the binding removed, the AE writes no-op and D1 is the only store. */
 	AE?: AnalyticsEngineDataset;
 	/** Rolling retention window for raw events, in days (string var). */
 	RAW_RETENTION_DAYS: string;

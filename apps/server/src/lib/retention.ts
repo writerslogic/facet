@@ -7,16 +7,23 @@ import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
 import { DAY_MS, DEFAULT_RAW_RETENTION_DAYS } from './constants.js';
 
+/**
+ * The deployment's raw-data window in days — the ONE reading of `RAW_RETENTION_DAYS`. Every caller
+ * goes through this so the window that is enforced, the window that is attested, and the window any
+ * other feature gates on can never disagree.
+ *
+ * Require a positive integer: parseInt never yields Infinity, so `!Number.isFinite` would let "0", a
+ * negative, or a partial parse ("30days"→30 is fine, but "0"/"-5") through — and days<=0 makes the
+ * cutoff >= now, purging live/current events on every run. Fall back to the default instead.
+ */
+export function retentionDays(env: Env): number {
+	const days = Number.parseInt(env.RAW_RETENTION_DAYS, 10);
+	return Number.isInteger(days) && days >= 1 ? days : DEFAULT_RAW_RETENTION_DAYS;
+}
+
 /** Purge raw rows older than `RAW_RETENTION_DAYS` (falling back to the default when unset/NaN). */
 export async function enforceRetention(env: Env, now: number): Promise<void> {
-	// Require a positive integer: parseInt never yields Infinity, so `!Number.isFinite` would let "0",
-	// a negative, or a partial parse ("30days"→30 is fine, but "0"/"-5") through — and days<=0 makes the
-	// cutoff >= now, purging live/current events on every run. Fall back to the default instead.
-	let days = Number.parseInt(env.RAW_RETENTION_DAYS, 10);
-	if (!Number.isInteger(days) || days < 1) {
-		days = DEFAULT_RAW_RETENTION_DAYS;
-	}
-	const cutoff = now - days * DAY_MS;
+	const cutoff = now - retentionDays(env) * DAY_MS;
 	await db(env).delete(schema.events).where(lt(schema.events.createdAt, cutoff));
 	await db(env).delete(schema.sessions).where(lt(schema.sessions.firstSeen, cutoff));
 	await db(env).delete(schema.salts).where(lt(schema.salts.createdAt, cutoff));

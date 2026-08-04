@@ -59,7 +59,22 @@
     "consumers": [
       { "queue": "facet-ingest", "max_batch_size": 100, "max_batch_timeout": 5, "max_retries": 3 }
     ]
-  }
+  },
+
+  // Analytics Engine: the columnar analytical store (U1). Every accepted event is mirrored here at
+  // derive time alongside its D1 row — D1 stays the authoritative metadata/config store and serves
+  // the bounded queries its indexes cover, AE absorbs the high-cardinality, arbitrary-dimension
+  // scans SQLite cannot. The binding is OPTIONAL in `Env`: with it unbound, every AE write no-ops
+  // and D1 remains the only store, so removing this block is a supported deployment.
+  // Reads (SQL over HTTP) additionally need the `CF_ACCOUNT_ID` var and the `CF_API_TOKEN` secret.
+  //
+  // RETENTION: AE stores a data point for three months and has NO delete API. Setting
+  // RAW_RETENTION_DAYS below 90 therefore turns the mirror OFF (lib/ae.ts) rather than let a copy
+  // outlive the window this deployment advertises — a shorter window means D1-only, by design.
+  //
+  // QUOTA: writes are metered (Workers Free: 100k data points/day; Paid: 10M/month included). One
+  // accepted event is one data point, so size the plan to traffic before enabling this on a busy site.
+  "analytics_engine_datasets": [{ "binding": "AE", "dataset": "facet_events" }]
 
   // ─────────────────────────────────────────────────────────────────────────
   // OPTIONAL — email alert delivery via Cloudflare Email Routing.
@@ -76,18 +91,6 @@
   // POST-v1 SCALE PATH — Cloudflare-native bindings, intentionally disabled.
   // Uncomment a block only when adopting that capability; each is out of v1 scope.
   // ─────────────────────────────────────────────────────────────────────────
-  //
-  // Analytics Engine — high-cardinality event sink (10M+ writes/s, SQL over HTTP).
-  // Alternative/complement to the D1 `events` table at very high volume.
-  //   "analytics_engine_datasets": [
-  //     { "binding": "AE", "dataset": "facet_events" }
-  //   ],
-  //
-  // Queues — decouple ingest from aggregation (at-least-once, retries).
-  //   "queues": {
-  //     "producers": [{ "binding": "INGEST_QUEUE", "queue": "facet-ingest" }],
-  //     "consumers": [{ "queue": "facet-ingest", "max_batch_size": 100, "max_batch_timeout": 5 }]
-  //   },
   //
   // Durable Objects + alarms — exactly-once real-time aggregation (1 DO per
   // metric_key+time_bucket, alarm flushes to D1/AE every 5s) for live dashboards.
