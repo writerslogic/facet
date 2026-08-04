@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { Site } from '@facet/shared';
 import pc from 'picocolors';
-import { type FetchJson, adminClient } from '../admin.js';
+import { type FetchJson, adminClient, normalizeHost } from '../admin.js';
 import { findWrangler, queueExists, secretNames, selectAccount, whoami } from '../lib/cf.js';
 import { type Runner, spawnRunner } from '../lib/exec.js';
 import { adminToken, findLayout, probeHealth, readLocalState } from '../lib/state.js';
@@ -185,8 +185,23 @@ export async function runDoctor(
 	}
 
 	// ── The deployment itself.
-	const host = values.host ?? local.install.host ?? null;
-	if (!host) {
+	// A bad host is reported as a row rather than thrown: doctor is what people run when something is
+	// already wrong, so it has to finish the report. It must still refuse to probe an unvalidated
+	// origin, because the admin token goes to whatever this resolves to.
+	const rawHost = values.host ?? local.install.host ?? null;
+	let host: string | null = null;
+	let hostError: string | null = null;
+	if (rawHost !== null) {
+		try {
+			host = normalizeHost(rawHost);
+		} catch (err) {
+			hostError = err instanceof Error ? err.message : String(err);
+		}
+	}
+	if (hostError !== null) {
+		row('missing', 'deployment', hostError);
+		next.push('facet doctor --host <url>   # with a valid https origin');
+	} else if (!host) {
 		row('warn', 'deployment', 'no deployment recorded — run `facet init`, or pass --host');
 		next.push('facet init');
 	} else {

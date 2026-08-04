@@ -18,7 +18,13 @@ const TOKEN = 'f'.repeat(64);
 const DB_ID = '11111111-2222-4333-8444-555555555555';
 
 async function doctor(
-	setup: { repo?: Repo; cloud?: CloudState; healthy?: boolean; token?: string } = {},
+	setup: {
+		repo?: Repo;
+		cloud?: CloudState;
+		healthy?: boolean;
+		token?: string;
+		fetchImpl?: typeof fetch;
+	} = {},
 ) {
 	const repo = setup.repo ?? makeRepo();
 	const cloud = setup.cloud ?? cloudState();
@@ -37,7 +43,9 @@ async function doctor(
 	const code = await runDoctor([], {
 		run: fakeRunner(cloud).runner,
 		fetchJson: admin.fetchJson,
-		fetchImpl: (async () => ({ ok: setup.healthy !== false })) as unknown as typeof fetch,
+		fetchImpl:
+			setup.fetchImpl ??
+			((async () => ({ ok: setup.healthy !== false })) as unknown as typeof fetch),
 		cwd: repo.root,
 		out: (chunk) => {
 			stdout += chunk;
@@ -123,6 +131,29 @@ describe('facet doctor', () => {
 		expect(h.stdout).toContain('wrangler was not found');
 		expect(h.stdout).toContain('node');
 		expect(h.stdout).toContain('Next steps');
+	});
+
+	it('refuses to probe a plain-http host from install.json and still finishes the report', async () => {
+		const { repo, cloud } = completedRepo();
+		writeFileSync(
+			repo.stateFile(),
+			JSON.stringify({ host: 'http://facet.acme.workers.dev', siteId: 'x' }),
+		);
+		let probes = 0;
+		const h = await doctor({
+			repo,
+			cloud,
+			fetchImpl: (async () => {
+				probes++;
+				return { ok: true };
+			}) as unknown as typeof fetch,
+		});
+		expect(probes).toBe(0);
+		expect(h.code).toBe(0);
+		expect(h.stdout).toContain('unencrypted');
+		expect(h.stdout).toContain('facet doctor --host');
+		// The rest of the report still rendered.
+		expect(h.stdout).toContain('ADMIN_TOKEN is set');
 	});
 
 	it('fails clearly when run outside a checkout', async () => {

@@ -14,7 +14,7 @@ import { writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
 import type { ApiKeyRecord, Site } from '@facet/shared';
 import pc from 'picocolors';
-import { type FetchJson, adminClient } from '../admin.js';
+import { type FetchJson, adminClient, normalizeHost } from '../admin.js';
 import {
 	type CfError,
 	type CfResult,
@@ -440,7 +440,22 @@ async function stepDeploy(ctx: Ctx, hostname: string | null): Promise<CfResult<s
 			},
 		};
 	}
-	const origin = host.replace(/\/$/, '');
+	// Validated before it is persisted: `.facet/install.json` is what every later run reads back as the
+	// destination for the admin token, so a bad `--host` must fail here rather than be stored.
+	let origin: string;
+	try {
+		origin = normalizeHost(host);
+	} catch (err) {
+		return {
+			ok: false,
+			error: {
+				code: 'host_invalid',
+				message: err instanceof Error ? err.message : String(err),
+				remedy: 'Re-run with `facet init --host https://your-worker.workers.dev`; everything already done is detected and skipped.',
+				resume: 'facet init --host <url>',
+			},
+		};
+	}
 	writeInstallState(local.layout.repoRoot, { host: origin, workerName: local.workerName });
 	ui.ok(`Deployed to ${origin}`);
 
