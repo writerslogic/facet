@@ -1,6 +1,6 @@
 // Shared stats-API types: query parameters and response shapes for GET /api/stats.
 
-import type { QueryIntent } from './schemas.js';
+import type { BreakdownDimension, QueryIntent } from './schemas.js';
 
 /** Time-bucket granularity for time-series responses. */
 export type Interval = 'hour' | 'day';
@@ -212,6 +212,38 @@ export interface StatsResponse {
 	attribution?: AttributionResult;
 	/** Session-data freshness. Optional for backward compatibility. */
 	meta?: Freshness;
+}
+
+/** One group of a `GET /api/stats/breakdown` response. `key` is the dimension's value, with an
+ * absent one reported as the empty string — the columnar store has no NULL, so both stores fold a
+ * missing dimension to `''` rather than each inventing its own label for it. */
+export interface BreakdownRow {
+	key: string;
+	/** All events in the group, pageviews included. */
+	events: number;
+	pageviews: number;
+	/** Distinct visitor hashes within the group. NOT additive across groups, and bounded below by the
+	 * k-anonymity floor every group had to clear to appear at all. */
+	visitors: number;
+}
+
+/**
+ * A single-dimension breakdown over the range.
+ *
+ * Which store answered is part of the response, not an implementation detail: the columnar store
+ * SAMPLES at high volume, so `events` and `pageviews` are sampling-corrected estimates and
+ * `visitors` — a distinct count, which no sampling weight can correct — is a LOWER bound whenever
+ * `sampled` is true. A caller that needs exact figures asks for a range D1 can serve, or reads the
+ * fixed top-N lists on `/api/stats`, which are always exact.
+ */
+export interface BreakdownResponse {
+	dimension: BreakdownDimension;
+	/** Which store produced these rows. */
+	source: 'analytics_engine' | 'd1';
+	/** True when the columnar store returned sampled rows, making every figure an estimate. Always
+	 * false for `d1`, which scans every row. */
+	sampled: boolean;
+	rows: BreakdownRow[];
 }
 
 // ── Visualization contracts (distribution, per-dimension series, path hierarchy, journeys, clock) ──

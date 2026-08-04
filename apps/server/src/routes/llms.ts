@@ -39,6 +39,10 @@ All read endpoints take an API key issued by this deployment's operator, sent as
 
 - \`GET /api/stats?site_id&start&end&interval=hour|day\` — full stats document, plus optional
   \`path\`, \`referrer\`, \`country\`, \`device\`, \`channel\` filters.
+- \`GET /api/stats/breakdown?site_id&start&end&dimension=&limit=\` — group the range by one
+  dimension, including the ones no other endpoint surfaces (\`city\`, \`timezone\`, \`utm_source\`,
+  \`utm_medium\`, \`utm_campaign\`, \`form_factor\`, \`currency\`). Groups below 3 distinct visitors
+  are withheld; read \`sampled\` before quoting the figures.
 - \`GET /api/stats/realtime?site_id\` — active visitors in a trailing 5-minute window.
 - \`GET /api/stats/sessions?site_id&start&end\` — sessions and engagement.
 - \`GET /api/stats/channels?site_id&start&end\` — traffic channel breakdown.

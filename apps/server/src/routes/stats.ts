@@ -2,6 +2,8 @@
 // owns the requested site, and assembles the full stats response.
 
 import {
+	BREAKDOWN_DEFAULT_ROWS,
+	BreakdownQuerySchema,
 	type CountRow,
 	DimensionSeriesQuerySchema,
 	type Goal,
@@ -22,6 +24,7 @@ import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { detectAnomalies } from '../db/anomaly.js';
+import { breakdown } from '../db/breakdown.js';
 import { listExperiments, listFunnels, listGoals } from '../db/catalog.js';
 import { goalConversions } from '../db/conversions.js';
 import { experimentResult } from '../db/experiments.js';
@@ -253,6 +256,24 @@ statsRoutes.get(
 			throw new ApiError('bad_request', 400, 'period must be day or week');
 		}
 		return c.json(await cohortRetention(c.env, f, periodRaw));
+	},
+);
+
+// One dimension, grouped over the range, with the ordinary filters composed on top. This is the read
+// that uses the columnar mirror: it reaches the dimensions D1 stores but no other endpoint surfaces
+// (city, timezone, the UTM columns, form factor, currency, hostname), and it falls back to D1
+// whenever the mirror is absent or cannot express the query. `source`/`sampled` in the response say
+// which store answered, because only the columnar one samples — see `BreakdownResponse`.
+statsRoutes.get(
+	'/stats/breakdown',
+	requireSiteAccess,
+	vValidator('query', BreakdownQuerySchema, validationErrorHook),
+	async (c) => {
+		const query = c.req.valid('query');
+		const f = toStatsFilter(query, c.get('siteId'));
+		return c.json(
+			await breakdown(c.env, f, query.dimension, query.limit ?? BREAKDOWN_DEFAULT_ROWS),
+		);
 	},
 );
 

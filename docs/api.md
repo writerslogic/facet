@@ -243,6 +243,43 @@ complete — every event lands in a cell and the totals still reconcile with `GE
 
 ---
 
+### `GET /api/stats/breakdown?site_id&start&end&dimension=&limit=` (API key)
+
+Group the range by **one** dimension. This is the only read that reaches the columns Facet stores
+but no other endpoint surfaces — `city`, `timezone`, `utm_source`, `utm_medium`, `utm_campaign`,
+`form_factor`, `currency`, `hostname` — and it accepts the same `path` / `referrer` / `country` /
+`device` / `channel` filters as `GET /api/stats`.
+
+`dimension` is required and must be one of: `hostname`, `path`, `referrer`, `event`, `country`,
+`region`, `city`, `timezone`, `network`, `language`, `device`, `form_factor`, `browser`, `os`,
+`channel`, `utm_source`, `utm_medium`, `utm_campaign`, `currency`. Anything else is
+`400 validation_failed`. `limit` is `1..200` (default 25).
+
+Every group must clear a **k-anonymity floor of 3 distinct visitors** to appear at all, so a
+breakdown can never resolve to one person's browsing. An absent dimension value is reported as the
+empty string, never as `null`. `dimension=event` is the raw `name` column, so it includes the
+internal `$`-prefixed events and `form_submit` that `top_events` on `GET /api/stats` filters out —
+use `top_events` / `GET /api/stats/interactions` when you want that split.
+
+```json
+{
+  "dimension": "city",
+  "source": "d1",
+  "sampled": false,
+  "rows": [{ "key": "Berlin", "events": 412, "pageviews": 380, "visitors": 96 }]
+}
+```
+
+`source` says which store answered. A deployment with Analytics Engine configured
+(`analytics_engine_datasets` bound, plus the `CF_ACCOUNT_ID` var and `CF_API_TOKEN` secret) is
+served from the columnar mirror; every other deployment — and any query the mirror cannot express —
+falls back to D1, which is always exact. **When `sampled` is `true` the figures are estimates:**
+Analytics Engine samples under load, `events` and `pageviews` are sampling-corrected, and `visitors`
+is a distinct count that no sampling weight can correct, so it is a lower bound. `source: "d1"` is
+always exact and always `"sampled": false`.
+
+---
+
 ## Visualization reads
 
 Five shapes the cube and the flat top-N lists cannot express: a session distribution

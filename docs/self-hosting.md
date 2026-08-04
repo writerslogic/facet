@@ -290,6 +290,24 @@ Setting this **below 90 disables the Analytics Engine mirror**. Cloudflare keeps
 three months with no delete API, so a mirrored copy cannot be purged on your schedule — a shorter
 window means the deployment stays D1-only rather than retaining data past what it advertises.
 
+## Analytics Engine reads (optional)
+
+The `analytics_engine_datasets` binding in `apps/server/wrangler.jsonc` is enough to **write** the
+columnar mirror. Reading it back — which is what `GET /api/stats/breakdown` uses — goes over
+Cloudflare's SQL API rather than the binding, so it additionally needs:
+
+```sh
+# Var: your 32-hex Cloudflare account id.
+npx wrangler deploy --var CF_ACCOUNT_ID:<account-id>
+# Secret: an API token with "Account | Account Analytics | Read", and nothing else.
+npx wrangler secret put CF_API_TOKEN
+```
+
+Leave either unset and every read falls back to D1, which answers the same questions exactly — the
+mirror is a scale option, not a dependency. Keep the `dataset` name in `wrangler.jsonc` as
+`facet_events`: the binding does not expose its own name at runtime, so reads query that name
+directly and a rename silently sends every breakdown back to D1.
+
 ## Operations
 
 ### Diagnosing an install

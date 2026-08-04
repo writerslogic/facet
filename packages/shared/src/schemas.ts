@@ -159,6 +159,54 @@ export const DimensionSeriesQuerySchema = v.object({
 	limit: v.optional(boundedIntParam(1, SERIES_MAX_KEYS)),
 });
 
+/**
+ * Every dimension `GET /api/stats/breakdown` can group by — one per column the columnar mirror
+ * carries, so the endpoint answers identically whichever store serves it.
+ *
+ * `visitor_hash` is mirrored too and is deliberately NOT here: it is the one column that identifies
+ * a browsing session rather than describing it, and grouping by it would return one row per person.
+ * The four enum-shaped columns D1 keeps but does not mirror (screen tier, connection, orientation,
+ * DPR class) are absent for the opposite reason — `/api/stats` already breaks them down.
+ */
+export const BREAKDOWN_DIMENSIONS = [
+	'hostname',
+	'path',
+	'referrer',
+	'event',
+	'country',
+	'region',
+	'city',
+	'timezone',
+	'network',
+	'language',
+	'device',
+	'form_factor',
+	'browser',
+	'os',
+	'channel',
+	'utm_source',
+	'utm_medium',
+	'utm_campaign',
+	'currency',
+] as const;
+
+export type BreakdownDimension = (typeof BREAKDOWN_DIMENSIONS)[number];
+
+/** Upper bound on breakdown rows. Higher than the fixed top-N lists on `/api/stats` because the
+ * point of this endpoint is the long tail, but still a constant rather than the data's cardinality. */
+export const BREAKDOWN_MAX_ROWS = 200;
+
+/** Default breakdown depth when the caller does not ask for one. */
+export const BREAKDOWN_DEFAULT_ROWS = 25;
+
+/** Query for `GET /api/stats/breakdown`: the stats query plus which dimension to group by. The same
+ * `path`/`referrer`/`country`/`device`/`channel` filters narrow it as they do everywhere else. */
+export const BreakdownQuerySchema = v.object({
+	...StatsQuerySchema.entries,
+	dimension: v.picklist(BREAKDOWN_DIMENSIONS),
+	limit: v.optional(boundedIntParam(1, BREAKDOWN_MAX_ROWS)),
+});
+
 // Constrained natural-language query intent: the LLM only emits a value matching this schema, which
 // the executor maps onto existing aggregate helpers. Never used to build SQL from model text.
 export const QueryIntentSchema = v.object({
@@ -288,6 +336,7 @@ export type CollectInput = v.InferOutput<typeof CollectPayloadSchema>;
 export type ServerEventInput = v.InferOutput<typeof ServerEventSchema>;
 export type StatsQueryInput = v.InferOutput<typeof StatsQuerySchema>;
 export type DimensionSeriesQueryInput = v.InferOutput<typeof DimensionSeriesQuerySchema>;
+export type BreakdownQueryInput = v.InferOutput<typeof BreakdownQuerySchema>;
 export type CreateSiteInput = v.InferOutput<typeof CreateSiteSchema>;
 export type IssueKeyInput = v.InferOutput<typeof IssueKeySchema>;
 export type GoalInput = v.InferOutput<typeof GoalSchema>;
