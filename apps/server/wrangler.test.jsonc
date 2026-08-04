@@ -4,7 +4,9 @@
 // pipeline is tested via an injectable stub LlmRunner; the rate limiter via a stub with the
 // middleware no-opping when RATE_LIMITER is absent.
 // Deployment identity (`routes`, the real `database_id`) is stripped too, so this tracked file never
-// carries an operator's hostname or account identifiers. Regenerate: `pnpm --filter @facet/server pretest`.
+// carries an operator's hostname or account identifiers. The optional CRM database is INJECTED here
+// (it ships commented out) so the suite can exercise the bound path; its id differs from DB's so
+// miniflare keeps them separate. Regenerate: `pnpm --filter @facet/server pretest`.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "facet",
@@ -31,6 +33,12 @@
       "database_name": "facet",
       "database_id": "test-database-id",
       "migrations_dir": "migrations"
+    },
+    {
+      "binding": "CRM_DB",
+      "database_name": "facet-crm",
+      "database_id": "test-crm-database-id",
+      "migrations_dir": "migrations-crm"
     }
   ],
   "vars": {

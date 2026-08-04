@@ -223,6 +223,12 @@ export const CreateSiteSchema = v.object({
 	domain: v.pipe(v.string(), v.minLength(1), v.maxLength(253)),
 });
 
+// Assign a site to a team (site_id comes from the path, never the body). `null` unassigns it, which
+// removes every dashboard session's access to that site — so the field is nullable, not just optional.
+export const SetSiteTeamSchema = v.object({
+	team_id: v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(64))),
+});
+
 export const IssueKeySchema = v.object({
 	site_id: v.pipe(v.string(), v.uuid()),
 	label: v.optional(v.pipe(v.string(), v.maxLength(100))),
@@ -351,5 +357,6 @@ export type FlagEvalInput = v.InferOutput<typeof FlagEvalSchema>;
 export type IdentityTier = v.InferOutput<typeof IdentityTierSchema>;
 export type SaltWindow = v.InferOutput<typeof SaltWindowSchema>;
 export type SetIdentityInput = v.InferOutput<typeof SetIdentitySchema>;
+export type SetSiteTeamInput = v.InferOutput<typeof SetSiteTeamSchema>;
 export type ConsentGrantInput = v.InferOutput<typeof ConsentGrantSchema>;
 export type ConsentRevokeInput = v.InferOutput<typeof ConsentRevokeSchema>;

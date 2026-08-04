@@ -12,6 +12,11 @@
 //      authorization: site_id, visitor_hash, tier, window_key, and iss must all equal the enforcement
 //      context, so a genuine grant for (siteA, pseudonymous, week W) can never be replayed into a row
 //      claiming (siteB, identified, week W'). Cross-site / cross-tier / cross-window replay closed.
+//
+// The optional CRM extension reads this module for the SAME reason and under the same rules: a
+// contact's `external_user_id` is only an index into `consent_records`, and the visitor hash it
+// resolves to comes out of a verified statement (`findLinkedVisitorHashes`), never out of a column.
+// That is what makes the CRM→analytics join consent-gated by construction rather than by convention.
 
 import type { IdentityTier, SaltWindow } from '@facet/shared';
 import {
@@ -60,6 +65,23 @@ export function signConsent(
 	return signStatement(CONSENT_STATEMENT_TYPE, claims, key, now);
 }
 
+/** Property 1 alone: the statement verifies against its own embedded key AND that key is the
+ * deployment key (kid equality ⇒ same JWK thumbprint), issued by this deployment. Split out because
+ * the two callers bind DIFFERENT things afterwards — ingest already knows the hash and window it
+ * expects, while the CRM link derives the hash FROM the statement — so only the pinning is shared.
+ * Never a sufficient check on its own; every caller must add its own claim-to-context equalities. */
+async function verifyPinnedToDeployment(
+	stmt: SignedStatement<ConsentClaims>,
+	iss: string,
+	kid: string,
+): Promise<boolean> {
+	const check = await verifyStatement(stmt, CONSENT_STATEMENT_TYPE);
+	if (!check.valid) return false;
+	// Pin to the deployment key (fixes self-embedded-JWK forgery).
+	if (stmt.proof.kid !== kid) return false;
+	return stmt.payload.iss === iss;
+}
+
 /** The security kernel. A consent statement authorizes elevation ONLY when its signature verifies,
  * it is pinned to the deployment key, and every security-relevant SIGNED claim equals the context.
  * Pure over its inputs so it can be tested directly against forged and replayed statements. */
@@ -67,14 +89,10 @@ export async function verifyConsentRecord(
 	stmt: SignedStatement<ConsentClaims>,
 	ctx: ConsentContext,
 ): Promise<boolean> {
-	const check = await verifyStatement(stmt, CONSENT_STATEMENT_TYPE);
-	if (!check.valid) return false;
-	// Pin to the deployment key (fixes self-embedded-JWK forgery).
-	if (stmt.proof.kid !== ctx.kid) return false;
+	if (!(await verifyPinnedToDeployment(stmt, ctx.iss, ctx.kid))) return false;
 	// Bind the signed payload to the ingest context (fixes cross-site/tier/window replay).
 	const p = stmt.payload;
 	return (
-		p.iss === ctx.iss &&
 		p.site_id === ctx.siteId &&
 		p.visitor_hash === ctx.visitorHash &&
 		p.tier === ctx.tier &&
@@ -160,6 +178,73 @@ export async function storeConsentRecord(env: Env, row: ConsentRecordRow): Promi
 			JSON.stringify(row.statement),
 		)
 		.run();
+}
+
+/**
+ * The ONE bridge from a CRM contact to analytics. Resolve a site's opaque `external_user_id` to the
+ * visitor hashes it is currently allowed to be linked to — one per salt window with a live grant.
+ *
+ * The authorization is the SIGNED statement, never the row. `external_user_id` is only an index into
+ * `consent_records`; what comes back is `payload.visitor_hash`, taken from claims that verified
+ * against the deployment key and assert `tier: identified` for THIS site. So a row hand-written into
+ * the table with an attacker-chosen `visitor_hash` column links nothing, and a genuine grant for
+ * another site cannot be replayed into this one.
+ *
+ * Returns an empty array — never throws, never partially fails — when the deployment has no signing
+ * key, when there is no active grant, or when a stored statement fails to verify. An empty result is
+ * the correct answer to "what may I link?", and it is also what retention produces on its own: once
+ * `enforceRetention` purges the consent record, this returns nothing and the contact silently stops
+ * being connected to any analytics. Nothing caches the result, so that severing needs no cleanup.
+ */
+export async function findLinkedVisitorHashes(
+	env: Env,
+	url: URL,
+	lookup: { siteId: string; externalUserId: string; now: number },
+): Promise<string[]> {
+	const loading = getSigningKey(env);
+	if (!loading) return [];
+	const key = await loading;
+	const { results } = await env.DB.prepare(
+		"SELECT statement FROM consent_records WHERE site_id = ? AND external_user_id = ? AND tier = 'identified' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
+	)
+		.bind(lookup.siteId, lookup.externalUserId, lookup.now)
+		.all<{ statement: string }>();
+	const iss = deploymentDid(url);
+	const hashes = new Set<string>();
+	for (const row of results ?? []) {
+		let stmt: SignedStatement<ConsentClaims>;
+		try {
+			stmt = JSON.parse(row.statement) as SignedStatement<ConsentClaims>;
+		} catch {
+			continue;
+		}
+		if (!(await verifyPinnedToDeployment(stmt, iss, key.kid))) continue;
+		const p = stmt.payload;
+		// The claims, not the columns: this grant must be for this site, at the identified tier, and
+		// must actually have been made against an external user id rather than an ip/ua pseudonym.
+		if (p.site_id !== lookup.siteId) continue;
+		if (p.tier !== 'identified') continue;
+		if (!p.external_user_id_present) continue;
+		hashes.add(p.visitor_hash);
+	}
+	return [...hashes];
+}
+
+/**
+ * Erase every consent record for a raw user id — DELETE, not `revoked_at`. Used when a contact is
+ * deleted: revocation would stop future elevation but leave a row still holding that person's raw
+ * `external_user_id`, which is exactly the data an erasure request is about. Returns rows erased.
+ */
+export async function eraseConsentByExternalUserId(
+	env: Env,
+	params: { siteId: string; externalUserId: string },
+): Promise<number> {
+	const res = await env.DB.prepare(
+		'DELETE FROM consent_records WHERE site_id = ? AND external_user_id = ?',
+	)
+		.bind(params.siteId, params.externalUserId)
+		.run();
+	return res.meta.changes ?? 0;
 }
 
 /** Revoke consent by derived hash or, for Tier 2, by raw user id. Sets `revoked_at` on every matching

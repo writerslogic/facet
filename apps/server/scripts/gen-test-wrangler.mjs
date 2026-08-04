@@ -44,8 +44,29 @@ config.vars = { ...config.vars, SESSION_SECRET: 'test-session-secret' };
 // that ignores `database_id`. Pinning both to fixed, meaningless values also keeps the generated
 // output identical on every machine, so the file stops producing per-developer diff noise.
 delete config.routes;
+// Distinct id PER BINDING: miniflare keys its local databases by `database_id`, so reusing one string
+// across two bindings would silently make CRM_DB an alias of DB and destroy the very isolation the
+// separate-database design exists to provide. `DB` keeps its historical value so regenerating this
+// tracked file produces no diff for the binding that already existed.
+const TEST_DATABASE_IDS = { DB: 'test-database-id', CRM_DB: 'test-crm-database-id' };
 for (const db of config.d1_databases ?? []) {
-	db.database_id = 'test-database-id';
+	db.database_id = TEST_DATABASE_IDS[db.binding] ?? `test-${db.binding.toLowerCase()}-database-id`;
+}
+// Bind the optional CRM database. It ships COMMENTED OUT in wrangler.jsonc — the extension is off by
+// default, and with no binding every /api/crm route returns 501 — but the suite still has to exercise
+// the bound path, so it is injected here exactly as SESSION_SECRET is. Tests covering an unbound
+// deployment delete the binding from the env they hand to `app.request`. Skipped when an operator has
+// already uncommented the block locally, so this never produces a duplicate binding.
+if (!(config.d1_databases ?? []).some((db) => db.binding === 'CRM_DB')) {
+	config.d1_databases = [
+		...(config.d1_databases ?? []),
+		{
+			binding: 'CRM_DB',
+			database_name: 'facet-crm',
+			database_id: TEST_DATABASE_IDS.CRM_DB,
+			migrations_dir: 'migrations-crm',
+		},
+	];
 }
 
 const header = [
@@ -55,7 +76,9 @@ const header = [
 	'// pipeline is tested via an injectable stub LlmRunner; the rate limiter via a stub with the',
 	'// middleware no-opping when RATE_LIMITER is absent.',
 	'// Deployment identity (`routes`, the real `database_id`) is stripped too, so this tracked file never',
-	'// carries an operator\'s hostname or account identifiers. Regenerate: `pnpm --filter @facet/server pretest`.',
+	'// carries an operator\'s hostname or account identifiers. The optional CRM database is INJECTED here',
+	'// (it ships commented out) so the suite can exercise the bound path; its id differs from DB\'s so',
+	'// miniflare keeps them separate. Regenerate: `pnpm --filter @facet/server pretest`.',
 ].join('\n');
 
 writeFileSync(outPath, `${header}\n${JSON.stringify(config, null, 2)}\n`);

@@ -8,7 +8,7 @@ import { getCookie } from 'hono/cookie';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv, Env } from '../env.js';
-import { SESSION_COOKIE, siteRole, verifySession } from './accounts.js';
+import { type Role, SESSION_COOKIE, roleAtLeast, siteRole, verifySession } from './accounts.js';
 import { hashKey } from './apikeys.js';
 import { constantTimeEqualHex, sha256Hex } from './crypto.js';
 import { ApiError } from './http.js';
@@ -85,6 +85,48 @@ export const requireSiteAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
 	}
 	throw new ApiError('unauthorized', 401);
 };
+
+/**
+ * Require an authenticated OPERATOR session holding at least `need` on the team that owns `site_id`.
+ *
+ * This deliberately does NOT accept an API key, and that is the whole point of it existing next to
+ * `requireSiteAccess`. A `clk_` key reads aggregate analytics and is handed out accordingly — /llms.txt
+ * advertises where to send one, and a public demo dashboard can ship with one embedded
+ * (VITE_FACET_DEMO_API_KEY). Aggregates survive that; contact PII would not. So every route that can
+ * return a name, an email, or a phone number is gated on a session cookie instead: an identity that
+ * belongs to a person, carries a role, and can be revoked for that person alone.
+ *
+ * Sets `siteId`, `userId` and `role`. Failure modes are deliberately coarse — "no session", "session
+ * but no sufficient role" — and nothing distinguishes a site that does not exist from one the caller
+ * has no role on, so probing site ids reveals nothing.
+ */
+export function requireTeamRole(need: Role): MiddlewareHandler<AppEnv> {
+	return async (c, next) => {
+		// No SESSION_SECRET means the whole account system is off (as in /api/auth), so there is no
+		// way to authenticate an operator and the resource is unavailable rather than unauthorized.
+		const secret = c.env.SESSION_SECRET;
+		if (!secret) {
+			throw new ApiError('auth_unavailable', 503, 'account auth is not configured');
+		}
+		const token = getCookie(c, SESSION_COOKIE);
+		const siteId = c.req.query('site_id');
+		if (!token || !siteId) {
+			throw new ApiError('unauthorized', 401);
+		}
+		const payload = await verifySession(token, secret, Date.now());
+		if (!payload) {
+			throw new ApiError('unauthorized', 401);
+		}
+		const role = await siteRole(c.env, payload.sub, siteId);
+		if (!role || !roleAtLeast(role, need)) {
+			throw new ApiError('forbidden', 403);
+		}
+		c.set('siteId', siteId);
+		c.set('userId', payload.sub);
+		c.set('role', role);
+		return next();
+	};
+}
 
 /** Middleware: require the admin bearer token, compared to ADMIN_TOKEN in constant time. */
 export const requireAdmin: MiddlewareHandler<AppEnv> = async (c, next) => {

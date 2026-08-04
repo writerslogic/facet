@@ -30,7 +30,7 @@ wellKnownRoutes.get('/facet-privacy.json', async (c) => {
 	return c.json(
 		{
 			deployment: await deploymentDescriptor(c.env),
-			dpv: privacyDpvClaims(),
+			dpv: privacyDpvClaims(c.env),
 			attestation: '/api/attestation/privacy',
 		},
 		200,
