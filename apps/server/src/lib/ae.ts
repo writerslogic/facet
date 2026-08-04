@@ -37,7 +37,7 @@ type StringColumn = {
  * fixed handful of enum values that D1 groups from an index in milliseconds, so mirroring them buys
  * nothing and spends a slot a genuinely high-cardinality dimension may need later.
  */
-const BLOB_SCHEMA: readonly { readonly key: StringColumn; readonly bytes: number }[] = [
+const BLOB_SCHEMA = [
 	{ key: 'hostname', bytes: 253 },
 	{ key: 'path', bytes: 1024 },
 	{ key: 'referrer', bytes: 1024 },
@@ -58,7 +58,28 @@ const BLOB_SCHEMA: readonly { readonly key: StringColumn; readonly bytes: number
 	{ key: 'utmMedium', bytes: 200 },
 	{ key: 'utmCampaign', bytes: 200 },
 	{ key: 'currency', bytes: 3 },
-];
+] as const satisfies readonly { key: StringColumn; bytes: number }[];
+
+/** A column this deployment actually mirrors — the key set of `BLOB_SCHEMA`, narrowed to literals so
+ * a read can only ever name a slot the write path fills. */
+export type MirroredColumn = (typeof BLOB_SCHEMA)[number]['key'];
+
+/** The `blobN` column a mirrored key occupies, 1-based, derived from `BLOB_SCHEMA` itself. Reads go
+ * through this so the layout has exactly ONE definition: appending a slot cannot leave a query
+ * addressing the position the column used to hold. */
+export function blobColumn(key: MirroredColumn): string {
+	return `blob${BLOB_SCHEMA.findIndex((slot) => slot.key === key) + 1}`;
+}
+
+/** The `blobN` column carrying the derived visitor hash. Reads reference it ONLY inside
+ * `count(DISTINCT …)`: it is the one mirrored column that identifies a browsing session rather than
+ * describing it, so it must never become a group key or a projected value. */
+export const VISITOR_BLOB = blobColumn('visitorHash');
+
+/** The dataset name reads query in their `FROM` clause. The binding object exposes no name at
+ * runtime, so this MUST stay equal to `analytics_engine_datasets[].dataset` in `wrangler.jsonc`; a
+ * rename there without a change here queries a table that was never written to. */
+export const AE_DATASET = 'facet_events';
 
 /** Analytics Engine per-data-point limits: one index of at most 96 bytes, at most 20 blobs totalling
  * at most 16 KB, at most 20 doubles. Exported so the tests assert the layout stays inside them
