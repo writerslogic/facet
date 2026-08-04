@@ -3,11 +3,14 @@
 name: Scorecard
 
 on:
+  # Fires for CLASSIC branch protection only. `main` is governed by a repository ruleset, which raises
+  # no event, so a ruleset change reaches Scorecard via the push/schedule triggers or by hand below.
   branch_protection_rule:
   schedule:
     - cron: '27 4 * * 1'
   push:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
