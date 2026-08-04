@@ -53,8 +53,9 @@ especially valuable include:
 
 ## Handling of secrets
 
-Worker secrets: `ADMIN_TOKEN` (admin auth) and `CF_API_TOKEN` (Analytics Engine reads) are required;
-`WEBHOOK_SECRET` (anomaly-webhook HMAC), `FACET_SIGNING_JWK` (attestation/provenance signing key), and
+Worker secrets: `ADMIN_TOKEN` (admin auth) is required; `CF_API_TOKEN` (Analytics Engine reads — the
+AE mirror writes through its binding and needs no token), `WEBHOOK_SECRET` (anomaly-webhook HMAC),
+`FACET_SIGNING_JWK` (attestation/provenance signing key), and
 `SCITT_TOKEN` (external transparency service) are optional and only used when their features are
 enabled. API keys are stored only as `SHA-256` hashes; plaintext keys are shown once at issuance and
 are never retrievable. `FACET_SIGNING_JWK` holds a private key — its public half is published at

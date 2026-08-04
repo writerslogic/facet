@@ -7,8 +7,8 @@ import type { DeploymentProperties, ProcessEvidence } from '@facet/trust';
 import { getTableColumns, getTableName } from 'drizzle-orm';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
-import { DEFAULT_RAW_RETENTION_DAYS } from './constants.js';
 import { sha256Hex } from './crypto.js';
+import { retentionDays } from './retention.js';
 
 let cachedSchemaHash: string | null = null;
 
@@ -42,7 +42,9 @@ export async function deploymentDescriptor(env: Env): Promise<DeploymentProperti
 		buildId: env.FACET_BUILD_ID ?? 'unknown',
 		commit: env.FACET_GIT_COMMIT ?? 'unknown',
 		schemaHash: await schemaFingerprintHash(),
-		retentionDays: Number(env.RAW_RETENTION_DAYS ?? DEFAULT_RAW_RETENTION_DAYS),
+		// Through the shared reader, so the window this signs is the one the purge job enforces. A
+		// second local parse could sign a figure that is never applied.
+		retentionDays: retentionDays(env),
 		privacy: {
 			visitorHash: 'daily-rotating-salted-sha256',
 			hashesIp: true,

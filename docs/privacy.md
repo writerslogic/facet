@@ -212,6 +212,15 @@ Deleting the old salts means expired days can never be re-hashed even if raw inp
 resurfaced. **Aggregated rollups are durable and are never deleted**, so long-range trend
 history survives without retaining any raw, potentially re-identifiable rows.
 
+**Analytics Engine.** A deployment may additionally bind Analytics Engine as a columnar mirror of
+the same derived event columns (no new identifier, no raw IP — see
+[`apps/server/src/lib/ae.ts`](../apps/server/src/lib/ae.ts)). Cloudflare stores an AE data point for
+three months and exposes no delete API, so the mirror cannot be purged on Facet's schedule. Rather
+than let that quietly shorten what the deployment can honor, **the mirror is disabled whenever
+`RAW_RETENTION_DAYS` is set below 90** — configure a shorter window and the deployment stays
+D1-only. The window that is enforced, the window the mirror is gated on, and the window signed into
+the privacy attestation all read the same setting through one function, so they cannot diverge.
+
 ## What is never stored
 
 - Raw IP addresses (used only transiently to compute the hash).

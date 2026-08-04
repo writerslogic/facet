@@ -286,6 +286,10 @@ Raw events, sessions, and daily salts are purged past a rolling window controlle
 rollups are durable and never deleted. The purge runs on the hourly cron. See the
 [privacy model](./privacy.md) for details.
 
+Setting this **below 90 disables the Analytics Engine mirror**. Cloudflare keeps an AE data point for
+three months with no delete API, so a mirrored copy cannot be purged on your schedule — a shorter
+window means the deployment stays D1-only rather than retaining data past what it advertises.
+
 ## Operations
 
 ### Diagnosing an install
