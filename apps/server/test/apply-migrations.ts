@@ -4,7 +4,13 @@ import { beforeEach } from 'vitest';
 // pool-workers 0.18 isolates storage per test file, not per test (the old `isolatedStorage`).
 // Restore per-test isolation: wipe all binding storage and re-apply migrations before each test,
 // so every test starts from a migrated-but-empty database exactly as before.
+//
+// CRM_DB is a SEPARATE D1 database with its own migration set, so it is migrated separately. It is
+// bound in wrangler.test.jsonc (injected by scripts/gen-test-wrangler.mjs) so the suite can exercise
+// the bound path; a test covering an unbound deployment deletes the binding from the env it hands to
+// `app.request`, which is what a deployment that never created the database actually looks like.
 beforeEach(async () => {
 	await reset();
 	await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
+	await applyD1Migrations(env.CRM_DB, env.TEST_CRM_MIGRATIONS);
 });

@@ -72,7 +72,16 @@ describe('GET /api/attestation/privacy', () => {
 		expect(subject.deployment.buildId).toBe('ci-99');
 		expect(subject.deployment.schemaHash).toMatch(/^[0-9a-f]{64}$/);
 		expect(subject.deployment.privacy.storesRawIp).toBe(false);
-		expect(subject.dpv['dpv:hasPurpose']).toBe('dpv:ServiceOptimisation');
+		// The test env binds CRM_DB, so the SIGNED claims must be the CRM ones. This is the tripwire
+		// for the whole design: a deployment that stores contact PII while signing the analytics-only
+		// claims would be cryptographically attesting something false, which is a defect in the
+		// product's central promise rather than a documentation slip. Both shapes live in dpv.test.ts.
+		expect(subject.dpv['dpv:hasPurpose']).toEqual([
+			'dpv:ServiceOptimisation',
+			'dpv:CustomerRelationshipManagement',
+		]);
+		expect(subject.dpv['dpv:hasLegalBasis']).toContain('dpv:Consent');
+		expect(subject.dpv['dpv:hasProcessing']).toContain('dpv:Store');
 
 		expect((await verifyCredential(vc, { publicJwk })).valid).toBe(true);
 	});

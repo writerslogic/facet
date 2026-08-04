@@ -2,9 +2,15 @@
 // (sites aren't site-scoped; keys use one-time issuance and never expose their hash), so they do
 // not use the generic crudRouter.
 
-import { CreateSiteSchema, IssueKeySchema, SetIdentitySchema, type Site } from '@facet/shared';
+import {
+	CreateSiteSchema,
+	IssueKeySchema,
+	SetIdentitySchema,
+	SetSiteTeamSchema,
+	type Site,
+} from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
-import { desc } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { siteExists } from '../db/catalog.js';
 import { db } from '../db/queries.js';
@@ -98,6 +104,42 @@ adminRoutes.patch(
 				salt_window: saltWindow,
 			},
 		});
+	},
+);
+
+// Assign a site to a team, which is what makes every session/RBAC path reachable. Until this
+// existed, `sites.team_id` was writable by nothing in the shipped code: `siteRole` therefore always
+// returned null, so the dashboard-session branch of `requireSiteAccess` was dead and the whole
+// accounts/RBAC surface could only be exercised by a test writing the column with raw SQL. A team id
+// comes from `GET /api/auth/me`, which returns the caller's memberships. Passing `team_id: null`
+// unassigns the site, which revokes every session's access to it in one step.
+adminRoutes.patch(
+	'/sites/:id/team',
+	requireAdmin,
+	vValidator('json', SetSiteTeamSchema, validationErrorHook),
+	async (c) => {
+		const siteId = c.req.param('id') ?? '';
+		const { team_id } = c.req.valid('json');
+		if (!(await siteExists(c.env, siteId))) {
+			return c.json({ error: 'not_found' }, 404);
+		}
+		// A site pointed at a team that does not exist grants access to nobody and is silently
+		// broken, so the id is checked rather than trusted.
+		if (team_id) {
+			const team = await db(c.env)
+				.select({ id: schema.teams.id })
+				.from(schema.teams)
+				.where(eq(schema.teams.id, team_id))
+				.get();
+			if (!team) {
+				return c.json({ error: 'unknown_team' }, 400);
+			}
+		}
+		await db(c.env)
+			.update(schema.sites)
+			.set({ teamId: team_id ?? null })
+			.where(eq(schema.sites.id, siteId));
+		return c.json({ site: { id: siteId, team_id: team_id ?? null } });
 	},
 );
 

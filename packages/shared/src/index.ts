@@ -2,6 +2,7 @@
 
 export * from './admin.js';
 export * from './alerts.js';
+export * from './crm.js';
 export * from './events.js';
 export * from './experiments.js';
 export * from './flags.js';

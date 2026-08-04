@@ -1,5 +1,6 @@
 // Worker environment bindings (D1, static assets, rate-limiter, vars, secrets). Single source of truth for `Env`.
 
+import type { Role } from './lib/accounts.js';
 import type { DerivedEvent } from './lib/ingest.js';
 
 export interface Env {
@@ -52,7 +53,22 @@ export interface Env {
 	SCITT_URL?: string;
 	/** Optional bearer token (Worker secret) for the external SCITT service. */
 	SCITT_TOKEN?: string;
+	/** CRM database — a SEPARATE D1 database, not a table set inside `DB`. The CRM is an optional
+	 * extension holding directly-supplied contact PII, so "excluded" has to mean the tables do not
+	 * exist: with this binding absent there is no database, no migration is applied, and every
+	 * `/api/crm` route returns 501 `crm_unavailable`.
+	 *
+	 * The separation is load-bearing, not cosmetic. D1 cannot join across databases, so the
+	 * contact→analytics link CANNOT be a foreign key — it must be assembled in the Worker, which
+	 * structurally forces it through the consent check in `lib/consent.ts` instead of a join someone
+	 * adds later. Binding this also changes what the deployment attests: see `lib/dpv.ts`. */
+	CRM_DB?: D1Database;
 }
 
-/** App-wide Hono environment: bindings plus request-scoped variables (set by auth middleware). */
-export type AppEnv = { Bindings: Env; Variables: { siteId: string } };
+/** App-wide Hono environment: bindings plus request-scoped variables (set by auth middleware).
+ * `userId`/`role` are set only by `requireTeamRole`, the session-only guard — the API-key middlewares
+ * leave them undefined, so a handler that reads them cannot be reached by a `clk_` key. */
+export type AppEnv = {
+	Bindings: Env;
+	Variables: { siteId: string; userId?: string; role?: Role };
+};

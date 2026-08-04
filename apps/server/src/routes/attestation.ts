@@ -48,7 +48,7 @@ attestationRoutes.get('/privacy', async (c) => {
 		did,
 		created,
 		deployment: await deploymentDescriptor(c.env),
-		dpv: privacyDpvClaims(),
+		dpv: privacyDpvClaims(c.env),
 		evidence: {
 			profile: EAT_PROCESS_PROFILE,
 			contentRef: evidence.payload['content-ref'],

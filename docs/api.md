@@ -29,6 +29,9 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
 - `POST /api/auth/request`, `POST /api/auth/verify` — **public** (dashboard sign-in);
   `GET /api/auth/me`, `POST /api/auth/logout` — **session cookie**. All `503 auth_unavailable`
   unless `SESSION_SECRET` is bound.
+- `/api/crm/*` — **session cookie + team role**, and deliberately *not* an API key. This is the only
+  authenticated surface that refuses `clk_` keys: they authorize aggregate analytics and are meant to
+  be handed out, which contact PII does not survive. `501 crm_unavailable` unless `CRM_DB` is bound.
 
 ## Error envelope
 
@@ -1134,6 +1137,20 @@ curl -X POST https://your-deployment.example.com/api/sites \
 }
 ```
 
+### `PATCH /api/sites/:id/team`
+
+Body: `{ "team_id": string | null }`. Assigns the site to a team, which is what grants that team's
+members dashboard-session access to it (`GET /api/auth/me` returns a user's team ids). Passing `null`
+unassigns the site, revoking every session's access in one step — API-key access is unaffected either
+way. `404 not_found` for an unknown site, `400 unknown_team` for an unknown team.
+
+```sh
+curl -X PATCH https://your-deployment.example.com/api/sites/11111111-1111-4111-8111-111111111111/team \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"team_id":"a1b2c3d4e5f6"}'
+```
+
 ### `GET /api/sites`
 
 Lists all sites, newest first. Returns `200`.
@@ -1293,6 +1310,81 @@ Returns `{ "user": …, "memberships": [...] }` for the signed-in user, or `401 
 ### `POST /api/auth/logout` (session cookie)
 
 Clears the session cookie. Returns `204`.
+
+---
+
+## CRM (optional extension)
+
+The CRM is **off unless you bind it**. It lives in a second D1 database (`CRM_DB`); with no binding
+there is no database, no table, and every route below returns `501 crm_unavailable` — before
+authentication, so an unbound deployment answers uniformly. See `apps/server/wrangler.jsonc` for how
+to turn it on, and note that doing so changes the DPV claims this deployment signs at
+`/.well-known/facet-privacy.json` (it gains `dpv:Store`, `dpv:Erase` and `dpv:Consent`).
+
+**Auth is a session cookie, never an API key.** This is the one authenticated surface that refuses
+`Authorization: Bearer <clk_...>`. A `clk_` key authorizes aggregate analytics and is meant to be
+handed out — to agents, to a public demo dashboard — and contact PII is not something that survives
+that. Every route takes `?site_id=<uuid>`, and the caller must hold a role on the team that owns it
+(assign one with `PATCH /api/sites/:id/team`). `503 auth_unavailable` without `SESSION_SECRET`;
+`401 unauthorized` without a session; `403 forbidden` when the role is insufficient.
+
+| Role | Contacts |
+| --- | --- |
+| `viewer` | no access at all |
+| `analyst` | list, read, create, update, view the analytics link |
+| `admin` / `owner` | the above, plus delete and export |
+
+### `GET /api/crm/contacts?site_id&status&q&limit&offset` (session, analyst)
+
+Lists contacts, newest first. `status` ∈ `lead \| active \| archived`; `q` is a bounded substring
+match over name/email/company (LIKE metacharacters are escaped, so `q=%` matches a literal `%`).
+`limit` defaults to 25, max 100. Returns `{ contacts: [...], total }`.
+
+### `POST /api/crm/contacts?site_id` (session, analyst)
+
+Body: `{ external_user_id?, email?, name?, phone?, company?, title?, status?, source?, notes?,
+owner_user_id? }`. `site_id` comes from the query parameter, **never** the body. Requires at least
+one of `email`, `external_user_id` or `name` — a row with none can never be matched or erased on
+request. Email is lowercased; `(site_id, email)` and `(site_id, external_user_id)` are unique, so a
+duplicate returns `409 contact_exists`. An `owner_user_id` that matches no user returns
+`400 unknown_owner`. Returns `201`.
+
+### `GET`/`PATCH /api/crm/contacts/:id?site_id` (session, analyst)
+
+`PATCH` is partial: only keys present in the body are written, so omitting `notes` leaves the notes
+alone. A contact belonging to another site is `404 not_found`, indistinguishable from a missing one.
+
+### `DELETE /api/crm/contacts/:id?site_id` (session, admin)
+
+**Really deletes** — no tombstone, because a tombstone still holding an email is still that person's
+personal data. Also erases (not revokes) every `consent_records` row for their `external_user_id`,
+since those rows hold the raw identifier the erasure was about. Returns
+`{ "deleted": true, "consent_records_erased": <n> }`. The pseudonymous event rows remain; with the
+consent record gone, nothing can re-associate them with a person.
+
+### `GET /api/crm/contacts/:id/analytics?site_id` (session, analyst)
+
+The **consent-gated** link. Resolves the contact's `external_user_id` through `consent_records` and
+returns activity only for visitor hashes taken from consent statements that verify against the
+deployment signing key. The hash comes from the signed claims, never from a column, so a hand-written
+row cannot attach a contact to an arbitrary visitor.
+
+Returns `{ "linked": false, "reason": "no_external_user_id" | "no_active_consent" }`, or
+`{ "linked": true, "windows": <n>, "activity": { pageviews, events, first_seen, last_seen,
+top_paths } }`. `windows` is how many salt windows currently have a live grant; it shrinks on its own
+as retention purges older consent records, and when the last one goes the link severs with no
+CRM-side cleanup — nothing here caches a visitor hash.
+
+Contacts themselves are **not** on the retention schedule. A contact is a business record with its
+own lifecycle; only the link to analytics is time-bounded.
+
+### `GET /api/crm/contacts/:id/export?site_id` (session, admin)
+
+Data-subject export: `{ exported_at, contact, consent: [...], analytics: { linked, windows, activity,
+events, events_truncated, events_limit } }`. The `consent` entries include each signed statement
+verbatim — they are PII-free by construction, so they add cryptographic evidence of what was
+consented to without widening what the export discloses. `events` is capped at `events_limit` (1000)
+and `events_truncated` says so explicitly rather than silently returning a prefix.
 
 ---
 

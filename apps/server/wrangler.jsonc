@@ -28,6 +28,37 @@
       "database_id": "PLACEHOLDER_D1_DATABASE_ID",
       "migrations_dir": "migrations"
     }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // OPTIONAL — the CRM extension. Off by default: with no CRM_DB binding
+    // there is no database, no migration is applied, no table exists, and
+    // every /api/crm route returns 501 `crm_unavailable`.
+    //
+    // It is a SECOND D1 DATABASE, not a table set inside `facet`, and that
+    // is load-bearing. D1 cannot join across databases, so the link from a
+    // contact to their analytics CANNOT be a foreign key — it is assembled
+    // in the Worker and therefore has to pass the signed-consent check in
+    // lib/consent.ts. Putting these tables in `facet` would let someone add
+    // that join later and never notice they had bypassed consent.
+    //
+    // Enabling it changes what this deployment IS. Contacts are people who
+    // handed over their details directly, so a CRM deployment is a
+    // controller of directly-identifying PII for the first time — and the
+    // signed privacy attestation says so: lib/dpv.ts reads this binding and
+    // adds dpv:Store, dpv:Erase and dpv:Consent to the claims served at
+    // /.well-known/facet-privacy.json. Do not bind this and leave that
+    // unchanged; the deployment would be signing a false statement.
+    //
+    // To turn it on:
+    //   wrangler d1 create facet-crm
+    //   pnpm --filter @facet/server migrate:crm:remote
+    // then uncomment the block below with the id `d1 create` printed.
+    //   ,{
+    //     "binding": "CRM_DB",
+    //     "database_name": "facet-crm",
+    //     "database_id": "PLACEHOLDER_CRM_D1_DATABASE_ID",
+    //     "migrations_dir": "migrations-crm"
+    //   }
   ],
   "vars": {
     // Rolling retention window for raw events, in days.

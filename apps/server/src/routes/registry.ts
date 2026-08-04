@@ -9,6 +9,7 @@ import { attestationRoutes } from './attestation.js';
 import { authRoutes } from './auth.js';
 import { collectRoute } from './collect.js';
 import { consentRoutes } from './consent.js';
+import { crmRoutes } from './crm.js';
 import { eventRoute } from './event.js';
 import { experimentsRoutes } from './experiments.js';
 import { flagsRoutes } from './flags.js';
@@ -39,6 +40,9 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/api/auth', router: authRoutes },
 	{ path: '/api/event', router: eventRoute },
 	{ path: '/api/consent', router: consentRoutes },
+	// Optional extension: every route 501s unless CRM_DB is bound. Mounted unconditionally so the
+	// answer is a deliberate "this deployment does not implement it", not a 404 that looks like a bug.
+	{ path: '/api/crm', router: crmRoutes },
 	{ path: '/api', router: statsRoutes },
 	{ path: '/api', router: adminRoutes },
 	{ path: '/api/goals', router: goalsRoutes },

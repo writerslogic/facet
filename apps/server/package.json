@@ -18,8 +18,11 @@
 		"pretest": "node scripts/gen-test-wrangler.mjs && pnpm --filter @facet/dashboard build",
 		"test": "vitest run",
 		"db:generate": "drizzle-kit generate",
+		"db:generate:crm": "drizzle-kit generate --config drizzle.crm.config.ts",
 		"migrate:local": "wrangler d1 migrations apply facet --local",
 		"migrate:remote": "wrangler d1 migrations apply facet --remote",
+		"migrate:crm:local": "wrangler d1 migrations apply facet-crm --local",
+		"migrate:crm:remote": "wrangler d1 migrations apply facet-crm --remote",
 		"seed:local": "wrangler d1 execute facet --local --file=./scripts/seed.sql"
 	},
 	"dependencies": {

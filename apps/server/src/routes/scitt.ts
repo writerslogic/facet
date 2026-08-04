@@ -41,7 +41,7 @@ scittRoutes.post('/attestation', requireAdmin, async (c) => {
 			did,
 			created,
 			deployment: await deploymentDescriptor(c.env),
-			dpv: privacyDpvClaims(),
+			dpv: privacyDpvClaims(c.env),
 		}),
 		key,
 		{ verificationMethod: verificationMethodId(did, key.kid), created },
