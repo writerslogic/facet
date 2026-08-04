@@ -260,8 +260,10 @@ crmRoutes.get('/contacts/:id/export', requireTeamRole('admin'), async (c) => {
 			activity,
 			events,
 			// Never a silent cap: an export that returned a prefix without saying so would read as
-			// the complete record and answer a subject-access request incorrectly.
-			events_truncated: activity.events > events.length,
+			// the complete record and answer a subject-access request incorrectly. Compared against
+			// `total`, NOT `events` — the latter counts custom events only, so a contact whose
+			// traffic is all pageviews would report `false` while a thousand rows were dropped.
+			events_truncated: activity.total > events.length,
 			events_limit: CONTACT_EXPORT_MAX_EVENTS,
 		},
 	});
