@@ -7,8 +7,13 @@ import { env } from 'cloudflare:test';
 import { generateSigningJwk } from '@facet/trust';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
-import { signSession, upsertUserByEmail, userMemberships } from '../src/lib/accounts.js';
-import { SESSION_COOKIE } from '../src/lib/accounts.js';
+import { CONTACT_EXPORT_MAX_EVENTS } from '../src/db/contact-analytics.js';
+import {
+	SESSION_COOKIE,
+	signSession,
+	upsertUserByEmail,
+	userMemberships,
+} from '../src/lib/accounts.js';
 import { issueKey } from '../src/lib/apikeys.js';
 import { enforceRetention } from '../src/lib/retention.js';
 
@@ -560,6 +565,75 @@ describe('erasure and export', () => {
 		expect(
 			(await crm(env, `/contacts/${contact.id}`, { method: 'DELETE' }, cookie)).status,
 		).toBe(404);
+	});
+
+	it('says so when the export hits its event cap, for pageview-only traffic', async () => {
+		// The cap must be measured against ALL rows, not the custom-event count. A contact whose
+		// traffic is entirely pageviews (the common case) has zero custom events, so comparing
+		// against that number reports `truncated: false` while a thousand rows are dropped — a
+		// subject-access request answered incorrectly, which is the one thing the flag exists to
+		// prevent. Seeded as pageviews (`name IS NULL`) precisely because that is the blind spot.
+		const e = await withSigningKey(env);
+		const cookie = await operator(e, 'admin@example.com', 'admin');
+		const hash = 'b'.repeat(64);
+		const insert = e.DB.prepare(
+			`INSERT INTO events (id, site_id, name, hostname, path, referrer, visitor_hash, created_at)
+			 VALUES (?, ?, NULL, 'shop.example.com', '/', '', ?, ?)`,
+		);
+		const over = CONTACT_EXPORT_MAX_EVENTS + 1;
+		for (let i = 0; i < over; i += 500) {
+			await e.DB.batch(
+				Array.from({ length: Math.min(500, over - i) }, (_, j) =>
+					insert.bind(crypto.randomUUID(), SITE, hash, Date.now() - (i + j)),
+				),
+			);
+		}
+		// Link the contact by minting real consent, then pointing it at the seeded hash: the export
+		// path only ever sees hashes that came out of a verified statement.
+		await e.DB.prepare(
+			'INSERT OR REPLACE INTO site_config (site_id, tier, salt_window, updated_at) VALUES (?, ?, ?, ?)',
+		)
+			.bind(SITE, 'identified', 'day', Date.now())
+			.run();
+		const { key } = await issueKey(e, SITE, 'server', Date.now());
+		await app.request(
+			'/api/consent',
+			{
+				method: 'POST',
+				headers: { Authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+				body: JSON.stringify({
+					tier: 'identified',
+					salt_window: 'day',
+					user_id: UID,
+					ip: '203.0.113.9',
+				}),
+			},
+			e,
+		);
+		const granted = await e.DB.prepare(
+			'SELECT visitor_hash FROM consent_records WHERE external_user_id = ?',
+		)
+			.bind(UID)
+			.first<{ visitor_hash: string }>();
+		await e.DB.prepare('UPDATE events SET visitor_hash = ? WHERE visitor_hash = ?')
+			.bind(granted?.visitor_hash as string, hash)
+			.run();
+
+		const contact = await createContact(e, cookie, { name: 'Ada', external_user_id: UID });
+		const res = await crm(e, `/contacts/${contact.id}/export`, {}, cookie);
+		const body = (await res.json()) as {
+			analytics: {
+				activity: { pageviews: number; events: number; total: number };
+				events: unknown[];
+				events_truncated: boolean;
+			};
+		};
+		expect(body.analytics.activity.total).toBe(over);
+		expect(body.analytics.activity.pageviews).toBe(over);
+		// Zero custom events is exactly the case the wrong comparison got wrong.
+		expect(body.analytics.activity.events).toBe(0);
+		expect(body.analytics.events.length).toBe(CONTACT_EXPORT_MAX_EVENTS);
+		expect(body.analytics.events_truncated).toBe(true);
 	});
 
 	it('exports the contact, their consent evidence, and their events', async () => {
