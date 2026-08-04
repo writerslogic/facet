@@ -6,8 +6,9 @@
 // never from a body, so a session with a role on one site cannot reach another site's contacts even
 // by guessing a contact id.
 
-import { and, desc, eq, like, or, sql } from 'drizzle-orm';
+import { and, desc, eq, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
+import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { MiddlewareHandler } from 'hono';
 import type { AppEnv, Env } from '../env.js';
 import { ApiError } from '../lib/http.js';
@@ -152,11 +153,17 @@ export async function listContacts(
 	if (opts.q) {
 		// Escape the LIKE metacharacters so a `%` in the search box means a literal percent sign
 		// rather than "match everything" — without this, `q=%` scans the whole table.
+		//
+		// The `ESCAPE` clause is not optional decoration: SQLite ignores backslash escapes entirely
+		// unless it is present, so `\%` would be read as a literal backslash followed by the wildcard.
+		// A prefixed term with no ESCAPE clause happens to match nothing (no name contains a
+		// backslash), which looks like it works while quietly making `%` unsearchable.
 		const term = `%${opts.q.replace(/[\\%_]/g, '\\$&')}%`;
+		const matches = (column: SQLiteColumn) => sql`${column} LIKE ${term} ESCAPE '\\'`;
 		const anyField = or(
-			like(crmSchema.contacts.name, term),
-			like(crmSchema.contacts.email, term),
-			like(crmSchema.contacts.company, term),
+			matches(crmSchema.contacts.name),
+			matches(crmSchema.contacts.email),
+			matches(crmSchema.contacts.company),
 		);
 		if (anyField) {
 			filters.push(anyField);

@@ -291,12 +291,26 @@ describe('contacts', () => {
 		expect(await res.json()).toMatchObject({ error: 'unknown_owner' });
 	});
 
-	it('does not let a % in the search box scan the whole table', async () => {
+	it('treats a % in the search box as a literal, matching neither everything nor nothing', async () => {
 		const cookie = await operator(env, 'admin@example.com', 'admin');
 		await createContact(env, cookie, { name: 'Ada', email: 'ada@example.com' });
+		await createContact(env, cookie, { name: '100% Widgets', email: 'w@example.com' });
+
+		// Not a wildcard: the contact without a `%` in its name is not returned.
 		const res = await crm(env, '/contacts?q=%25', {}, cookie);
-		const { total } = (await res.json()) as { total: number };
-		expect(total).toBe(0);
+		const { contacts, total } = (await res.json()) as {
+			contacts: { name: string }[];
+			total: number;
+		};
+		// And not inert either. Asserting only `total !== 2` would also pass if the escaping matched
+		// nothing at all, which is what happens without SQLite's ESCAPE clause — so the literal has
+		// to be shown actually finding its row.
+		expect(total).toBe(1);
+		expect(contacts[0]?.name).toBe('100% Widgets');
+
+		// The other metacharacter, same rule: `_` is a single-character wildcard in LIKE.
+		const underscore = await crm(env, '/contacts?q=_', {}, cookie);
+		expect(((await underscore.json()) as { total: number }).total).toBe(0);
 	});
 });
 
