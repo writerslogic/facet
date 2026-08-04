@@ -86,9 +86,15 @@ export function sanitizeKey(value: string): string {
 	return kept.join('');
 }
 
-/** Table-cell form: also escape the column delimiter, so a value cannot add or shift a column. */
+/** Table-cell form: also escape the column delimiter, so a value cannot add or shift a column.
+ *
+ * The backslash MUST be escaped first, and it is not optional. Escaping only `|` turns the key
+ * `a\|b` into `a\\|b`, which a markdown reader parses as an escaped backslash followed by a LIVE
+ * delimiter — the column injection this function exists to prevent, reintroduced by the escape
+ * itself. `sanitizeKey` does not drop `\` (it is not a control, zero-width or bidi code point), and
+ * `referrer` is settable by anyone who can send traffic at the public beacon. */
 function cell(value: string): string {
-	return sanitizeKey(value).replace(/\|/g, '\\|');
+	return sanitizeKey(value).replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
 }
 
 function isoDay(ms: number): string {
