@@ -4,7 +4,7 @@
 // Integrity `eddsa-jcs-2022` is Ed25519-only). Reuses @facet/trust's generator so the `kid` is the
 // RFC 7638 thumbprint, exactly as the Worker expects.
 
-import { chmod, writeFile } from 'node:fs/promises';
+import { open } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { type SigningAlg, generateSigningJwk } from '@facet/trust';
 import pc from 'picocolors';
@@ -41,10 +41,18 @@ async function runGenerate(args: string[]): Promise<number> {
 	const privateJson = JSON.stringify(privateJwk);
 
 	if (values.out) {
-		await writeFile(values.out, `${privateJson}\n`, { mode: 0o600 });
-		// `mode` only applies when the file is CREATED; enforce 0600 explicitly so overwriting a
-		// pre-existing (possibly world-readable) file never leaves the private key exposed.
-		await chmod(values.out, 0o600);
+		// `mode` only applies when the file is CREATED, so overwriting a pre-existing (possibly
+		// world-readable) file would take the private key at its old mode. Chmod through the
+		// descriptor before writing rather than after: the key must never touch an inode that is
+		// readable by anyone else, not even for the window between two syscalls. Opening with `w`
+		// truncates first, so nothing of the previous contents is exposed either.
+		const handle = await open(values.out, 'w', 0o600);
+		try {
+			await handle.chmod(0o600);
+			await handle.writeFile(`${privateJson}\n`);
+		} finally {
+			await handle.close();
+		}
 		process.stdout.write(`${pc.green('✓')} wrote private signing JWK → ${values.out}\n`);
 		process.stdout.write(
 			`  ${pc.dim(`kid ${publicJwk.kid} (${alg}). Store it as a secret: wrangler secret put FACET_SIGNING_JWK < ${values.out}`)}\n`,
