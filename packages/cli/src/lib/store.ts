@@ -69,12 +69,16 @@ export function readDevVar(devVarsPath: string, key: string): string | null {
  */
 export function writeDevVar(devVarsPath: string, key: string, value: string): void {
 	mkdirSync(dirname(devVarsPath), { recursive: true });
-	const existing = existsSync(devVarsPath) ? readFileSync(devVarsPath, 'utf8') : '';
+	const exists = existsSync(devVarsPath);
+	const existing = exists ? readFileSync(devVarsPath, 'utf8') : '';
 	const lines = existing === '' ? [] : existing.replace(/\n$/, '').split('\n');
 	const idx = lines.findIndex((line) => line.trim().startsWith(`${key}=`));
 	if (idx >= 0) lines[idx] = `${key}=${value}`;
 	else lines.push(`${key}=${value}`);
+	// Tighten BEFORE the secret lands, not after. `writeFileSync` applies `mode` only when it creates
+	// the file, so on a `.dev.vars` that already existed under a laxer mode — one the operator made by
+	// hand, or that a umask widened — chmod-ing afterwards leaves the value readable for the window
+	// between the two calls. This file holds ADMIN_TOKEN and FACET_SIGNING_JWK.
+	if (exists) chmodSync(devVarsPath, 0o600);
 	writeFileSync(devVarsPath, `${lines.join('\n')}\n`, { mode: 0o600 });
-	// writeFileSync only applies `mode` when it creates the file, so enforce it on an existing one too.
-	chmodSync(devVarsPath, 0o600);
 }
