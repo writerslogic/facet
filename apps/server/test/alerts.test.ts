@@ -624,20 +624,33 @@ describe('cron alerting', () => {
 			noRetry() {},
 		} as unknown as ScheduledController;
 
-		await expect(
-			runScheduled(event, env as Env, [
-				alertsJob,
-				{
-					name: 'after',
-					run: async () => {
-						ran = true;
+		// `alertsJob` calls `runAlerts` with no injectable fetch, so the unreachable-endpoint case has
+		// to be produced at the global. It used to be produced by letting the real `fetch` try to dial
+		// hooks.example.com and fail, which made the assertion depend on the runner's DNS: a resolver
+		// that answers NXDOMAIN with a landing page (common on ISP and VPN networks) fails it outright,
+		// and workerd surfaced the abandoned connection as an unhandled `internal error` rejection on
+		// every run of this suite.
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(() => Promise.reject(new Error('unreachable'))),
+		);
+		try {
+			await expect(
+				runScheduled(event, env as Env, [
+					alertsJob,
+					{
+						name: 'after',
+						run: async () => {
+							ran = true;
+						},
 					},
-				},
-			]),
-		).resolves.toBeUndefined();
+				]),
+			).resolves.toBeUndefined();
+		} finally {
+			vi.unstubAllGlobals();
+		}
 		expect(ran).toBe(true);
-		// The job used the real `fetch`, which cannot reach hooks.example.com from the test runtime —
-		// exactly the "endpoint is unreachable" case. It must be recorded, not thrown.
+		// A dead endpoint must be recorded, not thrown.
 		const rows = await deliveryRows();
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.status).toBe('failed');

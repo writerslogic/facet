@@ -1,6 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup } from '@testing-library/react';
-import { afterEach } from 'vitest';
+import { afterEach, vi } from 'vitest';
 
 // jsdom in this config does not expose Storage; provide a minimal in-memory implementation.
 function makeStorage(): Storage {
@@ -61,4 +61,10 @@ if (!('ResizeObserver' in globalThis)) {
 // React Testing Library needs explicit cleanup because vitest globals are off.
 afterEach(() => {
 	cleanup();
+	// `restoreAllMocks` does not undo `stubGlobal`, so a test that stubs `fetch` and only restores
+	// mocks leaves the stub installed. An unmounted tree's react-query request can still be in
+	// flight, and it then resolves against the NEXT test's DOM — a failure that moves between files
+	// and machines depending on which request loses the race. Unstubbing here covers every file
+	// rather than relying on each one to remember.
+	vi.unstubAllGlobals();
 });

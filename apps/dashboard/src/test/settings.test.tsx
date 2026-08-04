@@ -163,9 +163,6 @@ beforeEach(() => {
 
 afterEach(() => {
 	vi.restoreAllMocks();
-	// `restoreAllMocks` does not undo `stubGlobal`, so without this the stubbed fetch outlives the
-	// test that installed it and a late react-query retry lands on the wrong mock.
-	vi.unstubAllGlobals();
 });
 
 async function openSettingsWithToken() {
