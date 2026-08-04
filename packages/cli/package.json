@@ -42,8 +42,7 @@
 		"jsonld": "9.0.0",
 		"jsonld-document-loader": "2.3.0",
 		"jsonld-signatures": "11.6.0",
-		"picocolors": "1.1.1",
-		"rdf-canonize": "4.0.1"
+		"picocolors": "1.1.1"
 	},
 	"devDependencies": {
 		"@facet/shared": "workspace:*",

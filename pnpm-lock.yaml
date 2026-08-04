@@ -181,9 +181,6 @@ importers:
       picocolors:
         specifier: 1.1.1
         version: 1.1.1
-      rdf-canonize:
-        specifier: 4.0.1
-        version: 4.0.1
     devDependencies:
       '@facet/shared':
         specifier: workspace:*
@@ -2576,10 +2573,6 @@ packages:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
 
-  rdf-canonize@4.0.1:
-    resolution: {integrity: sha512-B5ynHt4sasbUafzrvYI2GFARgeFcD8Sx9yXPbg7gEyT2EH76rlCv84kyO6tnxzVbxUN/uJDbK1S/MXh+DsnuTA==}
-    engines: {node: '>=18'}
-
   rdf-canonize@5.0.0:
     resolution: {integrity: sha512-g8OUrgMXAR9ys/ZuJVfBr05sPPoMA7nHIVs8VEvg9QwM5W4GR2qSFEEHjsyHF1eWlBaf8Ev40WNjQFQ+nJTO3w==}
     engines: {node: '>=18'}
@@ -4854,10 +4847,6 @@ snapshots:
       sade: 1.8.1
 
   punycode@2.3.1: {}
-
-  rdf-canonize@4.0.1:
-    dependencies:
-      setimmediate: 1.0.5
 
   rdf-canonize@5.0.0:
     dependencies:
