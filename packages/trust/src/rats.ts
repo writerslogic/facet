@@ -155,9 +155,11 @@ export async function signProcessEvidence(
 	const claims: EatClaims = {
 		eat_profile: EAT_PROCESS_PROFILE,
 		iat: Math.floor(opts.now / 1000),
-		// `!== undefined`, not truthiness: a supplied nonce is always claimed. Every falsy one is now
-		// rejected above, so the two agree — but only the explicit test says a nonce can never be
-		// accepted and then silently dropped from the claim set it was asked to appear in.
+		// `!== undefined`, not truthiness. The check above rejects every falsy nonce, so the two are
+		// equivalent here and no test can tell them apart — this says the claim is omitted only when
+		// none was supplied, rather than leaving that to a bound enforced twenty lines earlier. Under
+		// truthiness, deleting that bound silently reintroduces the original defect: `''` accepted,
+		// then dropped, and an EAT that carries no freshness claim for a caller who asked for one.
 		...(opts.nonce !== undefined ? { eat_nonce: opts.nonce } : {}),
 		cnf: { jwk: subjectJwk },
 		'key-attributes': {
