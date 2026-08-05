@@ -184,6 +184,15 @@ function linkedHashes(
 	});
 }
 
+/**
+ * Every list response carries the role it was served under.
+ *
+ * A client has no other way to learn it. `GET /api/auth/me` reports a role per TEAM, and no
+ * session-reachable route maps a site to its owning team — that lives behind the admin token — so a
+ * browser deciding whether to offer the admin-only Delete and Export could only guess. Guessing high
+ * offers a button that answers 403; guessing low hides one the operator is entitled to. The server
+ * already resolved the exact role to authorize this very request, so it says so.
+ */
 crmRoutes.get(
 	'/contacts',
 	requireTeamRole('analyst'),
@@ -197,7 +206,7 @@ crmRoutes.get(
 			limit: query.limit ?? CRM_DEFAULT_PAGE,
 			offset: query.offset ?? 0,
 		});
-		return c.json({ contacts, total });
+		return c.json({ contacts, total, role: c.get('role') });
 	},
 );
 
@@ -379,7 +388,7 @@ crmRoutes.get(
 			limit: query.limit ?? CRM_DEFAULT_PAGE,
 			offset: query.offset ?? 0,
 		});
-		return c.json({ companies, total });
+		return c.json({ companies, total, role: c.get('role') });
 	},
 );
 
@@ -461,7 +470,7 @@ crmRoutes.get(
 			company.id,
 			{ limit: query.limit ?? CRM_DEFAULT_PAGE, offset: query.offset ?? 0 },
 		);
-		return c.json({ contacts, total });
+		return c.json({ contacts, total, role: c.get('role') });
 	},
 );
 

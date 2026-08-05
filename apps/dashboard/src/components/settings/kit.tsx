@@ -201,6 +201,7 @@ export function Field({
 	placeholder,
 	type = 'text',
 	hint,
+	disabled,
 }: {
 	id: string;
 	label: string;
@@ -210,6 +211,8 @@ export function Field({
 	type?: string;
 	/** Optional helper text under the field. */
 	hint?: string;
+	/** Inert because another control currently owns this value. State the reason in `hint`. */
+	disabled?: boolean;
 }): ReactElement {
 	return (
 		<div className="min-w-0">
@@ -222,8 +225,9 @@ export function Field({
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
 				placeholder={placeholder}
+				disabled={disabled}
 				aria-describedby={hint ? `${id}-hint` : undefined}
-				className="input mt-1 block w-full rounded-lg px-3 py-1.5 text-sm"
+				className="input mt-1 block w-full rounded-lg px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"
 			/>
 			{hint ? (
 				<p id={`${id}-hint`} className="mt-1 text-[color:var(--faint)] text-xs">

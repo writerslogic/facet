@@ -152,6 +152,7 @@ describe('segment capability claims match the server', () => {
 		expect(Object.keys(TAB_SEGMENT_SUPPORT).sort()).toEqual([
 			'anomalies',
 			'ask',
+			'crm',
 			'experiments',
 			'funnels',
 			'overview',

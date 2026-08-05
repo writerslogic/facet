@@ -72,7 +72,7 @@ describe('document structure', () => {
 	it('gives every view exactly one h1, naming the view', async () => {
 		seedProfiles();
 		wrap(<App />);
-		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(9));
+		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(10));
 
 		const h1s = () => document.querySelectorAll('h1');
 		expect(h1s()).toHaveLength(1);
@@ -118,7 +118,7 @@ describe('view tablist', () => {
 	it('wires each tab to the panel it selects', async () => {
 		seedProfiles();
 		wrap(<App />);
-		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(9));
+		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(10));
 
 		const selected = screen.getByRole('tab', { selected: true });
 		const panel = screen.getByRole('tabpanel');
@@ -126,20 +126,20 @@ describe('view tablist', () => {
 		expect(panel).toHaveAttribute('aria-labelledby', selected.id);
 	});
 
-	it('is a single tab stop with roving tabindex, not nine', async () => {
+	it('is a single tab stop with roving tabindex, not ten', async () => {
 		seedProfiles();
 		wrap(<App />);
-		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(9));
+		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(10));
 
 		const tabs = screen.getAllByRole('tab');
 		expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1);
-		expect(tabs.filter((t) => t.tabIndex === -1)).toHaveLength(8);
+		expect(tabs.filter((t) => t.tabIndex === -1)).toHaveLength(9);
 	});
 
 	it('moves selection with Left/Right/Home/End, as role=tablist promises', async () => {
 		seedProfiles();
 		wrap(<App />);
-		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(9));
+		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(10));
 
 		fireEvent.keyDown(screen.getByRole('tab', { name: 'Overview' }), { key: 'ArrowRight' });
 		await waitFor(() =>
