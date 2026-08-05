@@ -22,6 +22,8 @@ import { FunnelsPanel } from './settings/FunnelsPanel.js';
 import { GoalsPanel } from './settings/GoalsPanel.js';
 import { IdentityPanel } from './settings/IdentityPanel.js';
 import { KeysPanel } from './settings/KeysPanel.js';
+import { OperatorSessionsPanel } from './settings/OperatorSessionsPanel.js';
+import { SessionPanel } from './settings/SessionPanel.js';
 import { SitesPanel } from './settings/SitesPanel.js';
 
 type SectionId = 'keys' | 'goals' | 'funnels' | 'experiments' | 'flags' | 'identity';
@@ -44,10 +46,14 @@ export function Settings(): ReactElement {
 	// the context bar's site name and to notice a token the deployment has since stopped accepting.
 	const sites = useSites(token);
 
+	// Both of these are authorized by the operator's own session cookie, not by the admin token, so
+	// they render on either side of the gate — an operator who never enters an ADMIN_TOKEN still has
+	// an account, and ending its sessions is the one security control they can exercise alone.
 	if (!hasToken) {
 		return (
 			<div className="space-y-6">
 				<AppearancePanel />
+				<SessionPanel />
 				<AdminTokenGate />
 			</div>
 		);
@@ -63,6 +69,7 @@ export function Settings(): ReactElement {
 	return (
 		<div className="space-y-6">
 			<AppearancePanel />
+			<SessionPanel />
 
 			<div className="surface flex flex-wrap items-center justify-between gap-3 rounded-xl p-4">
 				<div className="flex items-start gap-2.5">
@@ -101,6 +108,11 @@ export function Settings(): ReactElement {
 			{rejected ? null : (
 				<SitesPanel token={token} onManageSite={setSiteId} activeSiteId={siteId} />
 			)}
+
+			{/* Deployment-wide like Sites, and deliberately above the site selection: a session belongs
+			    to a person and to this whole deployment, so offering it inside the per-site tabs would
+			    imply revoking it were somehow scoped to the site being managed. */}
+			{rejected ? null : <OperatorSessionsPanel token={token} />}
 
 			{rejected ? null : siteId ? (
 				<div className="space-y-4">

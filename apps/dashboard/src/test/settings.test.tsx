@@ -199,9 +199,14 @@ describe('Settings admin area', () => {
 		await openSettingsWithToken();
 		await waitFor(() => expect(calls.some((c) => c.url.startsWith('/api/sites'))).toBe(true));
 		for (const call of calls) {
-			const isAdmin = /^\/api\/(sites|keys|goals|funnels|experiments|flags)/.test(call.url);
+			// Mirrors ADMIN_PATHS in admin.ts. `users` covers /api/users/:id/revoke-sessions.
+			const isAdmin = /^\/api\/(sites|keys|goals|funnels|experiments|flags|users)/.test(
+				call.url,
+			);
 			if (!isAdmin) {
-				expect(call.auth).not.toContain(ADMIN_TOKEN);
+				// Coalesced because the session routes (`/api/auth/me`) send NO Authorization header
+				// at all, which is the strongest possible pass and the shape this used to throw on.
+				expect(call.auth ?? '').not.toContain(ADMIN_TOKEN);
 			}
 			// The token is never in a URL/query string.
 			expect(call.url).not.toContain(ADMIN_TOKEN);

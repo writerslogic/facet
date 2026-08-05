@@ -23,6 +23,11 @@ const ADMIN_PATHS = [
 	'/api/funnels',
 	'/api/experiments',
 	'/api/flags',
+	// Only `/api/users/:id/revoke-sessions` exists under this prefix and it is behind `requireAdmin`.
+	// Listed because the allowlist is what stops the token reaching a route that never asked for it —
+	// a genuine admin route missing from here fails closed with `non_admin_path`, which is the right
+	// default and the reason this is an explicit line rather than a widened pattern.
+	'/api/users',
 ];
 
 function isAdminPath(path: string): boolean {

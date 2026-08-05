@@ -71,21 +71,22 @@ function errorCode(status: number, body: { error?: string }): string {
 	return 'request_failed';
 }
 
+interface SessionInit {
+	method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+	body?: unknown;
+}
+
 /**
- * Canonical helper for the SESSION-authenticated API (`/api/auth/me`, `/api/crm/*`).
+ * Issue a request to the SESSION-authenticated API and raise the API's own error code on failure.
  *
  * Deliberately sends no `Authorization` header: those routes refuse an API key by design, because a
  * `clk_` key reads aggregate analytics and is handed out accordingly while contact PII is not. Auth
  * is the HttpOnly session cookie, which a same-origin request carries on its own — `same-origin` is
  * the browser default and is stated here so the intent survives the next refactor.
  */
-export async function sessionFetch<T>(
-	path: string,
-	init?: { method?: 'GET' | 'POST' | 'PATCH' | 'DELETE'; body?: unknown },
-): Promise<T> {
-	const method = init?.method ?? 'GET';
+async function sessionRequest(path: string, init?: SessionInit): Promise<Response> {
 	const res = await fetch(path, {
-		method,
+		method: init?.method ?? 'GET',
 		credentials: 'same-origin',
 		...(init?.body === undefined
 			? {}
@@ -98,5 +99,24 @@ export async function sessionFetch<T>(
 		const body = (await res.json().catch(() => ({}))) as { error?: string };
 		throw new Error(errorCode(res.status, body));
 	}
-	return (await res.json()) as T;
+	return res;
+}
+
+/** Canonical helper for the session API's JSON routes (`/api/auth/me`, `/api/crm/*`). */
+export async function sessionFetch<T>(path: string, init?: SessionInit): Promise<T> {
+	return (await sessionRequest(path, init)).json() as Promise<T>;
+}
+
+/**
+ * A session route that answers 204 and returns nothing — `/api/auth/logout-everywhere` is the one
+ * that matters here.
+ *
+ * Separate from `sessionFetch` rather than a status check inside it, because the difference is in the
+ * TYPE and not only in the parsing: a 204 has no body, so there is no `T` to promise and calling
+ * `.json()` on it throws a SyntaxError. Routed through `sessionFetch` that failure would surface as a
+ * rejected mutation for a request the server in fact completed — the worst possible reading of "you
+ * are signed out everywhere", since the sessions really are gone and the UI would say they are not.
+ */
+export async function sessionSend(path: string, init: SessionInit): Promise<void> {
+	await sessionRequest(path, init);
 }
