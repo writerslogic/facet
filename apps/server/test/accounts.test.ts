@@ -318,3 +318,52 @@ describe('account bootstrap', () => {
 		expect(team?.id).toBe(memberships[0]?.teamId);
 	});
 });
+
+describe('admin session revocation', () => {
+	const app = createApp();
+
+	it('ends a named operator’s sessions, which is the lever the audit log points at', async () => {
+		// The log names the operator whose session read the contact table. Before this route the only
+		// person who could act on that was the operator themselves — the wrong person entirely when
+		// the question is whether their session was stolen.
+		const now = Date.now();
+		const user = await upsertUserByEmail(env, 'suspect@example.com', now);
+		const secret = env.SESSION_SECRET as string;
+		const cookie = `${SESSION_COOKIE}=${await signSession(user.id, secret, now, user.sessionEpoch)}`;
+		expect((await app.request('/api/auth/me', { headers: { cookie } }, env)).status).toBe(200);
+
+		const res = await app.request(
+			`/api/users/${user.id}/revoke-sessions`,
+			{ method: 'POST', headers: { Authorization: 'Bearer test-admin-token' } },
+			env,
+		);
+		expect(res.status).toBe(200);
+		expect(await res.json()).toEqual({ user_id: user.id, sessions_revoked: true });
+		expect((await app.request('/api/auth/me', { headers: { cookie } }, env)).status).toBe(401);
+	});
+
+	it('404s an unknown user rather than reporting a revocation that never happened', async () => {
+		const res = await app.request(
+			'/api/users/no-such-user/revoke-sessions',
+			{ method: 'POST', headers: { Authorization: 'Bearer test-admin-token' } },
+			env,
+		);
+		expect(res.status).toBe(404);
+	});
+
+	it('refuses without the admin token, so it is not a session-authenticated route', async () => {
+		const now = Date.now();
+		const user = await upsertUserByEmail(env, 'notadmin@example.com', now);
+		const secret = env.SESSION_SECRET as string;
+		const cookie = `${SESSION_COOKIE}=${await signSession(user.id, secret, now, user.sessionEpoch)}`;
+		// A team role is not enough and a session cookie is not a credential here.
+		const res = await app.request(
+			`/api/users/${user.id}/revoke-sessions`,
+			{ method: 'POST', headers: { cookie } },
+			env,
+		);
+		expect(res.status).toBe(401);
+		// And the session it tried to revoke is untouched.
+		expect((await app.request('/api/auth/me', { headers: { cookie } }, env)).status).toBe(200);
+	});
+});

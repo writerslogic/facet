@@ -16,6 +16,7 @@ import { siteExists } from '../db/catalog.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
+import { revokeSessions } from '../lib/accounts.js';
 import { issueKey, listKeys, revokeKey } from '../lib/apikeys.js';
 import { requireAdmin } from '../lib/auth.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
@@ -142,6 +143,31 @@ adminRoutes.patch(
 		return c.json({ site: { id: siteId, team_id: team_id ?? null } });
 	},
 );
+
+/**
+ * End every session an operator holds. The lever the CRM audit log points at.
+ *
+ * The log names the operator whose session read the contact table; without this, the only person who
+ * could act on that was the operator themselves, which is precisely the wrong person when the
+ * question is whether their session was stolen. `/api/auth/logout-everywhere` is the self-service
+ * form of the same call.
+ *
+ * Behind `ADMIN_TOKEN` rather than a team role, and that is a deliberate limit rather than an
+ * oversight. Team admins have no user-management surface at all today — they cannot list their
+ * members, rename them, or remove them — and a route that reaches across to another person's
+ * sessions would be the first thing of its kind, arriving without any of the structure that should
+ * come with it. Ending someone's sessions is a deployment-operator action until that exists.
+ *
+ * Idempotent: revoking twice is two epochs and the same outcome. `404` distinguishes "no such user"
+ * from "done", so a typo'd id is not silently reported as a revocation that never happened.
+ */
+adminRoutes.post('/users/:id/revoke-sessions', requireAdmin, async (c) => {
+	const userId = c.req.param('id') ?? '';
+	if (!(await revokeSessions(c.env, userId))) {
+		return c.json({ error: 'not_found' }, 404);
+	}
+	return c.json({ user_id: userId, sessions_revoked: true });
+});
 
 adminRoutes.post(
 	'/keys',
