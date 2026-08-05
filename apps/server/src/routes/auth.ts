@@ -2,23 +2,26 @@
 // exchanges it for an HMAC-signed session cookie; GET /me returns the signed-in user + team roles; POST
 // /logout clears the cookie. All account auth is gated on SESSION_SECRET — absent, these return 503 and
 // the per-site API-key path (beacon, programmatic stats) is entirely unaffected.
+//
+// /logout and /logout-everywhere are not two spellings of one thing. A session token is HMAC-signed and
+// self-contained, so deleting the cookie ends the session in THAT browser and does nothing to a token
+// already copied out of it — which stays valid for the rest of its thirty days. Only the second route
+// withdraws a token that is already out, by moving the user past the epoch every one of them carries.
 
 import { vValidator } from '@hono/valibot-validator';
-import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import * as v from 'valibot';
-import { db } from '../db/queries.js';
-import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import {
 	SESSION_COOKIE,
 	consumeMagicToken,
 	createMagicToken,
+	revokeSessions,
+	sessionUser,
 	signSession,
 	upsertUserByEmail,
 	userMemberships,
-	verifySession,
 } from '../lib/accounts.js';
 import { requireAdmin } from '../lib/auth.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
@@ -74,7 +77,7 @@ authRoutes.post('/verify', vValidator('json', VerifySchema, validationErrorHook)
 		throw new ApiError('invalid_token', 401, 'the link is invalid, used, or expired');
 	}
 	const user = await upsertUserByEmail(c.env, email, now);
-	const session = await signSession(user.id, secret, now);
+	const session = await signSession(user.id, secret, now, user.sessionEpoch);
 	setCookie(c, SESSION_COOKIE, session, {
 		httpOnly: true,
 		secure: true,
@@ -88,20 +91,9 @@ authRoutes.post('/verify', vValidator('json', VerifySchema, validationErrorHook)
 // The signed-in user and their team roles, or 401.
 authRoutes.get('/me', async (c) => {
 	const secret = requireSecret(c.env);
-	const token = getCookie(c, SESSION_COOKIE);
-	const payload = token ? await verifySession(token, secret, Date.now()) : null;
-	if (!payload) {
-		throw new ApiError('unauthenticated', 401);
-	}
-	const user = await db(c.env)
-		.select({
-			id: schema.users.id,
-			email: schema.users.email,
-			name: schema.users.name,
-		})
-		.from(schema.users)
-		.where(eq(schema.users.id, payload.sub))
-		.get();
+	// `sessionUser` reads the row it verifies against, so describing the operator costs nothing beyond
+	// the check itself — this route spends the same one query it did before the epoch existed.
+	const user = await sessionUser(c.env, getCookie(c, SESSION_COOKIE), secret, Date.now());
 	if (!user) {
 		throw new ApiError('unauthenticated', 401);
 	}
@@ -109,6 +101,31 @@ authRoutes.get('/me', async (c) => {
 });
 
 authRoutes.post('/logout', (c) => {
+	deleteCookie(c, SESSION_COOKIE, { path: '/' });
+	return c.body(null, 204);
+});
+
+/**
+ * End every session this operator holds, anywhere — the one thing `/logout` cannot do.
+ *
+ * `/logout` deletes a cookie in the browser that asked. It does nothing to a token already copied out
+ * of that browser, which stays valid for the rest of its thirty days; for a session someone suspects
+ * has been stolen, clearing the cookie is not a remedy at all. This moves the user's epoch past the
+ * one every outstanding token carries, so all of them stop resolving at once — including the one
+ * making this request, whose cookie is cleared too so the browser is not left holding a dead session
+ * it believes in.
+ *
+ * Deliberately all-or-nothing. Facet keeps no session table, so there is no list of devices to revoke
+ * from and no per-device granularity to offer; the honest control is the one that ends everything,
+ * which is also the one someone reaching for it actually wants.
+ */
+authRoutes.post('/logout-everywhere', async (c) => {
+	const secret = requireSecret(c.env);
+	const user = await sessionUser(c.env, getCookie(c, SESSION_COOKIE), secret, Date.now());
+	if (!user) {
+		throw new ApiError('unauthenticated', 401);
+	}
+	await revokeSessions(c.env, user.id);
 	deleteCookie(c, SESSION_COOKIE, { path: '/' });
 	return c.body(null, 204);
 });

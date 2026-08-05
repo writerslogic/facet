@@ -65,7 +65,10 @@ async function operator(
 		.run();
 	await e.DB.prepare('UPDATE sites SET team_id = ? WHERE id = ?').bind(teamId, SITE).run();
 	const secret = e.SESSION_SECRET as string;
-	return { id: user.id, cookie: `${SESSION_COOKIE}=${await signSession(user.id, secret, now)}` };
+	return {
+		id: user.id,
+		cookie: `${SESSION_COOKIE}=${await signSession(user.id, secret, now, user.sessionEpoch)}`,
+	};
 }
 
 function crm(e: TestEnv, path: string, init: RequestInit = {}, cookie?: string) {
@@ -510,20 +513,26 @@ describe('GET /api/crm/audit', () => {
 	});
 
 	it('keeps the entry when the account behind it is gone, with no email to give it', async () => {
-		const { id: userId, cookie } = await operator(env, 'admin@example.com', 'admin');
-		await crm(env, '/contacts', {}, cookie);
-		// A closed account cannot be given a name back, and inventing one would be worse than the
-		// blank. The id stays either way, so the entry still says *someone specific* did this.
-		await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
-		// The session outlives the row, which is what makes this reachable at all: sessions are
-		// stateless and verify against the secret, not against a user lookup.
-		const res = await crm(env, '/audit', {}, cookie);
+		// A colleague who has since left. Their entry stays — the log records what operators did, and
+		// a closed account cannot be given a name back. Inventing one would be worse than the blank,
+		// and the id stays either way, so the entry still says *someone specific* did this.
+		const departed = await upsertUserByEmail(env, 'departed@example.com', Date.now());
+		const { cookie } = await operator(env, 'admin@example.com', 'admin');
+		await (env.CRM_DB as D1Database)
+			.prepare(
+				'INSERT INTO crm_audit_log (id, site_id, actor_user_id, actor_role, action, target_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+			)
+			.bind('gone', SITE, departed.id, 'analyst', 'contact.export', 'c1', Date.now())
+			.run();
+		await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(departed.id).run();
+
+		const res = await crm(env, '/audit?action=contact.export', {}, cookie);
 		const body = (await res.json()) as {
 			entries: (AuditRow & { actor_email: string | null })[];
 		};
-		expect(body.entries.length).toBeGreaterThan(0);
-		expect(body.entries.every((e) => e.actor_user_id === userId)).toBe(true);
-		expect(body.entries.every((e) => e.actor_email === null)).toBe(true);
+		expect(body.entries).toHaveLength(1);
+		expect(body.entries[0]?.actor_user_id).toBe(departed.id);
+		expect(body.entries[0]?.actor_email).toBeNull();
 	});
 
 	it('resolves a full page of distinct actors', async () => {

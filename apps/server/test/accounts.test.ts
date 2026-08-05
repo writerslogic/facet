@@ -9,6 +9,7 @@ import {
 	consumeMagicToken,
 	createMagicToken,
 	isRole,
+	revokeSessions,
 	roleAtLeast,
 	signSession,
 	upsertUserByEmail,
@@ -20,11 +21,11 @@ const SECRET = 'unit-secret';
 
 describe('session tokens', () => {
 	it('round-trips a valid session', async () => {
-		const t = await signSession('user-1', SECRET, 1_000_000);
+		const t = await signSession('user-1', SECRET, 1_000_000, 0);
 		expect((await verifySession(t, SECRET, 1_001_000))?.sub).toBe('user-1');
 	});
 	it('rejects tampering, a wrong secret, and expiry', async () => {
-		const t = await signSession('user-1', SECRET, 0);
+		const t = await signSession('user-1', SECRET, 0, 0);
 		expect(await verifySession(`${t}x`, SECRET, 1)).toBeNull();
 		expect(await verifySession(t, 'wrong', 1)).toBeNull();
 		expect(await verifySession(t, SECRET, 40 * 24 * 60 * 60 * 1000)).toBeNull();
@@ -167,18 +168,134 @@ describe('requireSiteAccess (session RBAC on /api/stats)', () => {
 		)
 			.bind(siteId, 'S', 's.test', now, teamId)
 			.run();
-		const memberCookie = `${SESSION_COOKIE}=${await signSession(member.id, secret, now)}`;
+		const memberCookie = `${SESSION_COOKIE}=${await signSession(member.id, secret, now, member.sessionEpoch)}`;
 		const ok = await app.request(`/api/stats${q}`, { headers: { cookie: memberCookie } }, env);
 		expect(ok.status).toBe(200);
 
 		// A user with no membership on this site's team is blocked.
 		const outsider = await upsertUserByEmail(env, 'outsider@example.com', now);
-		const outsiderCookie = `${SESSION_COOKIE}=${await signSession(outsider.id, secret, now)}`;
+		const outsiderCookie = `${SESSION_COOKIE}=${await signSession(outsider.id, secret, now, outsider.sessionEpoch)}`;
 		const blocked = await app.request(
 			`/api/stats${q}`,
 			{ headers: { cookie: outsiderCookie } },
 			env,
 		);
 		expect(blocked.status).toBe(401);
+	});
+});
+
+// Session revocation. A session token is HMAC-signed and self-contained, so nothing about the token
+// itself can be withdrawn once it is out — /logout clears a cookie in one browser and leaves a copied
+// token valid for the rest of its thirty days. The epoch is what makes it withdrawable, and these are
+// the four properties that have to hold for it to mean anything.
+describe('revoking sessions', () => {
+	const app = createApp();
+	const secret = env.SESSION_SECRET as string;
+
+	/** A live session cookie for a fresh operator. */
+	async function signedIn(email: string): Promise<{ id: string; cookie: string }> {
+		const now = Date.now();
+		const user = await upsertUserByEmail(env, email, now);
+		return {
+			id: user.id,
+			cookie: `${SESSION_COOKIE}=${await signSession(user.id, secret, now, user.sessionEpoch)}`,
+		};
+	}
+
+	const me = (cookie: string) => app.request('/api/auth/me', { headers: { cookie } }, env);
+
+	it('ends every outstanding session at once, not just the one that asked', async () => {
+		const user = await signedIn('two-devices@example.com');
+		// A second token for the same person: the other browser, or the copy someone took.
+		const other = `${SESSION_COOKIE}=${await signSession(user.id, secret, Date.now(), 0)}`;
+		expect((await me(user.cookie)).status).toBe(200);
+		expect((await me(other)).status).toBe(200);
+
+		const res = await app.request(
+			'/api/auth/logout-everywhere',
+			{ method: 'POST', headers: { cookie: user.cookie } },
+			env,
+		);
+		expect(res.status).toBe(204);
+		// The point of the whole design: the token this request never saw is dead too.
+		expect((await me(other)).status).toBe(401);
+		expect((await me(user.cookie)).status).toBe(401);
+		// And the browser that asked is not left holding a session it believes in.
+		expect(res.headers.get('set-cookie')).toContain(`${SESSION_COOKIE}=;`);
+	});
+
+	it('leaves everyone else signed in', async () => {
+		// Revocation is per user. A shared epoch would make one person's stolen laptop everybody's
+		// forced sign-in.
+		const alice = await signedIn('alice@example.com');
+		const bob = await signedIn('bob@example.com');
+		await app.request(
+			'/api/auth/logout-everywhere',
+			{ method: 'POST', headers: { cookie: alice.cookie } },
+			env,
+		);
+		expect((await me(alice.cookie)).status).toBe(401);
+		expect((await me(bob.cookie)).status).toBe(200);
+	});
+
+	it('signs the next session in at the new epoch, so revocation is not permanent', async () => {
+		const user = await signedIn('again@example.com');
+		await revokeSessions(env, user.id);
+		expect((await me(user.cookie)).status).toBe(401);
+
+		// Signing back in must work. An epoch read at mint time that went stale would lock the account
+		// out of itself — revocation has to end the old sessions, not the ability to have one.
+		const token = await createMagicToken(env, 'again@example.com', Date.now());
+		const verified = await app.request(
+			'/api/auth/verify',
+			{
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token }),
+			},
+			env,
+		);
+		expect(verified.status).toBe(200);
+		const fresh = (verified.headers.get('set-cookie') ?? '').split(';')[0] ?? '';
+		expect((await me(fresh)).status).toBe(200);
+		// The old one stays dead: signing in again does not resurrect what was revoked.
+		expect((await me(user.cookie)).status).toBe(401);
+	});
+
+	it('refuses a token that carries no epoch at all', async () => {
+		// What a session minted before revocation existed looks like. It cannot be compared against a
+		// revocation, and an unverifiable revocation state has to read as revoked.
+		const body = btoa(JSON.stringify({ sub: 'anyone', exp: Date.now() + 60_000 }))
+			.replace(/\+/g, '-')
+			.replace(/\//g, '_')
+			.replace(/=+$/, '');
+		const key = await crypto.subtle.importKey(
+			'raw',
+			new TextEncoder().encode(secret),
+			{ name: 'HMAC', hash: 'SHA-256' },
+			false,
+			['sign'],
+		);
+		const sig = new Uint8Array(
+			await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(body)),
+		);
+		const legacy = `${body}.${btoa(String.fromCharCode(...sig))
+			.replace(/\+/g, '-')
+			.replace(/\//g, '_')
+			.replace(/=+$/, '')}`;
+		// Genuinely signed by this deployment — it fails on the missing claim, not on the signature.
+		expect(await verifySession(legacy, secret, Date.now())).toBeNull();
+	});
+
+	it('ends the sessions of a user whose account is deleted', async () => {
+		const user = await signedIn('deleted@example.com');
+		expect((await me(user.cookie)).status).toBe(200);
+		await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id).run();
+		// There is no epoch to compare against, and an account that does not exist holds no sessions.
+		expect((await me(user.cookie)).status).toBe(401);
+	});
+
+	it('reports nothing to revoke for an unknown user', async () => {
+		expect(await revokeSessions(env, 'no-such-user')).toBe(false);
 	});
 });

@@ -2,7 +2,7 @@
 // tokens, and team roles. This is entirely separate from the cookieless VISITOR model — these are the
 // humans who log in to view analytics. No password is ever stored; only a SHA-256 of a one-time token.
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -34,6 +34,15 @@ export interface SessionPayload {
 	sub: string;
 	/** Expiry, unix ms. */
 	exp: number;
+	/**
+	 * The user's `session_epoch` at the moment this token was signed. A session is live only while it
+	 * still matches the column, which is what makes an issued token withdrawable at all.
+	 *
+	 * REQUIRED, and a token without it is rejected rather than read as epoch 0. A token minted before
+	 * this existed cannot be checked against a revocation, and "we cannot tell whether this was
+	 * revoked" has to mean revoked. The price is that every operator signs in once after the deploy.
+	 */
+	epoch: number;
 }
 
 const TOKEN_TTL_MS = 15 * 60 * 1000; // magic-link validity
@@ -61,9 +70,15 @@ function hmacKey(secret: string): Promise<CryptoKey> {
 	);
 }
 
-/** Sign a session token (`<payload>.<hmac>`, both base64url). Pure — secret is passed in. */
-export async function signSession(sub: string, secret: string, now: number): Promise<string> {
-	const payload: SessionPayload = { sub, exp: now + SESSION_TTL_MS };
+/** Sign a session token (`<payload>.<hmac>`, both base64url). Pure — secret and epoch are passed in,
+ * so the one caller that mints a session is the one that has just read the user. */
+export async function signSession(
+	sub: string,
+	secret: string,
+	now: number,
+	epoch: number,
+): Promise<string> {
+	const payload: SessionPayload = { sub, exp: now + SESSION_TTL_MS, epoch };
 	const body = b64url(new TextEncoder().encode(JSON.stringify(payload)));
 	const sig = new Uint8Array(
 		await crypto.subtle.sign('HMAC', await hmacKey(secret), new TextEncoder().encode(body)),
@@ -71,7 +86,15 @@ export async function signSession(sub: string, secret: string, now: number): Pro
 	return `${body}.${b64url(sig)}`;
 }
 
-/** Verify a session token's signature + expiry, returning its claims or null. */
+/**
+ * Verify a session token's signature + expiry, returning its claims or null.
+ *
+ * Pure, and NEVER sufficient on its own: it proves the token was issued by this deployment and has
+ * not expired, not that the session is still live. Only `sessionUser` can answer that, because only a
+ * read of `session_epoch` can. Split for the same reason `verifyConsentRecord` is split from
+ * `findActiveConsent` — the cryptographic check is testable in isolation, and keeping it separate
+ * makes it obvious that something else has to follow it.
+ */
 export async function verifySession(
 	token: string,
 	secret: string,
@@ -98,6 +121,9 @@ export async function verifySession(
 		if (
 			typeof payload.sub !== 'string' ||
 			typeof payload.exp !== 'number' ||
+			// A token carrying no epoch cannot be compared against a revocation, and an unverifiable
+			// revocation state must read as revoked. This is what signs everyone out once on deploy.
+			typeof payload.epoch !== 'number' ||
 			payload.exp < now
 		) {
 			return null;
@@ -149,15 +175,83 @@ export async function consumeMagicToken(
 	return row.email;
 }
 
+/** An authenticated operator, as every session-resolving path receives them. Carries the columns
+ * `/api/auth/me` needs, so resolving a session and describing the user are one read rather than two. */
+export interface SessionUser {
+	id: string;
+	email: string;
+	name: string | null;
+}
+
+/**
+ * THE ONLY WAY TO RESOLVE A SESSION. Verifies the token cryptographically, then confirms the session
+ * has not been revoked by comparing its epoch against the user's current one.
+ *
+ * Both halves live here rather than at the call sites because a signature check that is not followed
+ * by the epoch check silently restores the old behaviour — an unrevocable 30-day token — and does so
+ * at whichever route forgot, which is exactly the failure nobody notices. `verifySession` alone
+ * cannot authorize anything; this returns the user or null, and there is no third option.
+ *
+ * A missing user row is null too: an account that no longer exists has no live sessions, whatever its
+ * tokens still say.
+ *
+ * COST. One read, and it returns the row rather than just the id, so `/api/auth/me` spends no more
+ * queries than before. On the RBAC path `siteRole` is now a single joined statement instead of two,
+ * so the epoch check is paid for out of a round trip that was already there.
+ */
+export async function sessionUser(
+	env: Env,
+	token: string | undefined,
+	secret: string,
+	now: number,
+): Promise<SessionUser | null> {
+	if (!token) return null;
+	const payload = await verifySession(token, secret, now);
+	if (!payload) return null;
+	const row = await db(env)
+		.select({
+			id: schema.users.id,
+			email: schema.users.email,
+			name: schema.users.name,
+			sessionEpoch: schema.users.sessionEpoch,
+		})
+		.from(schema.users)
+		.where(eq(schema.users.id, payload.sub))
+		.get();
+	if (!row || row.sessionEpoch !== payload.epoch) return null;
+	return { id: row.id, email: row.email, name: row.name };
+}
+
+/**
+ * End every session this user currently holds, by moving the epoch past the one their tokens carry.
+ * Returns false when there is no such user.
+ *
+ * The increment is done in SQL rather than read-then-write: two revocations racing must both land,
+ * and a read-modify-write would let the second overwrite the first with the same value — which reads
+ * as success while leaving the sessions the second one was called to kill still alive.
+ */
+export async function revokeSessions(env: Env, userId: string): Promise<boolean> {
+	const rows = await db(env)
+		.update(schema.users)
+		.set({ sessionEpoch: sql`${schema.users.sessionEpoch} + 1` })
+		.where(eq(schema.users.id, userId))
+		.returning({ id: schema.users.id });
+	return rows.length > 0;
+}
+
 /** Find or create a user by email. A brand-new user gets a personal team + an `owner` membership. */
 export async function upsertUserByEmail(
 	env: Env,
 	email: string,
 	now: number,
-): Promise<{ id: string; email: string }> {
+): Promise<{ id: string; email: string; sessionEpoch: number }> {
 	const e = email.toLowerCase();
 	const existing = await db(env)
-		.select({ id: schema.users.id, email: schema.users.email })
+		.select({
+			id: schema.users.id,
+			email: schema.users.email,
+			sessionEpoch: schema.users.sessionEpoch,
+		})
 		.from(schema.users)
 		.where(eq(schema.users.email, e))
 		.get();
@@ -179,7 +273,8 @@ export async function upsertUserByEmail(
 	await db(env)
 		.insert(schema.memberships)
 		.values({ teamId, userId, role: 'owner', createdAt: now });
-	return { id: userId, email: e };
+	// A brand-new row starts at the column default, and the token minted from this must agree.
+	return { id: userId, email: e, sessionEpoch: 0 };
 }
 
 /**
@@ -228,21 +323,22 @@ export async function userMemberships(
 		.map((r) => ({ teamId: r.teamId, role: r.role as Role }));
 }
 
-/** The role a user holds on the team that owns `siteId`, or null if the site is unowned or the user is
- * not a member. Used to gate dashboard (session) access to a site's analytics. */
+/**
+ * The role a user holds on the team that owns `siteId`, or null if the site is unowned or the user is
+ * not a member. Used to gate dashboard (session) access to a site's analytics.
+ *
+ * ONE statement, joining the membership to the site that points at its team. It was two sequential
+ * reads — the site, then the membership — which is two round trips to answer a question SQLite
+ * answers in one, on the path every session-authenticated request takes. The inner join is also what
+ * expresses "unowned site grants nobody anything": a NULL `team_id` matches no membership row, so
+ * that case needs no separate branch to get right.
+ */
 export async function siteRole(env: Env, userId: string, siteId: string): Promise<Role | null> {
-	const site = await db(env)
-		.select({ teamId: schema.sites.teamId })
-		.from(schema.sites)
-		.where(eq(schema.sites.id, siteId))
-		.get();
-	if (!site?.teamId) return null;
 	const m = await db(env)
 		.select({ role: schema.memberships.role })
 		.from(schema.memberships)
-		.where(
-			and(eq(schema.memberships.teamId, site.teamId), eq(schema.memberships.userId, userId)),
-		)
+		.innerJoin(schema.sites, eq(schema.sites.teamId, schema.memberships.teamId))
+		.where(and(eq(schema.sites.id, siteId), eq(schema.memberships.userId, userId)))
 		.get();
 	return m && isRole(m.role) ? m.role : null;
 }
