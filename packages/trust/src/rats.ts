@@ -46,6 +46,34 @@ export const EAT_PROCESS_PROFILE = 'urn:ietf:params:rats:eat:profile:process-evi
 /** Statement type for a Facet process-evidence EAT. */
 export const PROCESS_EVIDENCE_TYPE = 'rats-process-evidence/1' as const;
 
+/**
+ * Inclusive byte bounds on `eat_nonce`, from RFC 9711 §4.1: "In JSON, an EAT nonce is a text string
+ * between 8 and 88 bytes in length", pinned by the CDDL as `.size (8..88)`. BYTES of UTF-8, not JS
+ * string length — those differ for any non-ASCII nonce, and the RFC counts the former.
+ *
+ * The RFC also requires at least 64 bits of entropy. That is a rule the VERIFIER must satisfy when it
+ * mints a challenge and one an issuer cannot check — a 64-bit-entropy nonce and a run of zeros are the
+ * same 8 bytes on the wire. So length is enforced here and entropy is deliberately not claimed.
+ */
+export const EAT_NONCE_MIN_BYTES = 8 as const;
+export const EAT_NONCE_MAX_BYTES = 88 as const;
+
+/**
+ * Why `nonce` is not a conformant `eat_nonce`, or null when it is. Returned rather than thrown so the
+ * caller at a request boundary can turn it into its own error shape without a try/catch.
+ *
+ * The empty string is rejected by the same bound that rejects any other short nonce, which matters:
+ * `signProcessEvidence` omits a falsy nonce from the claim set entirely, so `''` would otherwise have
+ * produced an EAT silently missing the freshness claim the caller believed it had asked for.
+ */
+export function eatNonceError(nonce: string): string | null {
+	const bytes = utf8(nonce).length;
+	if (bytes < EAT_NONCE_MIN_BYTES || bytes > EAT_NONCE_MAX_BYTES) {
+		return `eat_nonce must be between ${EAT_NONCE_MIN_BYTES} and ${EAT_NONCE_MAX_BYTES} bytes (RFC 9711), got ${bytes}`;
+	}
+	return null;
+}
+
 /** The attested deployment state (never anything about a visitor). */
 export interface ProcessEvidence {
 	buildId: string;
@@ -110,6 +138,15 @@ export async function signProcessEvidence(
 	key: SigningKey,
 	opts: IssueEvidenceOptions,
 ): Promise<SignedStatement<EatClaims>> {
+	// Refuse to put a signature on a non-conformant artifact. A verifier applying the RFC 9711 CDDL
+	// rejects an out-of-range `eat_nonce` outright, so emitting one produces an EAT that is signed,
+	// served, and unusable — a failure that surfaces only in somebody else's verifier. Enforced here
+	// rather than only at the request boundary so it holds for every caller: the CLI, the PoP
+	// challenge-response path, and any future issuer.
+	if (opts.nonce !== undefined) {
+		const bad = eatNonceError(opts.nonce);
+		if (bad) throw new TypeError(bad);
+	}
 	const digest = await canonicalDigestHex(evidence);
 	const subjectJwk = opts.subjectPublicJwk ?? key.publicJwk;
 	// Derive `hardware` from a VERIFIED key-attestation bound to the subject key. Anything short of a
@@ -118,7 +155,10 @@ export async function signProcessEvidence(
 	const claims: EatClaims = {
 		eat_profile: EAT_PROCESS_PROFILE,
 		iat: Math.floor(opts.now / 1000),
-		...(opts.nonce ? { eat_nonce: opts.nonce } : {}),
+		// `!== undefined`, not truthiness: a supplied nonce is always claimed. Every falsy one is now
+		// rejected above, so the two agree — but only the explicit test says a nonce can never be
+		// accepted and then silently dropped from the claim set it was asked to appear in.
+		...(opts.nonce !== undefined ? { eat_nonce: opts.nonce } : {}),
 		cnf: { jwk: subjectJwk },
 		'key-attributes': {
 			hardware: hw.hardware,

@@ -54,8 +54,12 @@ and returns `404` until you set one.
    enabled privacy transforms. Its `content-ref` binds the EAT to the digest of that evidence, and its
    `cnf` claim binds it to the subject key.
 4. **Prove freshness (challenge–response).** Pass `?nonce=<random>`; the returned EAT echoes it as
-   `eat_nonce`. For full proof-of-possession the issuer also returns a separate PoP signature over the
-   nonce made with the `cnf` subject key — a holder without the private key cannot produce it. See
+   `eat_nonce`. RFC 9711 §4.1 sizes a JSON nonce at **8–88 bytes** and requires at least 64 bits of
+   entropy: the issuer enforces the length and rejects anything else rather than signing an EAT a
+   conformant verifier would refuse, but the entropy is yours to supply — 8 bytes of zeros is the same
+   size on the wire as 8 good ones. For full proof-of-possession the issuer also returns a separate
+   PoP signature over the nonce made with the `cnf` subject key — a holder without the private key
+   cannot produce it. See
    `answerPopChallenge` / `verifyPopChallenge` in `@facet/trust`.
 
 The CLI runs the same verifiers in Node: `facet verify` checks a signed export/credential offline.

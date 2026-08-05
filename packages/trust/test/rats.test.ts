@@ -4,12 +4,18 @@
 import { describe, expect, it } from 'vitest';
 import { generateSigningJwk, loadSigningKey } from '../src/keys.js';
 import {
+	EAT_NONCE_MAX_BYTES,
+	EAT_NONCE_MIN_BYTES,
 	type ProcessEvidence,
 	answerPopChallenge,
+	eatNonceError,
 	signProcessEvidence,
 	verifyPopChallenge,
 	verifyProcessEvidence,
 } from '../src/rats.js';
+
+/** A conformant verifier nonce (RFC 9711 sizes a JSON `eat_nonce` at 8..88 bytes). */
+const FRESH_NONCE = 'nonce-0123456789abcdef';
 
 const EVIDENCE: ProcessEvidence = {
 	buildId: 'ci-99',
@@ -60,10 +66,43 @@ describe('RATS process-evidence', () => {
 		const key = await edKey();
 		const eat = await signProcessEvidence(EVIDENCE, key, {
 			now: 1_770_000_000_000,
-			nonce: 'n-123',
+			nonce: FRESH_NONCE,
 		});
-		expect((await verifyProcessEvidence(eat, { nonce: 'n-123' })).valid).toBe(true);
-		expect((await verifyProcessEvidence(eat, { nonce: 'wrong' })).valid).toBe(false);
+		expect((await verifyProcessEvidence(eat, { nonce: FRESH_NONCE })).valid).toBe(true);
+		expect((await verifyProcessEvidence(eat, { nonce: 'wrong-but-long-enough' })).valid).toBe(
+			false,
+		);
+	});
+
+	it('refuses to sign an eat_nonce outside the RFC 9711 size bounds', async () => {
+		// The bound is a property of the ARTIFACT, so it is enforced where the signature is applied and
+		// not only at the HTTP boundary — a signed EAT a conformant verifier rejects is worse than a
+		// refusal, because it fails in somebody else's stack with the deployment's name on it.
+		const key = await edKey();
+		const sign = (nonce: string) =>
+			signProcessEvidence(EVIDENCE, key, { now: 1_770_000_000_000, nonce });
+
+		await expect(sign('a'.repeat(EAT_NONCE_MIN_BYTES - 1))).rejects.toThrow(/RFC 9711/);
+		await expect(sign('a'.repeat(EAT_NONCE_MAX_BYTES + 1))).rejects.toThrow(/RFC 9711/);
+		// The empty string is the case the old truthiness check swallowed: accepted, then dropped from
+		// the claim set, yielding an EAT with no freshness claim that looked like it had one.
+		await expect(sign('')).rejects.toThrow(/RFC 9711/);
+
+		for (const ok of ['a'.repeat(EAT_NONCE_MIN_BYTES), 'a'.repeat(EAT_NONCE_MAX_BYTES)]) {
+			expect((await sign(ok)).payload.eat_nonce).toBe(ok);
+		}
+	});
+
+	it('measures the nonce in UTF-8 bytes, not JS string length', async () => {
+		// RFC 9711 sizes the JSON nonce in BYTES. '☃' is one JS char and three bytes, so a 30-character
+		// nonce is 90 bytes and out of range — a length check on `.length` would have signed it.
+		const key = await edKey();
+		const snowmen = '☃'.repeat(30);
+		expect(snowmen.length).toBeLessThan(EAT_NONCE_MAX_BYTES);
+		expect(eatNonceError(snowmen)).toMatch(/got 90/);
+		await expect(
+			signProcessEvidence(EVIDENCE, key, { now: 1_770_000_000_000, nonce: snowmen }),
+		).rejects.toThrow(/RFC 9711/);
 	});
 
 	it('fails key binding when the cnf key is swapped', async () => {
