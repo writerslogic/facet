@@ -27,7 +27,8 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   (`POST`/`GET /api/alerts`, `DELETE /api/alerts/:id`), and `POST /api/auth/admin-link` —
   **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
 - `POST /api/auth/request`, `POST /api/auth/verify` — **public** (dashboard sign-in);
-  `GET /api/auth/me`, `POST /api/auth/logout` — **session cookie**. All `503 auth_unavailable`
+  `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/logout-everywhere` — **session
+  cookie**. All `503 auth_unavailable`
   unless `SESSION_SECRET` is bound.
 - `/api/crm/*` — **session cookie + team role**, and deliberately *not* an API key. This is the only
   authenticated surface that refuses `clk_` keys: they authorize aggregate analytics and are meant to
@@ -1231,6 +1232,22 @@ curl -X DELETE "https://your-deployment.example.com/api/keys/22222222-2222-4222-
 { "deleted": true }
 ```
 
+### `POST /api/users/:id/revoke-sessions` (admin token)
+
+Ends every session the named operator holds — the same mechanism as `/api/auth/logout-everywhere`,
+applied to someone else. Returns `{ "user_id": "...", "sessions_revoked": true }`, or `404` when
+there is no such user, so a mistyped id is never reported as a revocation that did not happen.
+Idempotent: revoking twice is two epochs and the same outcome.
+
+This is **the lever the CRM audit log points at.** The log names the operator whose session read the
+contact table; without this route the only person who could act on that was that operator, which is
+precisely the wrong person when the question is whether their session was stolen.
+
+It sits behind `ADMIN_TOKEN` rather than a team role, and that is a deliberate limit. Team admins
+have no user-management surface at all today — they cannot list their members, rename them, or remove
+them — so a route reaching across to another person's sessions would be the first of its kind,
+arriving without any of the structure that should come with it.
+
 ---
 
 ## Admin: alert destinations
@@ -1309,7 +1326,25 @@ Returns `{ "user": …, "memberships": [...] }` for the signed-in user, or `401 
 
 ### `POST /api/auth/logout` (session cookie)
 
-Clears the session cookie. Returns `204`.
+Clears the session cookie. Returns `204`. **This ends the session in that browser only.** A session
+token is HMAC-signed and self-contained, so a token already copied out of the browser keeps working
+until it expires — deleting the cookie does nothing to it.
+
+### `POST /api/auth/logout-everywhere` (session cookie)
+
+Ends **every** session this operator holds, anywhere, and clears the cookie of the browser that
+asked. Returns `204`, or `401 unauthenticated`. This is the remedy for a session you believe was
+stolen; `/logout` is not.
+
+It works by moving the user's `session_epoch` past the one every outstanding token carries. Each
+token records the epoch it was signed at and resolves only while the two still match, so one
+increment ends all of them at once. Deliberately all-or-nothing: Facet keeps no session table, so
+there is no device list to revoke from, and the honest control is the one that ends everything.
+
+Signing back in afterwards works normally — revocation ends the sessions, not the ability to have
+one. Two consequences worth knowing: a token minted before this existed carries no epoch and is
+rejected rather than assumed valid, so every operator signs in once after upgrading; and deleting a
+user row also ends their sessions, since an account that does not exist holds none.
 
 ---
 
