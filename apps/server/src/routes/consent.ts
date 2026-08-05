@@ -22,8 +22,8 @@ import { validationErrorHook } from '../lib/http.js';
 import {
 	deriveVisitorHash,
 	getScopedSalt,
-	saltScope,
 	resolvePolicy,
+	saltScope,
 	windowEndMs,
 	windowKey,
 } from '../lib/identity.js';
