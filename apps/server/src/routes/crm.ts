@@ -54,6 +54,7 @@ import {
 	companyContactLinkage,
 	deleteCompany,
 	deleteContact,
+	foreignKeyViolation,
 	getCompany,
 	getContact,
 	insertCompany,
@@ -108,6 +109,36 @@ async function assertOwnerExists(env: Env, ownerUserId: string | undefined): Pro
 	}
 }
 
+/**
+ * Map a failed contact write onto the status it deserves, or rethrow.
+ *
+ * The unique indexes on `(site_id, email)` and `(site_id, external_user_id)` are the dedupe, and
+ * naming the field that collided is safe: the caller holds a role on this site and submitted the
+ * value themselves. A foreign-key failure means the company was deleted between this request
+ * resolving it and writing the row — the caller lost a race, which is a 400 about their `company_id`
+ * and not a 500 about the server.
+ */
+function contactWriteError(err: unknown): never {
+	const conflict = uniqueConstraintText(err);
+	if (conflict) {
+		throw new ApiError(
+			'contact_exists',
+			409,
+			/external_user_id/i.test(conflict)
+				? 'a contact with this external_user_id already exists'
+				: 'a contact with this email already exists',
+		);
+	}
+	if (foreignKeyViolation(err)) {
+		throw new ApiError(
+			'unknown_company',
+			400,
+			'company_id does not match a company on this site',
+		);
+	}
+	throw err;
+}
+
 /** A contact's currently-authorized visitor hashes, or [] when nothing authorizes a link. */
 function linkedHashes(
 	env: Env,
@@ -152,22 +183,7 @@ crmRoutes.post(
 			c.get('siteId'),
 			body,
 			Date.now(),
-		).catch((err: unknown) => {
-			// The (site_id, email) / (site_id, external_user_id) unique indexes are the dedupe. A
-			// collision is a client mistake, not a server fault, and saying which field collided is
-			// safe: the caller already holds a role on this site and submitted the value itself.
-			const conflict = uniqueConstraintText(err);
-			if (conflict) {
-				throw new ApiError(
-					'contact_exists',
-					409,
-					/external_user_id/i.test(conflict)
-						? 'a contact with this external_user_id already exists'
-						: 'a contact with this email already exists',
-				);
-			}
-			throw err;
-		});
+		).catch(contactWriteError);
 		return c.json({ contact }, 201);
 	},
 );
@@ -190,16 +206,7 @@ crmRoutes.patch(
 			c.req.param('id') ?? '',
 			body,
 			Date.now(),
-		).catch((err: unknown) => {
-			if (uniqueConstraintText(err)) {
-				throw new ApiError(
-					'contact_exists',
-					409,
-					'another contact already holds that value',
-				);
-			}
-			throw err;
-		});
+		).catch(contactWriteError);
 		if (!contact) {
 			throw new ApiError('not_found', 404);
 		}
@@ -220,16 +227,24 @@ crmRoutes.patch(
  */
 crmRoutes.delete('/contacts/:id', requireTeamRole('admin'), async (c) => {
 	const siteId = c.get('siteId');
-	const contact = await deleteContact(requireCrmDb(c.env), siteId, c.req.param('id'));
-	if (!contact) {
-		throw new ApiError('not_found', 404);
-	}
+	const contact = await loadContact(c.env, siteId, c.req.param('id') ?? '');
+	// The two writes land in DIFFERENT databases and D1 has no transaction spanning them, so one of
+	// them can be left undone. The order decides which. Erasing the consent records FIRST means a
+	// failure leaves the contact row still present and still naming the uid — an erasure that can
+	// simply be retried. Deleting the contact first would mean a failure destroys the only record of
+	// which uid to erase, stranding rows that hold that person's raw identifier: exactly the data the
+	// request was about, now unreachable by any retry.
 	const consentErased = contact.external_user_id
 		? await eraseConsentByExternalUserId(c.env, {
 				siteId,
 				externalUserId: contact.external_user_id,
 			})
 		: 0;
+	const deleted = await deleteContact(requireCrmDb(c.env), siteId, contact.id);
+	if (!deleted) {
+		// Lost a race with a concurrent delete, which already erased the same consent rows.
+		throw new ApiError('not_found', 404);
+	}
 	return c.json({ deleted: true, consent_records_erased: consentErased });
 });
 
@@ -461,7 +476,16 @@ crmRoutes.get('/companies/:id/analytics', requireTeamRole('analyst'), async (c) 
 	if (hashes.length === 0) {
 		// Same honesty as the contact route: zeroes would read as "this account did nothing", which is
 		// a different claim from "nobody here has authorized a link".
-		return c.json({ ...counts, linked: false, reason: 'no_linked_contacts' });
+		//
+		// And when the fan-out was capped, even THAT is more than can be claimed. The contacts
+		// resolved are the newest `contacts_limit`; older ones outside the window may well be linked,
+		// so the honest reason names what was actually examined rather than asserting a fact about
+		// contacts nobody looked at.
+		return c.json({
+			...counts,
+			linked: false,
+			reason: linkage.truncated ? 'none_linked_within_cap' : 'no_linked_contacts',
+		});
 	}
 	return c.json({
 		...counts,

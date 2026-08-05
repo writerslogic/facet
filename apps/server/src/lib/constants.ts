@@ -47,3 +47,24 @@ export const EXPORT_MAX_ROWS = 1000 as const;
 
 /** Trailing window for the realtime "active visitors" metric, in milliseconds (5 minutes). */
 export const REALTIME_WINDOW_MS = 300_000 as const;
+
+/**
+ * How many values one `IN (...)` list may carry.
+ *
+ * D1 rejects any statement with more than 100 bound parameters ("too many SQL variables"), and every
+ * such query spends some of that budget on its other predicates — a site id, a timestamp, a limit. So
+ * the list gets a margin rather than the whole allowance, and anything longer is chunked across
+ * statements. This is not a tuning knob: exceed it and the query does not run slowly, it fails.
+ */
+export const D1_MAX_IN_PARAMS = 90 as const;
+
+/** Split `values` into runs of at most `size`, for queries whose `IN (...)` list would otherwise
+ * exceed D1's bound-parameter limit. An empty input yields no chunks, so a caller can iterate the
+ * result without a special case for "nothing to look up". */
+export function chunked<T>(values: readonly T[], size: number = D1_MAX_IN_PARAMS): T[][] {
+	const out: T[][] = [];
+	for (let i = 0; i < values.length; i += size) {
+		out.push(values.slice(i, i + size));
+	}
+	return out;
+}
