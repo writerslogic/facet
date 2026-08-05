@@ -15,6 +15,7 @@ import {
 	type SignedExport,
 	type SignedStatement,
 	type VerifiableCredential,
+	didWebToUrl,
 	verifyCredential,
 	verifyDidConfiguration,
 	verifyProcessEvidence,
@@ -114,7 +115,17 @@ async function verifyDidConfigurationCmd(
 	const didDoc = await readJson(flags['did-doc']);
 	if (config === null || didDoc === null) return 1;
 	const doc = didDoc as DidDocument;
-	const origin = flags.origin ?? new URL(doc.id.replace(/^did:web:/, 'https://')).origin;
+	// Derive the expected origin through the trust package's own resolver rather than by string
+	// surgery on the DID. `did:web:host%3A8443` is a PORT, and stripping the prefix hands `%3A` to the
+	// URL parser as part of the hostname — a legitimate ported deployment then failed its own linkage
+	// check. It also runs the DID through didWebToUrl's host validation before it reaches a URL.
+	let origin: string;
+	try {
+		origin = flags.origin ?? new URL(didWebToUrl(doc.id)).origin;
+	} catch (e) {
+		printError(`✗ invalid DID document id: ${e instanceof Error ? e.message : 'bad did:web'}`);
+		return 1;
+	}
 	const result = await verifyDidConfiguration(config as DidConfiguration, doc, origin);
 	if (result.valid) {
 		ok(`valid domain linkage (did=${result.did}, origin=${result.origin})`);

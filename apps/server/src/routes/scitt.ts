@@ -35,6 +35,7 @@ scittRoutes.post('/attestation', requireAdmin, async (c) => {
 	const key = r.key;
 	const now = Date.now();
 	const did = deploymentDid(new URL(c.req.url));
+	if (!did) return c.json({ error: 'did_unavailable' }, 501);
 	const created = new Date(now).toISOString();
 	const vc = await issueCredential(
 		buildPrivacyAttestationCredential({

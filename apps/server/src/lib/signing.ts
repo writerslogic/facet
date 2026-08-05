@@ -3,7 +3,7 @@
 // deploy keeps working and the existing tests stay green. The loaded key is cached by its JWK string
 // so we import it through Web Crypto once per isolate rather than on every request.
 
-import { type SigningKey, didWebFromHost, loadSigningKey } from '@facet/trust';
+import { type SigningKey, didWebFromHost, didWebHostError, loadSigningKey } from '@facet/trust';
 import type { Env } from '../env.js';
 
 const cache = new Map<string, Promise<SigningKey>>();
@@ -21,9 +21,17 @@ export function getSigningKey(env: Env): Promise<SigningKey> | null {
 }
 
 /** The deployment DID (`did:web:<host>`) derived from a request URL — the single place this mapping
- * is defined, so a future public-origin override changes here only. */
-export function deploymentDid(url: URL): string {
-	return didWebFromHost(url.host);
+ * is defined, so a future public-origin override changes here only.
+ *
+ * Null when the request host cannot BE a did:web (an IP literal, or a character outside the DID Core
+ * idchar set): a deployment reached that way has no deployment DID, and there is nothing honest to put
+ * in the `issuer` of a credential it signs. Null rather than a throw because the two kinds of caller
+ * want opposite things and `string | null` makes the compiler ask each one which it is — an issuing
+ * route must refuse to sign, while the never-throw consent verifiers want the same answer they give
+ * for any other mismatch: no statement this deployment could have issued matches, so nothing is
+ * authorized. */
+export function deploymentDid(url: URL): string | null {
+	return didWebHostError(url.host) ? null : didWebFromHost(url.host);
 }
 
 /** Why an Ed25519 key was unavailable. */

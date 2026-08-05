@@ -47,6 +47,11 @@ consentRoutes.post(
 		if (!loading) {
 			return c.json({ error: 'identity_signing_unconfigured' }, 501);
 		}
+		// A consent record is only ever honoured at ingest against the deployment DID that issued it,
+		// so a host with no did:web has no `iss` to sign and could never satisfy its own ingest check.
+		// Refused before any salt is fetched or hash derived, since none of that could be used.
+		const iss = deploymentDid(new URL(c.req.url));
+		if (!iss) return c.json({ error: 'did_unavailable' }, 501);
 		const siteId = c.get('siteId'); // from the API key, NEVER the body
 		const body = c.req.valid('json');
 		const policy = await resolvePolicy(c.env, siteId);
@@ -72,7 +77,7 @@ consentRoutes.post(
 		const vh = await deriveVisitorHash(policy.tier, { ip, ua, uid }, salt, siteId);
 		const key = await loading;
 		const claims: ConsentClaims = {
-			iss: deploymentDid(new URL(c.req.url)),
+			iss,
 			site_id: siteId,
 			visitor_hash: vh,
 			tier: policy.tier,

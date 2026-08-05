@@ -38,9 +38,9 @@ function patchIdentity(e: typeof env, body: unknown, id = SITE) {
 	);
 }
 
-function postConsent(e: typeof env, key: string, body: unknown, gpc = false) {
+function postConsent(e: typeof env, key: string, body: unknown, gpc = false, origin = '') {
 	return app.request(
-		'/api/consent',
+		`${origin}/api/consent`,
 		{
 			method: 'POST',
 			headers: {
@@ -83,6 +83,21 @@ describe('POST /api/consent', () => {
 		});
 		const res = await postConsent(env, key, GRANT); // plain env: no signing key
 		expect(res.status).toBe(501);
+	});
+
+	// `iss` is the deployment DID built from the request host. A host that cannot be a did:web could
+	// never satisfy the ingest-side check on that same claim, so the grant is refused at the door
+	// rather than stored as a record that can only ever fail to elevate anyone.
+	it('501s did_unavailable when the host cannot be a did:web', async () => {
+		await patchIdentity(signingEnv, {
+			tier: 'pseudonymous',
+			salt_window: 'week',
+		});
+		const key = (await issueKey(signingEnv, SITE, null, Date.now())).key;
+		const res = await postConsent(signingEnv, key, GRANT, false, 'https://192.0.2.10');
+		expect(res.status).toBe(501);
+		expect(await res.json()).toEqual({ error: 'did_unavailable' });
+		expect(await consentCount(signingEnv)).toBe(0);
 	});
 
 	it('refuses to mint a record for a GPC visitor (202, nothing written)', async () => {

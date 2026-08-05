@@ -22,19 +22,66 @@ export const DID_CONFIGURATION_CONTEXT =
 /** Controlled Identifiers / Multikey context, used by the DID document. */
 export const MULTIKEY_CONTEXT = 'https://w3id.org/security/multikey/v1' as const;
 
-/** Build the deployment DID (`did:web:<host>`); a port in the host is percent-encoded per the spec. */
+/** WHATWG URL's "ends in a number" checker — whether a URL parser would read this hostname as an IPv4
+ * address. The last label decides it, so `1.2.3.4`, the bare `12345` and the hex `0x7f000001` are all
+ * IPv4 to a browser even though only the first looks like one. */
+function endsInANumber(hostname: string): boolean {
+	const parts = hostname.split('.');
+	if (parts.length > 1 && parts[parts.length - 1] === '') parts.pop();
+	const last = parts[parts.length - 1] ?? '';
+	if (last !== '' && /^\d+$/.test(last)) return true;
+	return /^0[xX][0-9a-fA-F]*$/.test(last);
+}
+
+/**
+ * Why `host` cannot be a did:web method-specific identifier, or null when it can. The single
+ * definition of that constraint, applied in BOTH directions: `didWebFromHost` will not mint a DID a
+ * host cannot express, and `didWebToUrl` will not resolve one.
+ *
+ * Two normative rules, from the two specs this module already implements:
+ *   - DID Core §3.1 ABNF — `idchar = ALPHA / DIGIT / "." / "-" / "_" / pct-encoded`. A host carrying
+ *     anything else is not expressible as a DID at all. `_` is excluded on top of the ABNF because
+ *     did:web additionally requires the identifier to "match the common name used in the SSL/TLS
+ *     certificate", and no public CA issues for a label containing an underscore.
+ *   - did:web — "The method specific identifier MUST match the common name used in the SSL/TLS
+ *     certificate, and it MUST NOT include IP addresses." A dotted quad is therefore refused even
+ *     though the ABNF would happily accept its digits and dots, and an IPv6 literal is refused twice
+ *     over: `[` and `]` are not idchars either.
+ *
+ * `host` is the `host:port` form both directions see — the emitter percent-encodes the `:` after this
+ * check, and `didWebToUrl` decodes it back before it.
+ */
+export function didWebHostError(host: string): string | null {
+	if (!/^[a-zA-Z0-9.-]+(:\d+)?$/.test(host)) {
+		return 'did:web host must be a DNS name with an optional port (DID Core idchar)';
+	}
+	if (endsInANumber(host.split(':')[0] as string)) {
+		return 'did:web must not include IP addresses';
+	}
+	return null;
+}
+
+/** Build the deployment DID (`did:web:<host>`); a port in the host is percent-encoded per the spec.
+ * Throws when the host is not expressible as a did:web ({@link didWebHostError}): every artifact this
+ * DID goes into is signed, and a DID no verifier can resolve is worse than no DID — it is a signature
+ * on a claim about an identity that does not exist. Refused at the mint, so it holds for every caller. */
 export function didWebFromHost(host: string): string {
+	const bad = didWebHostError(host);
+	if (bad) throw new TypeError(bad);
 	return `did:web:${host.replace(/:/g, '%3A')}`;
 }
 
 /** Resolve a did:web identifier to its DID-document URL (`.../.well-known/did.json` or `.../did.json`).
  * Only `:`→`%3A` (the port separator) is decoded in the host, and path segments may not contain a
- * slash or be `.`/`..`, so a crafted DID cannot inject path traversal or host confusion into the URL. */
+ * slash or be `.`/`..`, so a crafted DID cannot inject path traversal or host confusion into the URL.
+ * The host must also pass {@link didWebHostError}, which is what stops a DID naming an IP literal from
+ * pointing this resolver's fetch at an arbitrary address. */
 export function didWebToUrl(did: string): string {
 	if (!did.startsWith('did:web:')) throw new Error('not a did:web identifier');
 	const parts = did.slice('did:web:'.length).split(':');
 	const host = (parts[0] as string).replace(/%3A/gi, ':');
-	if (!/^[a-zA-Z0-9.-]+(:\d+)?$/.test(host)) throw new Error('invalid did:web host');
+	const badHost = didWebHostError(host);
+	if (badHost) throw new Error(`invalid did:web host: ${badHost}`);
 	if (parts.length === 1) return `https://${host}/.well-known/did.json`;
 	const segments = parts.slice(1).map(decodeURIComponent);
 	if (segments.some((s) => s === '' || s === '.' || s === '..' || s.includes('/'))) {

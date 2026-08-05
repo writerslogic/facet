@@ -135,12 +135,16 @@ export async function findActiveConsent(
 	} catch {
 		return null;
 	}
+	// No did:web for this host ⇒ no `iss` any statement could have been issued under ⇒ nothing to
+	// match, which is the same fail-closed answer this function gives to every other mismatch.
+	const iss = deploymentDid(url);
+	if (!iss) return null;
 	const ctx: ConsentContext = {
 		siteId: lookup.siteId,
 		visitorHash: lookup.visitorHash,
 		tier: lookup.tier,
 		windowKey: lookup.windowKey,
-		iss: deploymentDid(url),
+		iss,
 		kid: key.kid,
 	};
 	return (await verifyConsentRecord(stmt, ctx)) ? stmt : null;
@@ -292,7 +296,10 @@ export async function findLinkedVisitorHashesForMany(
 	const loading = getSigningKey(env);
 	if (!loading) return byUid;
 	const key = await loading;
+	// Same fail-closed reading as `findActiveConsent`: no did:web for this host means no statement can
+	// be pinned to this deployment, and an empty map is already this function's answer for that.
 	const iss = deploymentDid(url);
+	if (!iss) return byUid;
 	const seen = new Map<string, Set<string>>();
 	// Rows routinely share a salt window, so the salt is fetched once per window rather than per row.
 	const saltCache = new Map<string, string | null>();

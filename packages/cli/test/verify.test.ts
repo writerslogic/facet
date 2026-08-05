@@ -125,6 +125,41 @@ describe('facet verify export', () => {
 		expect(stdout).toContain('valid domain linkage');
 	});
 
+	// The expected origin is derived from the DID document's own id. Deriving it by stripping the
+	// `did:web:` prefix left the port's `%3A` in the hostname, so `https://facet.example%3a8443`
+	// never equalled the credential's `https://facet.example:8443` and a ported deployment failed
+	// its own linkage check. `didWebToUrl` is the decoder that already knew about the port.
+	it('verifies a did-configuration for a deployment on a non-default port', async () => {
+		const { privateJwk, publicJwk } = await generateSigningJwk('EdDSA');
+		const key = await loadSigningKey(JSON.stringify(privateJwk));
+		const did = didWebFromHost('facet.example:8443');
+		expect(did).toBe('did:web:facet.example%3A8443');
+		const didDoc = buildDidDocument(did, key.kid, publicJwk);
+		const cred = await issueDomainLinkageCredential({
+			did,
+			origin: 'https://facet.example:8443',
+			key,
+			created: '2026-07-01T00:00:00.000Z',
+		});
+		const cfgFile = await tmpFile('config.json', buildDidConfiguration([cred]));
+		const docFile = await tmpFile('did.json', didDoc);
+		expect(await main(['verify', 'did-configuration', cfgFile, '--did-doc', docFile])).toBe(0);
+		expect(stdout).toContain('valid domain linkage');
+	});
+
+	it('rejects a DID document whose id is not a resolvable did:web', async () => {
+		const { privateJwk, publicJwk } = await generateSigningJwk('EdDSA');
+		const key = await loadSigningKey(JSON.stringify(privateJwk));
+		const didDoc = buildDidDocument('did:web:facet.example', key.kid, publicJwk);
+		// did:web forbids an IP address; without the check this fed `https://192.0.2.10` straight to
+		// the origin comparison, i.e. an attacker-chosen literal address out of an untrusted document.
+		didDoc.id = 'did:web:192.0.2.10';
+		const cfgFile = await tmpFile('config.json', buildDidConfiguration([]));
+		const docFile = await tmpFile('did.json', didDoc);
+		expect(await main(['verify', 'did-configuration', cfgFile, '--did-doc', docFile])).toBe(1);
+		expect(stderr).toContain('invalid DID document id');
+	});
+
 	it('verifies a RATS process-evidence attestation', async () => {
 		const { privateJwk } = await generateSigningJwk('EdDSA');
 		const key = await loadSigningKey(JSON.stringify(privateJwk));

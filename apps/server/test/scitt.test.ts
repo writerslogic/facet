@@ -52,6 +52,18 @@ describe('POST /api/scitt/attestation', () => {
 		expect(body.external).toBeNull();
 	});
 
+	// The wrapped credential's `issuer` is the deployment DID, built from the request host, and the
+	// whole thing is then registered in an append-only log. An unresolvable issuer would be permanent.
+	it('501s did_unavailable when the host cannot be a did:web', async () => {
+		const res = await createApp().request(
+			'https://192.0.2.10/api/scitt/attestation',
+			{ method: 'POST', headers: { Authorization: ADMIN } },
+			signingEnv,
+		);
+		expect(res.status).toBe(501);
+		expect(await res.json()).toEqual({ error: 'did_unavailable' });
+	});
+
 	it('assigns increasing entry ids across registrations', async () => {
 		const first = (await (
 			await createApp().request(

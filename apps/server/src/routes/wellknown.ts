@@ -54,7 +54,9 @@ wellKnownRoutes.get('/jwks.json', async (c) => {
 
 // did:web DID document. The deployment DID is `did:web:<host>`; its verification method is the JWKS
 // Ed25519 key as a Multikey. Requires an Ed25519 signing key (Data Integrity is Ed25519-only); 404
-// when signing is unconfigured or the key is ECDSA.
+// when signing is unconfigured or the key is ECDSA — and equally when the request host cannot BE a
+// did:web (an IP literal, or a character the DID ABNF has no room for), because then there genuinely
+// is no DID document at this address to serve.
 wellKnownRoutes.get('/did.json', async (c) => {
 	const r = await loadEd25519Key(c.env);
 	if ('error' in r) {
@@ -70,6 +72,7 @@ wellKnownRoutes.get('/did.json', async (c) => {
 	}
 	const key = r.key;
 	const did = deploymentDid(new URL(c.req.url));
+	if (!did) return c.json({ error: 'did_unavailable' }, 404);
 	return c.json(buildDidDocument(did, key.kid, key.publicJwk), 200, {
 		'content-type': 'application/did+json',
 		'cache-control': 'public, max-age=3600',
@@ -94,6 +97,7 @@ wellKnownRoutes.get('/did-configuration.json', async (c) => {
 	const key = r.key;
 	const url = new URL(c.req.url);
 	const did = deploymentDid(url);
+	if (!did) return c.json({ error: 'did_unavailable' }, 404);
 	const credential = await issueDomainLinkageCredential({
 		did,
 		origin: url.origin,

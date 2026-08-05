@@ -21,7 +21,10 @@ import { deploymentDid } from '../src/lib/signing.js';
 
 const SITE = '66666666-6666-4666-8666-666666666666';
 const url = new URL('https://facet.example/api/consent');
+// null for a host that cannot be a did:web. These fixtures need the real issuer, so a test host that
+// stopped qualifying should fail loudly here rather than quietly sign claims with a missing `iss`.
 const ISS = deploymentDid(url);
+if (ISS === null) throw new Error('test host must be expressible as a did:web');
 const VH = 'a'.repeat(64);
 
 const claims = (over: Partial<ConsentClaims> = {}): ConsentClaims => ({
