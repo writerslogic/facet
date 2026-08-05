@@ -118,8 +118,14 @@ export const ContactListQuerySchema = v.object({
 	...pageBounds,
 });
 
-/** Longest legal DNS name. The domain is a dedupe key, so its shape is enforced rather than trusted. */
+/** Longest legal DNS name — the bound on the STORED value. The domain is a dedupe key, so its shape
+ * is enforced rather than trusted. */
 export const COMPANY_DOMAIN_MAX_LEN = 253;
+
+/** The bound on what may be SUBMITTED, which is deliberately looser: an operator pastes a URL, and
+ * `https://acme.com/<a long path>?utm=...` normalises to a short host but arrives long. Rejecting it
+ * on raw length would fail the input this field exists to accept. */
+const COMPANY_DOMAIN_INPUT_MAX_LEN = 2048;
 
 const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
 
@@ -144,7 +150,7 @@ export function normalizeCompanyDomain(raw: string | null | undefined): string |
 
 const companyFields = {
 	name: optionalText(200),
-	domain: optionalText(COMPANY_DOMAIN_MAX_LEN),
+	domain: optionalText(COMPANY_DOMAIN_INPUT_MAX_LEN),
 	status: v.optional(CompanyStatusSchema),
 	notes: optionalText(CONTACT_NOTES_MAX_LEN),
 	/** Same cross-database validation as a contact's owner: checked against `users` in the Worker. */

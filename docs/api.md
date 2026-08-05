@@ -1319,7 +1319,9 @@ The CRM is **off unless you bind it**. It lives in a second D1 database (`CRM_DB
 there is no database, no table, and every route below returns `501 crm_unavailable` — before
 authentication, so an unbound deployment answers uniformly. See `apps/server/wrangler.jsonc` for how
 to turn it on, and note that doing so changes the DPV claims this deployment signs at
-`/.well-known/facet-privacy.json` (it gains `dpv:Store`, `dpv:Erase` and `dpv:Consent`).
+`/.well-known/facet-privacy.json` (it gains `dpv:Store`, `dpv:Erase`, `dpv:Consent`, and the
+`pd:` categories it holds — including `pd:CurrentEmployment`, because a contact linked to a company
+record carries a structured employer that a free-text box did not).
 
 **Auth is a session cookie, never an API key.** This is the one authenticated surface that refuses
 `Authorization: Bearer <clk_...>`. A `clk_` key authorizes aggregate analytics and is meant to be
@@ -1328,7 +1330,7 @@ that. Every route takes `?site_id=<uuid>`, and the caller must hold a role on th
 (assign one with `PATCH /api/sites/:id/team`). `503 auth_unavailable` without `SESSION_SECRET`;
 `401 unauthorized` without a session; `403 forbidden` when the role is insufficient.
 
-| Role | Contacts |
+| Role | Contacts and companies |
 | --- | --- |
 | `viewer` | no access at all |
 | `analyst` | list, read, create, update, view the analytics link |
@@ -1337,17 +1339,28 @@ that. Every route takes `?site_id=<uuid>`, and the caller must hold a role on th
 ### `GET /api/crm/contacts?site_id&status&q&limit&offset` (session, analyst)
 
 Lists contacts, newest first. `status` ∈ `lead \| active \| archived`; `q` is a bounded substring
-match over name/email/company (LIKE metacharacters are escaped, so `q=%` matches a literal `%`).
-`limit` defaults to 25, max 100. Returns `{ contacts: [...], total }`.
+match over name/email/company (LIKE metacharacters are escaped, so `q=%` matches a literal `%`). The
+company it matches on is the **resolved** one, so searching a company name finds the contacts linked
+to it as well as those carrying it as free text. `limit` defaults to 25, max 100. Returns
+`{ contacts: [...], total }`.
 
 ### `POST /api/crm/contacts?site_id` (session, analyst)
 
-Body: `{ external_user_id?, email?, name?, phone?, company?, title?, status?, source?, notes?,
-owner_user_id? }`. `site_id` comes from the query parameter, **never** the body. Requires at least
-one of `email`, `external_user_id` or `name` — a row with none can never be matched or erased on
-request. Email is lowercased; `(site_id, email)` and `(site_id, external_user_id)` are unique, so a
-duplicate returns `409 contact_exists`. An `owner_user_id` that matches no user returns
+Body: `{ external_user_id?, email?, name?, phone?, company?, company_id?, title?, status?, source?,
+notes?, owner_user_id? }`. `site_id` comes from the query parameter, **never** the body. Requires at
+least one of `email`, `external_user_id` or `name` — a row with none can never be matched or erased
+on request. Email is lowercased; `(site_id, email)` and `(site_id, external_user_id)` are unique, so
+a duplicate returns `409 contact_exists`. An `owner_user_id` that matches no user returns
 `400 unknown_owner`. Returns `201`.
+
+`company` and `company_id` are the same fact recorded two ways — free text, or a link to a
+`companies` row — and **exactly one of them answers at a time**. Sending both as non-empty is
+`400 company_conflict`; a `company_id` that is not a company on this site is `400 unknown_company`
+(the foreign key would accept another site's, so the site check is what rejects it). A non-empty
+write to either clears the other. Reads return `company` resolved to the linked company's **current**
+name, falling back to the free text when nothing is linked, so renaming a company changes every
+linked contact with no backfill. `company_id` is returned alongside it, so a link is still
+distinguishable from a label.
 
 ### `GET`/`PATCH /api/crm/contacts/:id?site_id` (session, analyst)
 
@@ -1385,6 +1398,78 @@ events, events_truncated, events_limit } }`. The `consent` entries include each 
 verbatim — they are PII-free by construction, so they add cryptographic evidence of what was
 consented to without widening what the export discloses. `events` is capped at `events_limit` (1000)
 and `events_truncated` says so explicitly rather than silently returning a prefix.
+
+### `GET`/`POST /api/crm/companies?site_id` (session, analyst)
+
+A company is an organization, not a data subject — a name, a domain and a note about a legal person
+are nobody's personal data. Body: `{ name, domain?, status?, notes?, owner_user_id? }`. `name` is
+required. `domain` is normalised before it is stored — lowercased, with the scheme, path, port and
+any trailing dot removed, so `https://Acme.com/about` and `acme.com` are one company; `www.` is
+deliberately **not** stripped, since deciding that `www.acme.com` is the same organization as
+`acme.com` is a guess. A domain that is not a hostname is `400`. `(site_id, name)` and
+`(site_id, domain)` are unique, so a duplicate returns `409 company_exists`.
+
+Name uniqueness is an **exact** match: names are displayed as typed, so they are not case-folded for
+the index. Use `domain` if you want a case-insensitive identity key.
+
+`GET` takes `status`, `q` (substring over name/domain), `limit`, `offset` and returns
+`{ companies: [...], total }`.
+
+### `GET`/`PATCH /api/crm/companies/:id?site_id` (session, analyst)
+
+`PATCH` is partial. A `name` that is present must be non-blank (`companies.name` is NOT NULL and is
+the display value); omitting it leaves it alone.
+
+### `DELETE /api/crm/companies/:id?site_id` (session, admin)
+
+**Deletes the company, not the people in it.** Deleting an organization is not an erasure request
+about anybody, so its contacts survive: each one's `company_id` is cleared and the company's name is
+written back into their free-text `company`, in a single D1 batch. "Where does this person work"
+therefore answers the same before and after — only the structured link is gone. Returns
+`{ "deleted": true, "contacts_unlinked": <n> }`.
+
+### `GET /api/crm/companies/:id/contacts?site_id&limit&offset` (session, analyst)
+
+That company's contacts, newest first, in the same resolved shape the contact list returns.
+
+### `GET /api/crm/companies/:id/analytics?site_id` (session, analyst)
+
+The company rollup: the **sum of its contacts' individually consent-gated links**, never a query over
+"the company". Every visitor hash comes from the same verified-statement gate the per-contact route
+uses, applied per contact, so a contact with no active signed consent contributes nothing — the
+aggregate is exactly the union of the per-contact results the same caller can already fetch one at a
+time, and is strictly less revealing than the calls it replaces.
+
+There is deliberately **no k-anonymity floor**, unlike the analytics breakdowns. `K_ANON` protects
+visitors the operator has no other route to; these are contacts the same caller can already retrieve
+individually and by name, so a floor would suppress a two-contact company's rollup while both of
+their pages stayed readable — hiding a legitimate answer while protecting nobody.
+
+What does need saying is the denominator, so it is in the response:
+
+```json
+{
+  "contacts_total": 12,       // contacts at this company, including those that can never link
+  "contacts_linked": 3,       // of those considered, how many consent currently authorizes
+  "contacts_considered": 12,  // how many were resolved (bounded by contacts_limit)
+  "contacts_truncated": false,
+  "contacts_limit": 100,
+  "linked": true,
+  "visitor_hashes": 4,
+  "activity": { "pageviews": 0, "events": 0, "total": 0, "first_seen": null, "last_seen": null, "top_paths": [] }
+}
+```
+
+`contacts_total` beside `contacts_linked` is what stops "142 pageviews" for a twelve-person account
+reading as the account's traffic when it is one person's. `contacts_truncated` is never silent: a
+capped fan-out is a lower bound, not a total. `visitor_hashes` is contacts multiplied by their live
+salt windows — a linkage-breadth number, **not** a headcount; `contacts_linked` is the headcount.
+When nothing is linked the response is `{ ..., "linked": false, "reason": "no_linked_contacts" }`
+rather than zeroes that would read as "this account did nothing".
+
+There is **no company export**. A data-subject export is per person by definition; a company-wide one
+would be a bulk PII dump with no data-protection meaning. Use `/companies/:id/contacts` and then the
+per-contact export, which accounts for each person separately.
 
 ---
 
