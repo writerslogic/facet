@@ -144,6 +144,26 @@ export async function resolvePolicy(env: Env, siteId: string): Promise<IdentityP
  * `getDailySalt` to any window, storing `window_end` so retention can purge on window close. Only
  * ever called on the elevated branch AFTER consent is confirmed, so a downgraded event never creates
  * a salt row. */
+/** The `identity_salts` key for one site's window. Declared once because the consent grant, the
+ * revoke, and the CRM's linkage check must all name the same string; three copies of a template
+ * literal is three chances for one of them to drift and silently stop resolving. */
+export function saltScope(siteId: string, window: SaltWindow, key: string): string {
+	return `${siteId}:${window}:${key}`;
+}
+
+/**
+ * Look up an existing scoped salt WITHOUT creating one. `getScopedSalt` mints a salt when none
+ * exists, which is right at ingest and wrong on any read path: a verification that conjured the salt
+ * it was about to check against would both resurrect an identifier retention had destroyed and
+ * compute a hash that matches nothing. Absent means absent.
+ */
+export async function readScopedSalt(env: Env, scope: string): Promise<string | null> {
+	const row = await env.DB.prepare('SELECT salt FROM identity_salts WHERE scope = ?')
+		.bind(scope)
+		.first<{ salt: string }>();
+	return row?.salt ?? null;
+}
+
 export async function getScopedSalt(
 	env: Env,
 	scope: string,
