@@ -93,6 +93,9 @@ export const ContactUpdateSchema = v.pipe(
  * thing enforcing it, so the server imports these rather than repeating the numbers next to a second
  * copy that can drift. */
 export const CRM_MAX_PAGE = 100;
+
+/** How deep a CRM list may be paged. */
+export const CRM_MAX_OFFSET = 100_000;
 export const CRM_DEFAULT_PAGE = 25;
 
 const pageBounds = {
@@ -106,8 +109,17 @@ const pageBounds = {
 			v.maxValue(CRM_MAX_PAGE),
 		),
 	),
+	/** Bounded at both ends. SQLite walks every skipped row, so an unbounded `offset` is a full
+	 * table scan and the natural shape of a page-by-page bulk read of the whole contact list. */
 	offset: v.optional(
-		v.pipe(v.string(), v.transform(Number), v.number(), v.integer(), v.minValue(0)),
+		v.pipe(
+			v.string(),
+			v.transform(Number),
+			v.number(),
+			v.integer(),
+			v.minValue(0),
+			v.maxValue(CRM_MAX_OFFSET),
+		),
 	),
 };
 

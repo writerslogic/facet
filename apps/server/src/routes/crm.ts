@@ -41,6 +41,7 @@ import {
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import {
 	COMPANY_ROLLUP_MAX_CONTACTS,
 	CONTACT_EXPORT_MAX_EVENTS,
@@ -77,11 +78,40 @@ import {
 	findLinkedVisitorHashes,
 	findLinkedVisitorHashesForMany,
 } from '../lib/consent.js';
+import { CRM_MAX_BODY_BYTES } from '../lib/constants.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
+import { rateLimit } from '../lib/ratelimit.js';
 
 export const crmRoutes = new Hono<AppEnv>();
 
 crmRoutes.use('*', requireCrm);
+
+// The global body limit is path-scoped to /api/collect, so it never reached here — leaving the one
+// route group that stores personal data as the only one accepting an unbounded upload.
+crmRoutes.use(
+	'*',
+	bodyLimit({
+		maxSize: CRM_MAX_BODY_BYTES,
+		onError: () => {
+			throw new ApiError('payload_too_large', 413);
+		},
+	}),
+);
+
+/**
+ * Rate limit, keyed by the OPERATOR rather than the site.
+ *
+ * Everything else in this codebase keys its bucket per site, because the risk it manages is one
+ * tenant's traffic drowning another's. The risk here is different: these are the only routes that
+ * return names, emails and phone numbers, and the threat is a single stolen session pulling the whole
+ * table a page at a time. Keying per site would let a compromised operator hide inside their team's
+ * legitimate traffic and would punish their colleagues for it; keying per operator caps the session
+ * that is actually doing it.
+ *
+ * Applied AFTER the role guard at every call site, matching /api/event: an unauthenticated request is
+ * rejected before it can consume anyone's bucket, and `userId` is only set once a session resolves.
+ */
+const crmRateLimit = rateLimit((c) => `crm:${c.get('userId') ?? 'unauthenticated'}`);
 
 /** Resolve a contact or raise the canonical 404. Scoped by the authorized site, so a contact id from
  * another site is indistinguishable from one that does not exist. */
@@ -157,6 +187,7 @@ function linkedHashes(
 crmRoutes.get(
 	'/contacts',
 	requireTeamRole('analyst'),
+	crmRateLimit,
 	vValidator('query', ContactListQuerySchema, validationErrorHook),
 	async (c) => {
 		const query = c.req.valid('query');
@@ -173,6 +204,7 @@ crmRoutes.get(
 crmRoutes.post(
 	'/contacts',
 	requireTeamRole('analyst'),
+	crmRateLimit,
 	vValidator('json', ContactCreateSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
@@ -188,7 +220,7 @@ crmRoutes.post(
 	},
 );
 
-crmRoutes.get('/contacts/:id', requireTeamRole('analyst'), async (c) => {
+crmRoutes.get('/contacts/:id', requireTeamRole('analyst'), crmRateLimit, async (c) => {
 	const contact = await loadContact(c.env, c.get('siteId'), c.req.param('id'));
 	return c.json({ contact });
 });
@@ -196,6 +228,7 @@ crmRoutes.get('/contacts/:id', requireTeamRole('analyst'), async (c) => {
 crmRoutes.patch(
 	'/contacts/:id',
 	requireTeamRole('analyst'),
+	crmRateLimit,
 	vValidator('json', ContactUpdateSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
@@ -225,7 +258,7 @@ crmRoutes.patch(
  * keyed by a salted hash, and with the consent record gone nothing can ever re-associate them with a
  * person; destroying the link is what erasure of the identifiable data means here.
  */
-crmRoutes.delete('/contacts/:id', requireTeamRole('admin'), async (c) => {
+crmRoutes.delete('/contacts/:id', requireTeamRole('admin'), crmRateLimit, async (c) => {
 	const siteId = c.get('siteId');
 	const contact = await loadContact(c.env, siteId, c.req.param('id') ?? '');
 	// The two writes land in DIFFERENT databases and D1 has no transaction spanning them, so one of
@@ -251,7 +284,7 @@ crmRoutes.delete('/contacts/:id', requireTeamRole('admin'), async (c) => {
 /** A contact's analytics, if and only if an active signed consent record authorizes the link. When
  * it does not, the response says so explicitly rather than returning zeroes that read like "this
  * person did nothing" — `linked: false` and a reason are the honest answer. */
-crmRoutes.get('/contacts/:id/analytics', requireTeamRole('analyst'), async (c) => {
+crmRoutes.get('/contacts/:id/analytics', requireTeamRole('analyst'), crmRateLimit, async (c) => {
 	const siteId = c.get('siteId');
 	const contact = await loadContact(c.env, siteId, c.req.param('id'));
 	if (!contact.external_user_id) {
@@ -278,7 +311,7 @@ crmRoutes.get('/contacts/:id/analytics', requireTeamRole('analyst'), async (c) =
  * (their claims are a derived hash, a tier and a window), so including them adds cryptographic
  * evidence of what was consented to without widening what the export reveals.
  */
-crmRoutes.get('/contacts/:id/export', requireTeamRole('admin'), async (c) => {
+crmRoutes.get('/contacts/:id/export', requireTeamRole('admin'), crmRateLimit, async (c) => {
 	const siteId = c.get('siteId');
 	const contact = await loadContact(c.env, siteId, c.req.param('id'));
 	const externalUserId = contact.external_user_id;
@@ -336,6 +369,7 @@ function companyConflict(err: unknown): never {
 crmRoutes.get(
 	'/companies',
 	requireTeamRole('analyst'),
+	crmRateLimit,
 	vValidator('query', CompanyListQuerySchema, validationErrorHook),
 	async (c) => {
 		const query = c.req.valid('query');
@@ -352,6 +386,7 @@ crmRoutes.get(
 crmRoutes.post(
 	'/companies',
 	requireTeamRole('analyst'),
+	crmRateLimit,
 	vValidator('json', CompanyCreateSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
@@ -367,7 +402,7 @@ crmRoutes.post(
 	},
 );
 
-crmRoutes.get('/companies/:id', requireTeamRole('analyst'), async (c) => {
+crmRoutes.get('/companies/:id', requireTeamRole('analyst'), crmRateLimit, async (c) => {
 	const company = await loadCompany(c.env, c.get('siteId'), c.req.param('id'));
 	return c.json({ company });
 });
@@ -375,6 +410,7 @@ crmRoutes.get('/companies/:id', requireTeamRole('analyst'), async (c) => {
 crmRoutes.patch(
 	'/companies/:id',
 	requireTeamRole('analyst'),
+	crmRateLimit,
 	vValidator('json', CompanyUpdateSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
@@ -402,7 +438,7 @@ crmRoutes.patch(
  * `admin` rather than `analyst` because it is irreversible and it rewrites rows the caller did not
  * name — the same reason deleting a contact is.
  */
-crmRoutes.delete('/companies/:id', requireTeamRole('admin'), async (c) => {
+crmRoutes.delete('/companies/:id', requireTeamRole('admin'), crmRateLimit, async (c) => {
 	const result = await deleteCompany(requireCrmDb(c.env), c.get('siteId'), c.req.param('id'));
 	if (!result) {
 		throw new ApiError('not_found', 404);
@@ -413,6 +449,7 @@ crmRoutes.delete('/companies/:id', requireTeamRole('admin'), async (c) => {
 crmRoutes.get(
 	'/companies/:id/contacts',
 	requireTeamRole('analyst'),
+	crmRateLimit,
 	vValidator('query', CompanyContactsQuerySchema, validationErrorHook),
 	async (c) => {
 		const siteId = c.get('siteId');
@@ -449,7 +486,7 @@ crmRoutes.get(
  * start reasoning about the eleven who never consented. So `contacts_total` and `contacts_linked` are
  * reported side by side and one-of-twelve is visible as one-of-twelve.
  */
-crmRoutes.get('/companies/:id/analytics', requireTeamRole('analyst'), async (c) => {
+crmRoutes.get('/companies/:id/analytics', requireTeamRole('analyst'), crmRateLimit, async (c) => {
 	const siteId = c.get('siteId');
 	const company = await loadCompany(c.env, siteId, c.req.param('id'));
 	const linkage = await companyContactLinkage(
