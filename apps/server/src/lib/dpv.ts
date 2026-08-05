@@ -34,8 +34,9 @@ export const DPV_PD_CONTEXT = {
  *     active signed consent record, never by legitimate interest.
  *   • Pseudonymisation stops being the sole measure. It still describes the analytics half, but
  *     directly-supplied contact details are not pseudonymised; what protects them is access control
- *     (an authenticated operator session with a team role, never an API key), so that is named
- *     alongside it rather than letting one term imply coverage it does not have.
+ *     (an authenticated operator session with a team role, never an API key) and a record of every
+ *     access made under it, so both are named alongside it rather than letting one term imply
+ *     coverage it does not have.
  */
 export function privacyDpvClaims(env: Env): Record<string, unknown> {
 	if (!env.CRM_DB) {
@@ -62,6 +63,13 @@ export function privacyDpvClaims(env: Env): Record<string, unknown> {
 		'dpv:hasTechnicalOrganisationalMeasure': [
 			'dpv:Pseudonymisation',
 			'dpv:AccessControlMethod',
+			// The CRM audit log: every authorized request against the contact store is recorded before
+			// it runs. `dpv:ActivityMonitoring` rather than `dpv:RecordsOfActivities`, which in DPV sits
+			// with ROPA and the other compliance documents — this is a live access log, not a register
+			// of processing. Claimed only on the CRM branch because it is the only data this deployment
+			// holds that a person can read one record at a time, and therefore the only data where who
+			// looked is a fact worth keeping.
+			'dpv:ActivityMonitoring',
 		],
 		'dpv:hasDataSubject': 'dpv:Customer',
 		// The categories the contact schema has columns for. Free-text fields an operator may fill
