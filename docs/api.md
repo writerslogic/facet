@@ -26,7 +26,7 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   flag CRUD (`POST`/`GET /api/flags`, `PATCH`/`DELETE /api/flags/:id`), alert destinations
   (`POST`/`GET /api/alerts`, `DELETE /api/alerts/:id`), and `POST /api/auth/admin-link` —
   **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
-- `POST /api/auth/request`, `POST /api/auth/verify` — **public** (dashboard sign-in);
+- `POST /api/auth/request`, `POST /api/auth/verify` — **public**, rate-limited (dashboard sign-in);
   `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/logout-everywhere` — **session
   cookie**. All `503 auth_unavailable`
   unless `SESSION_SECRET` is bound.
@@ -1307,12 +1307,21 @@ Passwordless sign-in for the dashboard UI, entirely separate from the per-site A
 of it is gated on `SESSION_SECRET`: without that binding every route below returns
 `503 auth_unavailable`, and the beacon plus programmatic stats endpoints are unaffected.
 
-### `POST /api/auth/request` (public)
+### `POST /api/auth/request` (public, rate-limited)
 
 Body `{ "email": string (≤ 254, valid address) }`. Mints a single-use magic-link token. Always
 returns `202` with an empty body, whether or not the address has an account — the response never
 reveals which. Delivering the link by email is a deployment concern (bind a Cloudflare Email
 sender); the token itself is created regardless.
+
+Rate-limited **per client IP**, and separately from `/verify` so that a burst of sign-in requests
+from one shared address cannot stop the people behind it redeeming links they already hold. Because
+the route cannot check whether an address has an account before writing — that check is exactly what
+would leak the answer — the limit is what bounds an anonymous caller's writes, and on a deployment
+with an email sender bound, the mail those writes would send.
+
+Tokens live 15 minutes and are deleted by the retention cron once they expire, so an address that
+requested a link and never used it leaves nothing behind.
 
 ### `POST /api/auth/admin-link` (admin)
 
@@ -1320,11 +1329,14 @@ Body `{ "email": … }`. The self-hosted bootstrap/invite path: an operator hold
 mints a magic link and gets it back directly as `{ email, token, link }`. This is what makes
 sign-in work with **no** email service configured.
 
-### `POST /api/auth/verify` (public)
+### `POST /api/auth/verify` (public, rate-limited)
 
 Body `{ "token": string (3–200) }`. Consumes the token and sets an HMAC-signed, `httpOnly`,
 `Secure`, `SameSite=Lax` session cookie (30 days). Returns `{ "user": … }`, or
 `401 invalid_token` when the link is invalid, already used, or expired.
+
+Rate-limited per client IP, in its own bucket. The token secret is 192 bits, so the limit is not
+what makes guessing infeasible; it stops each guess costing a database read.
 
 ### `GET /api/auth/me` (session cookie)
 
