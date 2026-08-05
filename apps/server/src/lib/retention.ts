@@ -1,5 +1,9 @@
-// Retention cleanup: delete raw events, sessions, salts, and identity mappings older than the rolling
-// window. `event_rollups` are durable history and are never deleted. Invoked from the cron handler.
+// Retention cleanup: delete raw events, BOTH session tables, salts, and identity mappings older than
+// the rolling window. `event_rollups` are durable history and are never deleted. Invoked from the
+// cron handler.
+//
+// "Sessions" is two tables, and saying it in the singular is what hid `event_sessions` here for as
+// long as it did — see its delete for what the difference costs.
 //
 // Spent magic-link tokens are swept here too, on their own much shorter window — see the delete for
 // why it is `now` and not the raw cutoff.
@@ -38,6 +42,17 @@ export async function enforceRetention(env: Env, now: number): Promise<void> {
 	const cutoff = now - retentionDays(env) * DAY_MS;
 	await db(env).delete(schema.events).where(lt(schema.events.createdAt, cutoff));
 	await db(env).delete(schema.sessions).where(lt(schema.sessions.firstSeen, cutoff));
+	// The OTHER session table. `sessions` is the per-day dedupe key behind the visitor count;
+	// `event_sessions` is the materialized visit the cron folds out of raw events, and it carries the
+	// visitor hash alongside entry path, exit path, duration and bounce. Purging the first and not the
+	// second left the richer of the two — a per-visitor behavioural record — retained forever, outliving
+	// by any margin the events it was derived from and the salt that could explain its hash.
+	//
+	// Keyed on `started_at`, the timestamp of the row's FIRST event, so the summary can never outlive
+	// what it summarises: present exactly while the events it was folded from are. `ended_at` would
+	// invert that — a visit straddling the cutoff would keep an aggregate counting rows that are gone.
+	// It is also the same key by the same reasoning as `sessions.first_seen` directly above.
+	await db(env).delete(schema.eventSessions).where(lt(schema.eventSessions.startedAt, cutoff));
 	await db(env).delete(schema.salts).where(lt(schema.salts.createdAt, cutoff));
 	// Windowed identity salts purge on window END, not creation: the salt outlives every event whose
 	// timestamp could fall in its window, then is destroyed — irreversibly severing the hash→input

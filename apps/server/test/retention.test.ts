@@ -95,6 +95,60 @@ describe('enforceRetention', () => {
 		expect(await count('SELECT COUNT(*) AS n FROM event_rollups')).toBe(1);
 	});
 
+	it('purges materialized visits on their FIRST event, so no summary outlives its events', async () => {
+		// `event_sessions` is the second session table and the one that carries a visitor hash next to
+		// entry path, exit path and duration. Three rows pin the key: aged out, inside the window, and
+		// the straddler that decides `started_at` vs `ended_at` — it begins before the cutoff, so the
+		// events it counted are being deleted in this same sweep and the aggregate must go with them.
+		const insert = (id: string, startedAt: number, endedAt: number) =>
+			env.DB.prepare(
+				'INSERT INTO event_sessions (id, site_id, visitor_hash, day_key, started_at, ended_at, entry_path, exit_path, pageviews, events, duration_ms, is_bounce) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+			)
+				.bind(id, S, 'v', '2026-02-01', startedAt, endedAt, '/in', '/out', 3, 1, 60_000, 0)
+				.run();
+		await insert('s-old', OLD, OLD + 60_000);
+		await insert('s-fresh', FRESH, FRESH + 60_000);
+		await insert('s-straddle', NOW - 90 * DAY - 1, NOW - 89 * DAY);
+
+		await enforceRetention(env, NOW);
+
+		expect(await count('SELECT COUNT(*) AS n FROM event_sessions WHERE id = ?', 's-old')).toBe(
+			0,
+		);
+		expect(
+			await count('SELECT COUNT(*) AS n FROM event_sessions WHERE id = ?', 's-straddle'),
+		).toBe(0);
+		expect(
+			await count('SELECT COUNT(*) AS n FROM event_sessions WHERE id = ?', 's-fresh'),
+		).toBe(1);
+	});
+
+	it('leaves no aged visitor hash behind in either session table', async () => {
+		// The privacy claim, asserted on the column rather than the row: the retention window is a
+		// promise about the hash itself, and a sweep that cleared one session table and not the other
+		// would still count as "sessions purged" by row count alone.
+		const hash = 'aged-visitor-hash';
+		await env.DB.prepare(
+			'INSERT INTO sessions (site_id, visitor_hash, day_key, first_seen) VALUES (?,?,?,?)',
+		)
+			.bind(S, hash, '2026-02-02', OLD)
+			.run();
+		await env.DB.prepare(
+			'INSERT INTO event_sessions (id, site_id, visitor_hash, day_key, started_at, ended_at, entry_path, exit_path, pageviews, events, duration_ms, is_bounce) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+		)
+			.bind('s-hash', S, hash, '2026-02-02', OLD, OLD + 1000, '/in', '/out', 1, 0, 1000, 1)
+			.run();
+
+		await enforceRetention(env, NOW);
+
+		expect(await count('SELECT COUNT(*) AS n FROM sessions WHERE visitor_hash = ?', hash)).toBe(
+			0,
+		);
+		expect(
+			await count('SELECT COUNT(*) AS n FROM event_sessions WHERE visitor_hash = ?', hash),
+		).toBe(0);
+	});
+
 	it('purges identity salts by window END (not creation) and aged consent records', async () => {
 		// A salt CREATED long ago but whose window has NOT yet closed must survive — proving the purge
 		// keys on window_end, so a live event can never reference a purged salt.
