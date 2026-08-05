@@ -264,15 +264,20 @@ export async function upsertUserByEmail(
 	}
 	const userId = randomHex(12);
 	const teamId = randomHex(12);
-	await db(env)
-		.insert(schema.users)
-		.values({ id: userId, email: e, createdAt: now, lastLogin: now });
-	await db(env)
-		.insert(schema.teams)
-		.values({ id: teamId, name: `${e}'s team`, createdAt: now });
-	await db(env)
-		.insert(schema.memberships)
-		.values({ teamId, userId, role: 'owner', createdAt: now });
+	const client = db(env);
+	// ONE batch, which for D1 is one transaction. Run as three separate statements, a failure between
+	// them leaves a user row with no team — and that state is permanent rather than merely wrong,
+	// because every later login takes the `existing` branch above and returns without ever looking for
+	// a membership. The operator then sees no teams from /api/auth/me and `siteRole` answers null for
+	// every site, while the users table looks perfectly healthy. Same reasoning, same remedy as
+	// `deleteCompany`: two writes that must both land are one statement or they are a latent bug.
+	await client.batch([
+		client
+			.insert(schema.users)
+			.values({ id: userId, email: e, createdAt: now, lastLogin: now }),
+		client.insert(schema.teams).values({ id: teamId, name: `${e}'s team`, createdAt: now }),
+		client.insert(schema.memberships).values({ teamId, userId, role: 'owner', createdAt: now }),
+	]);
 	// A brand-new row starts at the column default, and the token minted from this must agree.
 	return { id: userId, email: e, sessionEpoch: 0 };
 }
