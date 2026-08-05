@@ -8,7 +8,7 @@ import { getCookie } from 'hono/cookie';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv, Env } from '../env.js';
-import { type Role, SESSION_COOKIE, roleAtLeast, siteRole, verifySession } from './accounts.js';
+import { type Role, SESSION_COOKIE, roleAtLeast, sessionUser, siteRole } from './accounts.js';
 import { hashKey } from './apikeys.js';
 import { constantTimeEqualHex, sha256Hex } from './crypto.js';
 import { ApiError } from './http.js';
@@ -74,11 +74,10 @@ export const requireSiteAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
 		return next();
 	}
 	const secret = c.env.SESSION_SECRET;
-	const token = getCookie(c, SESSION_COOKIE);
 	const siteId = c.req.query('site_id');
-	if (secret && token && siteId) {
-		const payload = await verifySession(token, secret, Date.now());
-		if (payload && (await siteRole(c.env, payload.sub, siteId))) {
+	if (secret && siteId) {
+		const user = await sessionUser(c.env, getCookie(c, SESSION_COOKIE), secret, Date.now());
+		if (user && (await siteRole(c.env, user.id, siteId))) {
 			c.set('siteId', siteId);
 			return next();
 		}
@@ -108,21 +107,20 @@ export function requireTeamRole(need: Role): MiddlewareHandler<AppEnv> {
 		if (!secret) {
 			throw new ApiError('auth_unavailable', 503, 'account auth is not configured');
 		}
-		const token = getCookie(c, SESSION_COOKIE);
 		const siteId = c.req.query('site_id');
-		if (!token || !siteId) {
+		if (!siteId) {
 			throw new ApiError('unauthorized', 401);
 		}
-		const payload = await verifySession(token, secret, Date.now());
-		if (!payload) {
+		const user = await sessionUser(c.env, getCookie(c, SESSION_COOKIE), secret, Date.now());
+		if (!user) {
 			throw new ApiError('unauthorized', 401);
 		}
-		const role = await siteRole(c.env, payload.sub, siteId);
+		const role = await siteRole(c.env, user.id, siteId);
 		if (!role || !roleAtLeast(role, need)) {
 			throw new ApiError('forbidden', 403);
 		}
 		c.set('siteId', siteId);
-		c.set('userId', payload.sub);
+		c.set('userId', user.id);
 		c.set('role', role);
 		return next();
 	};

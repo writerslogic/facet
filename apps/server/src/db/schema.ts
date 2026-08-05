@@ -23,13 +23,26 @@ export const sites = sqliteTable('sites', {
 // ── Accounts & RBAC (Phase 4). Dashboard operators — NOT tracked visitors — so this is orthogonal to
 //    the cookieless/no-cross-session-identity visitor model. Passwordless: no password column ever. ──
 
-/** A dashboard user, identified by email. No password is stored — auth is magic-link + passkeys. */
+/**
+ * A dashboard user, identified by email. No password is stored — auth is magic-link + passkeys.
+ *
+ * `session_epoch` is what makes a session revocable. Session tokens are HMAC-signed and carry their
+ * own expiry, so nothing about the token itself can be withdrawn once it is out: logging out clears a
+ * cookie in one browser and leaves a copied token valid for the rest of its 30 days. Every token
+ * carries the epoch it was signed at, and a session resolves only while that still equals this
+ * column — so incrementing it ends every outstanding session for this person at once, without a
+ * session table and without a lookup per token beyond the one the RBAC path already performs.
+ *
+ * A counter rather than a timestamp: two revocations in the same millisecond are two revocations, and
+ * a clock that moves backwards must not resurrect a session.
+ */
 export const users = sqliteTable('users', {
 	id: text('id').primaryKey(),
 	email: text('email').notNull().unique(),
 	name: text('name'),
 	createdAt: integer('created_at').notNull(),
 	lastLogin: integer('last_login'),
+	sessionEpoch: integer('session_epoch').notNull().default(0),
 });
 
 /** A team that owns sites; members access them through a role. */

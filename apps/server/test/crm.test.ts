@@ -63,7 +63,7 @@ async function operator(e: TestEnv, email: string, role: string): Promise<string
 		.run();
 	await e.DB.prepare('UPDATE sites SET team_id = ? WHERE id = ?').bind(teamId, SITE).run();
 	const secret = e.SESSION_SECRET as string;
-	return `${SESSION_COOKIE}=${await signSession(user.id, secret, now)}`;
+	return `${SESSION_COOKIE}=${await signSession(user.id, secret, now, user.sessionEpoch)}`;
 }
 
 function crm(e: TestEnv, path: string, init: RequestInit = {}, cookie?: string) {
@@ -240,7 +240,7 @@ describe('roles', () => {
 		await operator(env, 'owner@example.com', 'owner');
 		const now = Date.now();
 		const outsider = await upsertUserByEmail(env, 'outsider@example.com', now);
-		const cookie = `${SESSION_COOKIE}=${await signSession(outsider.id, env.SESSION_SECRET as string, now)}`;
+		const cookie = `${SESSION_COOKIE}=${await signSession(outsider.id, env.SESSION_SECRET as string, now, outsider.sessionEpoch)}`;
 		expect((await crm(env, '/contacts', {}, cookie)).status).toBe(403);
 	});
 });
