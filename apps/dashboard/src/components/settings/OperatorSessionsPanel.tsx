@@ -7,8 +7,8 @@
 // WHY A FREE-TEXT ID and not a picker. There is no user directory to pick from — team admins have no
 // user-management surface at all yet, by design, and this route is behind ADMIN_TOKEN precisely
 // because it would otherwise be the first cross-user action arriving without any of that structure.
-// The access log in the CRM tab is where operator ids actually come from, and it makes each one
-// copyable for this reason.
+// The access log in the CRM tab is where operator ids actually come from: it shows each actor's id,
+// marks it selectable, and carries the full value in the button's title when the column truncates.
 
 import { LogOut } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
