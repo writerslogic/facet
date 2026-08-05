@@ -11,8 +11,11 @@ import { env } from 'cloudflare:test';
 import { generateSigningJwk } from '@facet/trust';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
-import { CONTACT_EXPORT_MAX_EVENTS } from '../src/db/contact-analytics.js';
-import { companyContactLinkage } from '../src/db/crm.js';
+import {
+	COMPANY_ROLLUP_MAX_CONTACTS,
+	CONTACT_EXPORT_MAX_EVENTS,
+} from '../src/db/contact-analytics.js';
+import { companyContactLinkage, foreignKeyViolation } from '../src/db/crm.js';
 import {
 	SESSION_COOKIE,
 	signSession,
@@ -1155,5 +1158,153 @@ describe('the company rollup sums consent, it does not bypass it', () => {
 		const uncapped = await companyContactLinkage(env.CRM_DB, SITE, company.id, 3);
 		expect(uncapped.external_user_ids.length).toBe(3);
 		expect(uncapped.truncated).toBe(false);
+	});
+});
+
+describe('the rollup fan-out stays inside D1 limits', () => {
+	it('answers for a company larger than one query can bind', async () => {
+		// D1 allows 100 bound parameters per query. The consent lookup binds site_id and `now` on top
+		// of one per contact, so a company with 99 linkable contacts asks for 101 and the statement is
+		// rejected outright — a hard 500 on exactly the large account that most wants a rollup, while
+		// every small company a test would naturally use keeps working.
+		// A signing key is required, or the consent lookup returns before it ever builds the query and
+		// the fan-out under test never happens.
+		const e = await withSigningKey(env);
+		const cookie = await operator(e, 'admin@example.com', 'admin');
+		const company = await createCompany(e, cookie, { name: 'Acme' });
+		const now = Date.now();
+		const insert = e.CRM_DB.prepare(
+			`INSERT INTO contacts (id, site_id, external_user_id, name, company_id, status, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, 'lead', ?, ?)`,
+		);
+		const n = 99;
+		await e.CRM_DB.batch(
+			Array.from({ length: n }, (_, i) =>
+				insert.bind(
+					crypto.randomUUID(),
+					SITE,
+					`uid-${i}`,
+					`Person ${i}`,
+					company.id,
+					now - i,
+					now,
+				),
+			),
+		);
+		const res = await crm(e, `/companies/${company.id}/analytics`, {}, cookie);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as { contacts_total: number; contacts_linked: number };
+		expect(body.contacts_total).toBe(n);
+		// Nobody consented, so the honest answer is zero linked — but it has to be an ANSWER.
+		expect(body.contacts_linked).toBe(0);
+	});
+});
+
+describe('a patch cannot strip a contact of every identifier', () => {
+	it('refuses to blank email, external id and name all at once', async () => {
+		// `ContactCreateSchema` rejects a row with none of the three because such a row "can never be
+		// matched, deduped, or erased on request". A PATCH one request later could reach exactly that
+		// state, and NULLs are distinct in both unique indexes so nothing downstream would object.
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const contact = await createContact(env, cookie, { name: 'Ada', email: 'ada@example.com' });
+		const res = await crm(
+			env,
+			`/contacts/${contact.id}`,
+			{
+				method: 'PATCH',
+				body: JSON.stringify({ name: '', email: '', external_user_id: '' }),
+			},
+			cookie,
+		);
+		expect(res.status).toBe(400);
+		expect(await res.json()).toMatchObject({ error: 'contact_needs_an_identifier' });
+		// And the row is untouched, not half-blanked.
+		const after = await crm(env, `/contacts/${contact.id}`, {}, cookie);
+		expect((await after.json()) as { contact: { name: string } }).toMatchObject({
+			contact: { name: 'Ada', email: 'ada@example.com' },
+		});
+	});
+
+	it('still lets one identifier be cleared while another survives', async () => {
+		// The check is against the MERGED row, not the patch: clearing the email of a contact who
+		// still has a name is ordinary editing and must not be blocked.
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const contact = await createContact(env, cookie, { name: 'Ada', email: 'ada@example.com' });
+		const res = await crm(
+			env,
+			`/contacts/${contact.id}`,
+			{ method: 'PATCH', body: JSON.stringify({ email: '' }) },
+			cookie,
+		);
+		expect(res.status).toBe(200);
+		expect((await res.json()) as { contact: { email: null } }).toMatchObject({
+			contact: { email: null, name: 'Ada' },
+		});
+	});
+});
+
+describe('the foreign key is a real constraint, not a comment', () => {
+	it('refuses a contact pointing at a company that does not exist', async () => {
+		// `resolveCompany` is the site-scoped check and this is the backstop underneath it. If D1 did
+		// not enforce the constraint, the schema's claim that a bad link "cannot" be written would be
+		// decoration, and the race between resolving a company and inserting the row would corrupt
+		// data silently instead of failing loudly.
+		let message = '';
+		try {
+			await env.CRM_DB.prepare(
+				`INSERT INTO contacts (id, site_id, name, company_id, status, created_at, updated_at)
+				 VALUES (?, ?, 'Ada', 'does-not-exist', 'lead', 1, 1)`,
+			)
+				.bind(crypto.randomUUID(), SITE)
+				.run();
+		} catch (err) {
+			message = err instanceof Error ? err.message : String(err);
+		}
+		expect(message).toMatch(/FOREIGN KEY constraint failed/i);
+		// And the classifier the route relies on recognises the real error shape, not a guessed one.
+		expect(foreignKeyViolation(new Error(message))).toBe(true);
+		expect(foreignKeyViolation(new Error('UNIQUE constraint failed: contacts.email'))).toBe(
+			false,
+		);
+	});
+});
+
+describe('a capped rollup does not claim what it did not look at', () => {
+	it('names the cap rather than asserting nobody is linked', async () => {
+		// With the fan-out truncated, "no linked contacts" is a statement about contacts that were
+		// never examined. The older ones outside the window may well be linked.
+		const e = await withSigningKey(env);
+		const cookie = await operator(e, 'admin@example.com', 'admin');
+		const company = await createCompany(e, cookie, { name: 'Acme' });
+		const now = Date.now();
+		const insert = e.CRM_DB.prepare(
+			`INSERT INTO contacts (id, site_id, external_user_id, name, company_id, status, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, 'lead', ?, ?)`,
+		);
+		const n = COMPANY_ROLLUP_MAX_CONTACTS + 1;
+		for (let i = 0; i < n; i += 200) {
+			await e.CRM_DB.batch(
+				Array.from({ length: Math.min(200, n - i) }, (_, j) =>
+					insert.bind(
+						crypto.randomUUID(),
+						SITE,
+						`uid-${i + j}`,
+						`Person ${i + j}`,
+						company.id,
+						now - (i + j),
+						now,
+					),
+				),
+			);
+		}
+		const res = await crm(e, `/companies/${company.id}/analytics`, {}, cookie);
+		expect(res.status).toBe(200);
+		expect(await res.json()).toMatchObject({
+			linked: false,
+			reason: 'none_linked_within_cap',
+			contacts_total: n,
+			contacts_considered: COMPANY_ROLLUP_MAX_CONTACTS,
+			contacts_truncated: true,
+		});
 	});
 });

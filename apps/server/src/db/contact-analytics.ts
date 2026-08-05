@@ -10,6 +10,7 @@
 
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Env } from '../env.js';
+import { chunked } from '../lib/constants.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
 import { eventCount, pageviewCount } from './stats.js';
@@ -56,47 +57,78 @@ export async function contactActivity(
 	visitorHashes: string[],
 ): Promise<ContactActivity> {
 	if (visitorHashes.length === 0) return EMPTY;
-	const where = and(
-		eq(schema.events.siteId, siteId),
-		inArray(schema.events.visitorHash, visitorHashes),
-	);
 	const client = db(env);
-	const [totals, paths] = await Promise.all([
-		client
-			// The SAME expressions /api/stats uses, imported rather than rewritten. A pageview is
-			// `name IS NULL` in this schema, so a hand-rolled `name = 'pageview'` would silently
-			// report zero pageviews for every real visitor — and the two surfaces would disagree
-			// about one person's numbers while agreeing about everyone's.
-			.select({
-				total: sql<number>`count(*)`,
-				pageviews: pageviewCount,
-				events: eventCount,
-				first_seen: sql<number>`min(${schema.events.createdAt})`,
-				last_seen: sql<number>`max(${schema.events.createdAt})`,
-			})
-			.from(schema.events)
-			.where(where)
-			.get(),
-		client
-			.select({
-				path: schema.events.path,
-				views: sql<number>`count(*)`,
-			})
-			.from(schema.events)
-			.where(where)
-			.groupBy(schema.events.path)
-			.orderBy(desc(sql`count(*)`))
-			.limit(TOP_PATHS),
-	]);
-	if (!totals || totals.total === 0) return EMPTY;
+	const summed = { ...EMPTY, top_paths: [] as { path: string; views: number }[] };
+	const pathViews = new Map<string, number>();
+	// One statement per chunk: an `IN (...)` list is one bound parameter per hash, and D1 refuses a
+	// query with more than 100 of them. A company rollup unions every linked contact's live salt
+	// windows, so this list is contacts x windows and routinely passes that on a real account.
+	for (const batch of chunked(visitorHashes)) {
+		const where = and(
+			eq(schema.events.siteId, siteId),
+			inArray(schema.events.visitorHash, batch),
+		);
+		const [totals, paths] = await Promise.all([
+			client
+				// The SAME expressions /api/stats uses, imported rather than rewritten. A pageview is
+				// `name IS NULL` in this schema, so a hand-rolled `name = 'pageview'` would silently
+				// report zero pageviews for every real visitor — and the two surfaces would disagree
+				// about one person's numbers while agreeing about everyone's.
+				.select({
+					total: sql<number>`count(*)`,
+					pageviews: pageviewCount,
+					events: eventCount,
+					first_seen: sql<number>`min(${schema.events.createdAt})`,
+					last_seen: sql<number>`max(${schema.events.createdAt})`,
+				})
+				.from(schema.events)
+				.where(where)
+				.get(),
+			// Deliberately NOT `LIMIT TOP_PATHS` per chunk. A path in the overall top ten need not be
+			// in any single chunk's top ten, so taking a prefix here and merging would return a
+			// plausible, subtly wrong ranking. Grouping fully and ranking once at the end is exact,
+			// and a visitor set's distinct paths are bounded by the site's own routes.
+			client
+				.select({
+					path: schema.events.path,
+					views: sql<number>`count(*)`,
+				})
+				.from(schema.events)
+				.where(where)
+				.groupBy(schema.events.path),
+		]);
+		if (!totals) continue;
+		summed.total += totals.total ?? 0;
+		summed.pageviews += totals.pageviews ?? 0;
+		summed.events += totals.events ?? 0;
+		// A hash appears in exactly one chunk, so counts add and the extremes are the extremes.
+		summed.first_seen = minDefined(summed.first_seen, totals.first_seen);
+		summed.last_seen = maxDefined(summed.last_seen, totals.last_seen);
+		for (const row of paths) {
+			pathViews.set(row.path, (pathViews.get(row.path) ?? 0) + row.views);
+		}
+	}
+	if (summed.total === 0) return EMPTY;
 	return {
-		pageviews: totals.pageviews ?? 0,
-		events: totals.events ?? 0,
-		total: totals.total,
-		first_seen: totals.first_seen ?? null,
-		last_seen: totals.last_seen ?? null,
-		top_paths: paths,
+		...summed,
+		top_paths: [...pathViews]
+			.map(([path, views]) => ({ path, views }))
+			.sort((a, b) => b.views - a.views || a.path.localeCompare(b.path))
+			.slice(0, TOP_PATHS),
 	};
+}
+
+/** `Math.min` over values that may be absent, where absent means "no opinion" rather than zero. */
+function minDefined(a: number | null, b: number | null | undefined): number | null {
+	if (a === null || a === undefined) return b ?? null;
+	if (b === null || b === undefined) return a;
+	return Math.min(a, b);
+}
+
+function maxDefined(a: number | null, b: number | null | undefined): number | null {
+	if (a === null || a === undefined) return b ?? null;
+	if (b === null || b === undefined) return a;
+	return Math.max(a, b);
 }
 
 /** One event row as it appears in a data-subject export. */
@@ -119,26 +151,35 @@ export async function contactEvents(
 	visitorHashes: string[],
 ): Promise<ContactEvent[]> {
 	if (visitorHashes.length === 0) return [];
-	return db(env)
-		.select({
-			created_at: schema.events.createdAt,
-			hostname: schema.events.hostname,
-			path: schema.events.path,
-			referrer: schema.events.referrer,
-			name: schema.events.name,
-			country: schema.events.country,
-			device: schema.events.device,
-			channel: schema.events.channel,
-		})
-		.from(schema.events)
-		.where(
-			and(
-				eq(schema.events.siteId, siteId),
-				inArray(schema.events.visitorHash, visitorHashes),
-			),
-		)
-		.orderBy(desc(schema.events.createdAt))
-		.limit(CONTACT_EXPORT_MAX_EVENTS);
+	const client = db(env);
+	const collected: ContactEvent[] = [];
+	// Chunked for D1's bound-parameter limit, as in `contactActivity`. Each chunk takes the full cap
+	// rather than a share of it: the newest `CONTACT_EXPORT_MAX_EVENTS` overall could all belong to
+	// one chunk, so a per-chunk share would drop rows that belong in the export and the caller's
+	// truncation flag would be computed over the wrong set.
+	for (const batch of chunked(visitorHashes)) {
+		const rows = await client
+			.select({
+				created_at: schema.events.createdAt,
+				hostname: schema.events.hostname,
+				path: schema.events.path,
+				referrer: schema.events.referrer,
+				name: schema.events.name,
+				country: schema.events.country,
+				device: schema.events.device,
+				channel: schema.events.channel,
+			})
+			.from(schema.events)
+			.where(and(eq(schema.events.siteId, siteId), inArray(schema.events.visitorHash, batch)))
+			.orderBy(desc(schema.events.createdAt))
+			.limit(CONTACT_EXPORT_MAX_EVENTS);
+		collected.push(...rows);
+	}
+	// Re-rank across chunks, then apply the cap once, so the export is the genuinely newest rows
+	// rather than the newest-per-chunk concatenated.
+	return collected
+		.sort((a, b) => b.created_at - a.created_at)
+		.slice(0, CONTACT_EXPORT_MAX_EVENTS);
 }
 
 /** The consent records authorizing a contact's linkage, for the export. The signed statement is

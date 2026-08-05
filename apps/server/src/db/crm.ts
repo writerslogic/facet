@@ -160,11 +160,35 @@ function normalizeEmail(email: string | null | undefined): string | null {
  * exactly what a single-level `err.message` check did.
  */
 export function uniqueConstraintText(err: unknown): string | null {
+	return constraintText(err, /UNIQUE constraint failed/i);
+}
+
+/**
+ * True when the failure is a foreign-key violation — in this schema, always a contact pointing at a
+ * company that is no longer there.
+ *
+ * `resolveCompany` checks the company exists before the insert, but the check and the write are two
+ * statements: a `DELETE /companies/:id` committing between them makes the write fail on the
+ * constraint. Without this the error falls through to a 500, telling the caller the server is broken
+ * when in fact their request simply lost a race and `unknown_company` is the accurate answer.
+ */
+export function foreignKeyViolation(err: unknown): boolean {
+	return constraintText(err, /FOREIGN KEY constraint failed/i) !== null;
+}
+
+/**
+ * The text of a constraint violation matching `pattern`, or null for any other failure.
+ *
+ * Drizzle wraps driver errors (`DrizzleQueryError` carrying the D1 error as `cause`), and how deeply
+ * it nests them is a detail of the ORM version, not a contract. Walking the `cause` chain means a
+ * drizzle upgrade that adds or removes a wrapper changes nothing here.
+ */
+function constraintText(err: unknown, pattern: RegExp): string | null {
 	let current: unknown = err;
 	// Bounded, so a self-referential `cause` cannot spin here.
 	for (let depth = 0; depth < 5; depth++) {
 		if (!(current instanceof Error)) return null;
-		if (/UNIQUE constraint failed/i.test(current.message)) return current.message;
+		if (pattern.test(current.message)) return current.message;
 		current = current.cause;
 	}
 	return null;
@@ -360,6 +384,45 @@ async function setCompanyFields(
 	if ('company_id' in input) set.company_id = null;
 }
 
+/**
+ * Refuse a patch that would leave a contact with no email, no external id and no name.
+ *
+ * `ContactCreateSchema` enforces this at creation and states why: such a row "is not a contact, it is
+ * an empty row that can never be matched, deduped, or erased on request". A PATCH could reach exactly
+ * that state by blanking the three fields one request later, and the NULLs are distinct in both
+ * unique indexes so nothing downstream would object. The check has to run against the MERGED row —
+ * a patch that only clears `email` is fine when a name remains — so it reads the stored row rather
+ * than judging the patch alone, and only when the patch actually touches an identifier.
+ */
+async function assertStillIdentifiable(
+	binding: D1Database,
+	siteId: string,
+	id: string,
+	set: Record<string, string | number | null>,
+): Promise<void> {
+	const IDENTIFIERS = ['email', 'external_user_id', 'name'] as const;
+	if (!IDENTIFIERS.some((field) => field in set)) return;
+	const existing = await crmDb(binding)
+		.select({
+			email: crmSchema.contacts.email,
+			external_user_id: crmSchema.contacts.external_user_id,
+			name: crmSchema.contacts.name,
+		})
+		.from(crmSchema.contacts)
+		.where(and(eq(crmSchema.contacts.site_id, siteId), eq(crmSchema.contacts.id, id)))
+		.get();
+	// No row means the update will report 404 on its own; that is a better answer than this one.
+	if (!existing) return;
+	const survives = IDENTIFIERS.some((field) => (field in set ? set[field] : existing[field]));
+	if (!survives) {
+		throw new ApiError(
+			'contact_needs_an_identifier',
+			400,
+			'a contact must keep at least one of email, external_user_id or name',
+		);
+	}
+}
+
 /** Apply a partial update. Only keys actually present in `input` are written, so a PATCH that omits
  * a field leaves it alone rather than nulling it. Returns the updated row in the resolved read
  * shape, or undefined if the contact does not exist on this site. */
@@ -375,6 +438,7 @@ export async function updateContact(
 	if ('external_user_id' in input) set.external_user_id = orNull(input.external_user_id);
 	if ('email' in input) set.email = normalizeEmail(input.email);
 	if ('name' in input) set.name = orNull(input.name);
+	await assertStillIdentifiable(binding, siteId, id, set);
 	if ('phone' in input) set.phone = orNull(input.phone);
 	await setCompanyFields(client, siteId, input, set);
 	if ('title' in input) set.title = orNull(input.title);
@@ -563,17 +627,29 @@ export async function deleteCompany(
 	const client = crmDb(binding);
 	const company = await getCompany(binding, siteId, id);
 	if (!company) return undefined;
-	const [unlinked, deleted] = await client.batch([
+	const atCompany = and(
+		eq(crmSchema.contacts.site_id, siteId),
+		eq(crmSchema.contacts.company_id, company.id),
+	);
+	const [counted, , deleted] = await client.batch([
+		// Counted inside the transaction rather than by materialising the rows: `.returning()` on the
+		// update would pull one row per contact across the wire to produce a single integer, which for
+		// a large account is tens of thousands of rows read to count them.
+		client
+			.select({ n: sql<number>`count(*)` })
+			.from(crmSchema.contacts)
+			.where(atCompany),
 		client
 			.update(crmSchema.contacts)
-			.set({ company: company.name, company_id: null })
-			.where(
-				and(
-					eq(crmSchema.contacts.site_id, siteId),
-					eq(crmSchema.contacts.company_id, company.id),
-				),
-			)
-			.returning({ id: crmSchema.contacts.id }),
+			// The name is read by a correlated subquery, INSIDE the transaction, not captured from the
+			// `getCompany` above. A rename committing between that read and this write would otherwise
+			// stamp every contact with the superseded name — and with the company row then deleted,
+			// nothing would remain to correct it against.
+			.set({
+				company: sql`(SELECT ${crmSchema.companies.name} FROM ${crmSchema.companies} WHERE ${crmSchema.companies.id} = ${company.id})`,
+				company_id: null,
+			})
+			.where(atCompany),
 		client
 			.delete(crmSchema.companies)
 			.where(and(eq(crmSchema.companies.site_id, siteId), eq(crmSchema.companies.id, id)))
@@ -581,5 +657,5 @@ export async function deleteCompany(
 	]);
 	// Lost a race with a concurrent delete: the batch changed nothing, and 404 is the honest answer.
 	if (deleted.length === 0) return undefined;
-	return { company, contacts_unlinked: unlinked.length };
+	return { company, contacts_unlinked: counted[0]?.n ?? 0 };
 }

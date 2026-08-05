@@ -27,6 +27,7 @@ import {
 	verifyStatement,
 } from '@facet/trust';
 import type { Env } from '../env.js';
+import { chunked } from './constants.js';
 import { deploymentDid, getSigningKey } from './signing.js';
 
 export const CONSENT_STATEMENT_TYPE = 'facet-consent/1';
@@ -225,7 +226,11 @@ export async function findLinkedVisitorHashes(
  * while pointing at another person's hash still has to survive the signature check, which is what
  * stops the grouping key from becoming an authorization key.
  *
- * The caller must bound `externalUserIds`; this issues one query with one bind per id.
+ * The uid list is CHUNKED across statements rather than bound in one. D1 rejects any query carrying
+ * more than 100 bound parameters, and this one spends two of them on `site_id` and `now` — so a
+ * company of 99 linkable contacts asked for 101 and the statement was refused outright. That is a
+ * hard failure, not a slow one, and it lands on exactly the largest account rather than on the small
+ * ones a test would reach for.
  */
 export async function findLinkedVisitorHashesForMany(
 	env: Env,
@@ -237,31 +242,34 @@ export async function findLinkedVisitorHashesForMany(
 	const loading = getSigningKey(env);
 	if (!loading) return byUid;
 	const key = await loading;
-	const placeholders = lookup.externalUserIds.map(() => '?').join(', ');
-	const { results } = await env.DB.prepare(
-		`SELECT external_user_id, statement FROM consent_records WHERE site_id = ? AND external_user_id IN (${placeholders}) AND tier = 'identified' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`,
-	)
-		.bind(lookup.siteId, ...lookup.externalUserIds, lookup.now)
-		.all<{ external_user_id: string; statement: string }>();
 	const iss = deploymentDid(url);
 	const seen = new Map<string, Set<string>>();
-	for (const row of results ?? []) {
-		let stmt: SignedStatement<ConsentClaims>;
-		try {
-			stmt = JSON.parse(row.statement) as SignedStatement<ConsentClaims>;
-		} catch {
-			continue;
+	for (const batch of chunked(lookup.externalUserIds)) {
+		const placeholders = batch.map(() => '?').join(', ');
+		const { results } = await env.DB.prepare(
+			`SELECT external_user_id, statement FROM consent_records WHERE site_id = ? AND external_user_id IN (${placeholders}) AND tier = 'identified' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`,
+		)
+			.bind(lookup.siteId, ...batch, lookup.now)
+			.all<{ external_user_id: string; statement: string }>();
+		for (const row of results ?? []) {
+			let stmt: SignedStatement<ConsentClaims>;
+			try {
+				stmt = JSON.parse(row.statement) as SignedStatement<ConsentClaims>;
+			} catch {
+				continue;
+			}
+			if (!(await verifyPinnedToDeployment(stmt, iss, key.kid))) continue;
+			const p = stmt.payload;
+			// The claims, not the columns: this grant must be for this site, at the identified tier,
+			// and must actually have been made against an external user id rather than an ip/ua
+			// pseudonym.
+			if (p.site_id !== lookup.siteId) continue;
+			if (p.tier !== 'identified') continue;
+			if (!p.external_user_id_present) continue;
+			const hashes = seen.get(row.external_user_id) ?? new Set<string>();
+			hashes.add(p.visitor_hash);
+			seen.set(row.external_user_id, hashes);
 		}
-		if (!(await verifyPinnedToDeployment(stmt, iss, key.kid))) continue;
-		const p = stmt.payload;
-		// The claims, not the columns: this grant must be for this site, at the identified tier, and
-		// must actually have been made against an external user id rather than an ip/ua pseudonym.
-		if (p.site_id !== lookup.siteId) continue;
-		if (p.tier !== 'identified') continue;
-		if (!p.external_user_id_present) continue;
-		const hashes = seen.get(row.external_user_id) ?? new Set<string>();
-		hashes.add(p.visitor_hash);
-		seen.set(row.external_user_id, hashes);
 	}
 	for (const [uid, hashes] of seen) {
 		byUid.set(uid, [...hashes]);
