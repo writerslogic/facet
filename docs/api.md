@@ -718,7 +718,7 @@ aggregate rollups only.
 | `GET /api/transparency/consistency?from&to` | public | Consistency proof between two tree sizes. |
 | `POST /api/scitt/attestation` | admin | Wrap the PrivacyAttestation as a SCITT Signed Statement, register it with the local Transparency-Service double, return a Receipt. |
 | `POST /api/scitt/register` | admin | Register an arbitrary Signed Statement, return a Receipt. |
-| `GET /api/attestation/evidence[?nonce=]` | public | A RATS process-evidence EAT (software attestation only; no hardware root of trust). |
+| `GET /api/attestation/evidence[?nonce=]` | public | A RATS process-evidence EAT (software attestation only; no hardware root of trust). `nonce` must be **8–88 bytes** (RFC 9711 §4.1); anything else is a `400` rather than a signed EAT no conformant verifier would accept. |
 
 Verify offline: `facet verify receipt <file>` (SCITT receipt / MMR inclusion) and
 `facet verify attestation <file> [--nonce <n>]` (RATS EAT). The COSE_Sign1 wire form and an external

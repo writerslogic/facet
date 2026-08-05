@@ -8,6 +8,7 @@
 import {
 	EAT_PROCESS_PROFILE,
 	buildPrivacyAttestationCredential,
+	eatNonceError,
 	issueCredential,
 	signProcessEvidence,
 	verificationMethodId,
@@ -16,6 +17,7 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { buildProcessEvidence, deploymentDescriptor } from '../lib/attestation.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
+import { ApiError } from '../lib/http.js';
 import {
 	deploymentDid,
 	ed25519KeyErrorCode,
@@ -68,7 +70,17 @@ attestationRoutes.get('/evidence', async (c) => {
 	const loading = getSigningKey(c.env);
 	if (!loading) return c.json({ error: 'signing_unavailable' }, 501);
 	const key = await loading;
+	// The one request-derived value on either attestation route, and it is copied verbatim into a
+	// signed claim, so it is bounded before the key is ever used: RFC 9711 sizes a JSON `eat_nonce` at
+	// 8..88 bytes and a verifier applying that CDDL rejects anything else. Unchecked, a caller could
+	// have the deployment sign an EAT no verifier would accept and never learn why. `bad_request` with
+	// the reason, matching the other public router's shape — the bound is a published property of the
+	// caller's own input, so stating it reveals nothing about this deployment.
 	const nonce = c.req.query('nonce') ?? undefined;
+	if (nonce !== undefined) {
+		const bad = eatNonceError(nonce);
+		if (bad) throw new ApiError('bad_request', 400, bad);
+	}
 	const eat = await signProcessEvidence(await buildProcessEvidence(c.env), key, {
 		now: Date.now(),
 		nonce,

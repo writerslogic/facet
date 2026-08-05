@@ -137,12 +137,14 @@ describe('facet verify export', () => {
 				privacyTransforms: ['cookieless'],
 			},
 			key,
-			{ now: 1_770_000_000_000, nonce: 'n1' },
+			// 8..88 bytes: RFC 9711 §4.1, enforced at issuance so the CLI is never asked to verify an EAT
+			// the deployment should not have signed in the first place.
+			{ now: 1_770_000_000_000, nonce: 'nonce-01' },
 		);
 		const file = await tmpFile('eat.json', eat);
-		expect(await main(['verify', 'attestation', file, '--nonce', 'n1'])).toBe(0);
+		expect(await main(['verify', 'attestation', file, '--nonce', 'nonce-01'])).toBe(0);
 		expect(stdout).toContain('valid RATS process evidence');
 		// Wrong nonce fails.
-		expect(await main(['verify', 'attestation', file, '--nonce', 'bad'])).toBe(1);
+		expect(await main(['verify', 'attestation', file, '--nonce', 'bad-nonce'])).toBe(1);
 	});
 });
