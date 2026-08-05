@@ -17,6 +17,7 @@
 // contact's `external_user_id` is only an index into `consent_records`, and the visitor hash it
 // resolves to comes out of a verified statement (`findLinkedVisitorHashes`), never out of a column.
 // That is what makes the CRM→analytics join consent-gated by construction rather than by convention.
+// A company rollup is the same function over many uids at once, not a second route around it.
 
 import type { IdentityTier, SaltWindow } from '@facet/shared';
 import {
@@ -201,16 +202,49 @@ export async function findLinkedVisitorHashes(
 	url: URL,
 	lookup: { siteId: string; externalUserId: string; now: number },
 ): Promise<string[]> {
+	const byUid = await findLinkedVisitorHashesForMany(env, url, {
+		siteId: lookup.siteId,
+		externalUserIds: [lookup.externalUserId],
+		now: lookup.now,
+	});
+	return byUid.get(lookup.externalUserId) ?? [];
+}
+
+/**
+ * The same bridge for a SET of `external_user_id`s, keyed by uid — what a company rollup needs to sum
+ * its contacts' activity without asking the database once per contact.
+ *
+ * It is the single implementation, with `findLinkedVisitorHashes` delegating to it, deliberately:
+ * a second copy of this loop is a second place for the claims-not-columns rule to be got wrong, and
+ * the one that summed many people at once would be the worse place to get it wrong. Every uid absent
+ * from the returned map has nothing authorizing a link, which is indistinguishable — and should be —
+ * from having no consent record at all.
+ *
+ * The `external_user_id` COLUMN groups the results and the SIGNED claims authorize them: the column
+ * says which contact asked, the statement says what they may see. A row whose column names one uid
+ * while pointing at another person's hash still has to survive the signature check, which is what
+ * stops the grouping key from becoming an authorization key.
+ *
+ * The caller must bound `externalUserIds`; this issues one query with one bind per id.
+ */
+export async function findLinkedVisitorHashesForMany(
+	env: Env,
+	url: URL,
+	lookup: { siteId: string; externalUserIds: string[]; now: number },
+): Promise<Map<string, string[]>> {
+	const byUid = new Map<string, string[]>();
+	if (lookup.externalUserIds.length === 0) return byUid;
 	const loading = getSigningKey(env);
-	if (!loading) return [];
+	if (!loading) return byUid;
 	const key = await loading;
+	const placeholders = lookup.externalUserIds.map(() => '?').join(', ');
 	const { results } = await env.DB.prepare(
-		"SELECT statement FROM consent_records WHERE site_id = ? AND external_user_id = ? AND tier = 'identified' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)",
+		`SELECT external_user_id, statement FROM consent_records WHERE site_id = ? AND external_user_id IN (${placeholders}) AND tier = 'identified' AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > ?)`,
 	)
-		.bind(lookup.siteId, lookup.externalUserId, lookup.now)
-		.all<{ statement: string }>();
+		.bind(lookup.siteId, ...lookup.externalUserIds, lookup.now)
+		.all<{ external_user_id: string; statement: string }>();
 	const iss = deploymentDid(url);
-	const hashes = new Set<string>();
+	const seen = new Map<string, Set<string>>();
 	for (const row of results ?? []) {
 		let stmt: SignedStatement<ConsentClaims>;
 		try {
@@ -225,9 +259,14 @@ export async function findLinkedVisitorHashes(
 		if (p.site_id !== lookup.siteId) continue;
 		if (p.tier !== 'identified') continue;
 		if (!p.external_user_id_present) continue;
+		const hashes = seen.get(row.external_user_id) ?? new Set<string>();
 		hashes.add(p.visitor_hash);
+		seen.set(row.external_user_id, hashes);
 	}
-	return [...hashes];
+	for (const [uid, hashes] of seen) {
+		byUid.set(uid, [...hashes]);
+	}
+	return byUid;
 }
 
 /**

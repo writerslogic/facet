@@ -66,6 +66,18 @@ export function privacyDpvClaims(env: Env): Record<string, unknown> {
 		'dpv:hasDataSubject': 'dpv:Customer',
 		// The categories the contact schema has columns for. Free-text fields an operator may fill
 		// with anything are deliberately not enumerated as categories they are not.
-		'dpv:hasPersonalData': ['pd:Name', 'pd:EmailAddress', 'pd:TelephoneNumber'],
+		//
+		// `pd:CurrentEmployment` is here because of `companies`, and the distinction is real rather
+		// than pedantic. A `company` string an operator typed into a box is free text, which is why it
+		// was not enumerated before; a `company_id` pointing at an organization record makes this
+		// person's employer a structured attribute the deployment can query and join on. The company
+		// row itself is NOT personal data — an organization is a legal person, and its name and domain
+		// are nobody's — so what is declared is the contact's employment, not the company table.
+		'dpv:hasPersonalData': [
+			'pd:Name',
+			'pd:EmailAddress',
+			'pd:TelephoneNumber',
+			'pd:CurrentEmployment',
+		],
 	};
 }

@@ -19,6 +19,11 @@ import { eventCount, pageviewCount } from './stats.js';
  * returning a prefix that reads like the whole record. */
 export const CONTACT_EXPORT_MAX_EVENTS = 1000;
 
+/** How many of a company's contacts one rollup resolves consent for. Each one costs a signature
+ * verification, so an unbounded fan-out is a CPU-limit failure waiting for the largest account. The
+ * response says when it bit, because a truncated aggregate is a lower bound and not a total. */
+export const COMPANY_ROLLUP_MAX_CONTACTS = 100;
+
 /** How many distinct paths a contact summary lists. */
 const TOP_PATHS = 10;
 
