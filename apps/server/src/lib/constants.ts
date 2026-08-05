@@ -49,6 +49,14 @@ export const EXPORT_MAX_ROWS = 1000 as const;
 export const REALTIME_WINDOW_MS = 300_000 as const;
 
 /**
+ * Largest body a CRM write may carry. The global `bodyLimit` is path-scoped to `/api/collect`, so
+ * without this the one route group that stores personal data was the one with no ceiling at all.
+ * Generous against the field bounds — a contact's `notes` alone may be 4000 characters — because this
+ * is a backstop against an unbounded upload, not a second copy of the wire schema.
+ */
+export const CRM_MAX_BODY_BYTES = 16_384 as const;
+
+/**
  * How many values one `IN (...)` list may carry.
  *
  * D1 rejects any statement with more than 100 bound parameters ("too many SQL variables"), and every

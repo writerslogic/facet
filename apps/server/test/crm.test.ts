@@ -8,6 +8,7 @@
 // events sitting right there and is still excluded — revoked consent, and a forged statement.
 
 import { env } from 'cloudflare:test';
+import { CRM_MAX_OFFSET } from '@facet/shared';
 import { generateSigningJwk } from '@facet/trust';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -1385,5 +1386,59 @@ describe('a genuine consent statement authorizes only the person it was issued f
 		const body = (await hers.json()) as { linked: boolean; activity: { total: number } };
 		expect(body.linked).toBe(true);
 		expect(body.activity.total).toBe(2);
+	});
+});
+
+describe('the PII routes are bounded, not just authenticated', () => {
+	/** An env whose rate limiter denies everything, which is how a wired-up limiter is distinguished
+	 * from one that was never attached. The real binding is absent in tests, so the middleware
+	 * no-ops and its presence is otherwise unobservable. */
+	function denyingLimiter(e: TestEnv): TestEnv {
+		return { ...e, RATE_LIMITER: { limit: async () => ({ success: false }) } } as TestEnv;
+	}
+
+	it('rate limits an authenticated operator, and only after authenticating them', async () => {
+		const e = denyingLimiter(env);
+		const cookie = await operator(e, 'analyst@example.com', 'analyst');
+		const limited = await crm(e, '/contacts', {}, cookie);
+		expect(limited.status).toBe(429);
+		expect(limited.headers.get('Retry-After')).toBe('60');
+
+		// Auth still runs first: an anonymous caller is rejected as unauthorized rather than being
+		// told it was rate limited, so an unauthenticated flood cannot consume anyone's bucket.
+		const anonymous = await crm(e, '/contacts');
+		expect(anonymous.status).toBe(401);
+
+		// A viewer is refused on role, also before the limiter.
+		const viewerCookie = await operator(e, 'viewer@example.com', 'viewer');
+		expect((await crm(e, '/contacts', {}, viewerCookie)).status).toBe(403);
+	});
+
+	it('covers the company routes too, not just contacts', async () => {
+		const e = denyingLimiter(env);
+		const cookie = await operator(e, 'admin@example.com', 'admin');
+		expect((await crm(e, '/companies', {}, cookie)).status).toBe(429);
+	});
+
+	it('refuses an oversized write body', async () => {
+		// The global bodyLimit is scoped to /api/collect, so before this the one route group storing
+		// personal data was the only one accepting an unbounded upload.
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const res = await crm(
+			env,
+			'/contacts',
+			{ method: 'POST', body: JSON.stringify({ name: 'Ada', notes: 'x'.repeat(50_000) }) },
+			cookie,
+		);
+		expect(res.status).toBe(413);
+	});
+
+	it('refuses to page arbitrarily deep', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		expect((await crm(env, `/contacts?offset=${CRM_MAX_OFFSET + 1}`, {}, cookie)).status).toBe(
+			400,
+		);
+		// The ceiling itself is still reachable, so this is a bound and not an off-by-one.
+		expect((await crm(env, `/contacts?offset=${CRM_MAX_OFFSET}`, {}, cookie)).status).toBe(200);
 	});
 });
