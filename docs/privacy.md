@@ -101,7 +101,8 @@ references the visitor only through the same daily `visitor_hash`, and its own i
 non-reversible `SHA-256` digest of `site_id | visitor_hash | started_at`. Because a session
 is keyed on the daily hash, sessions inherit the **daily un-linkability** of the visitor
 hash: the same person's sessions on two different UTC days cannot be linked, even in
-principle.
+principle. A session row is bound by the same window as the events behind it — it is purged on the
+timestamp of its first event, so it never outlives them (see [Retention](#retention)).
 
 UTM values (`utm_source`, `utm_medium`, `utm_campaign`) are **site-supplied marketing
 tags** taken verbatim from the page URL. They are stored only in their own declared columns
@@ -202,7 +203,10 @@ configurable in `apps/server/wrangler.jsonc`). On the hourly cron, everything ol
 the window is deleted:
 
 - raw **events**
-- **sessions**
+- both **session** tables — the per-day key behind the visitor count, *and* the materialized visit
+  (entry path, exit path, duration, bounce) that the cron folds out of the raw events. The second is
+  purged on the timestamp of its first event, so a visit summary can never outlive the events it
+  summarizes
 - daily **salts**
 - windowed **identity salts** (purged on window *end*, so a salt always outlives every event in its
   window)
