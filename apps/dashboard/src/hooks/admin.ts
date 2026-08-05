@@ -159,6 +159,29 @@ export function useDeleteExperiment(token: string, siteId: string) {
 	});
 }
 
+/**
+ * End every session one operator holds, via POST /api/users/:id/revoke-sessions (admin token).
+ *
+ * The id is URL-encoded rather than interpolated raw: it arrives as pasted free text, and a value
+ * carrying a `/` or a `?` would otherwise re-point the request at a different route entirely — past
+ * the `/api/users/` prefix that `isAdminPath` checks, which is what keeps the admin token off every
+ * path that never asked for it.
+ *
+ * Nothing to invalidate on success: the deployment keeps no session table, so there is no list this
+ * changes. The response is the whole of the feedback, and `404` is a distinct outcome rather than an
+ * error — see the panel.
+ */
+export function useRevokeUserSessions(token: string) {
+	return useMutation({
+		mutationFn: (userId: string) =>
+			adminPost<{ user_id: string; sessions_revoked: boolean }>(
+				`/api/users/${encodeURIComponent(userId)}/revoke-sessions`,
+				token,
+				{},
+			),
+	});
+}
+
 /** Set a site's identity tier + salt window via PATCH /api/sites/:id/identity (admin token). */
 export function useSetIdentity(token: string, siteId: string) {
 	return useMutation({

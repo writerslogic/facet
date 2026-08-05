@@ -135,6 +135,7 @@ export function ConfirmDelete({
 	confirmLabel = 'Confirm',
 	consequence,
 	busy = false,
+	icon: Icon = Trash2,
 }: {
 	onConfirm: () => void;
 	label?: string;
@@ -142,6 +143,9 @@ export function ConfirmDelete({
 	/** What is irreversibly lost, e.g. "Any client using this key stops working immediately." */
 	consequence?: string;
 	busy?: boolean;
+	/** Overrides the trash can for a two-step action that is destructive but is not a deletion —
+	 * ending sessions destroys no record, and a trash icon on it names the wrong consequence. */
+	icon?: typeof Trash2;
 }): ReactElement {
 	const [armed, setArmed] = useState(false);
 
@@ -186,7 +190,7 @@ export function ConfirmDelete({
 			disabled={busy}
 			className="btn-ghost inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 font-medium text-[color:var(--muted)] text-xs transition"
 		>
-			<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+			<Icon className="h-3.5 w-3.5" aria-hidden="true" />
 			{label}
 		</button>
 	);
