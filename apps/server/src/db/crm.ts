@@ -119,20 +119,29 @@ const CONTACT_COLUMNS = {
 	updated_at: crmSchema.contacts.updated_at,
 };
 
-/** Contacts joined to their company. The join is scoped by site as well as by id — the foreign key
- * already guarantees the company exists, but not that it belongs to the same site, and a name
- * crossing that boundary would be a leak rather than a missing value. */
+/** Scoped by site as well as by id — the foreign key already guarantees the company exists, but not
+ * that it belongs to the same site, and a name crossing that boundary would be a leak rather than a
+ * missing value. */
+const COMPANY_JOIN = and(
+	eq(crmSchema.contacts.company_id, crmSchema.companies.id),
+	eq(crmSchema.companies.site_id, crmSchema.contacts.site_id),
+);
+
+/** Contacts joined to their company, in the resolved read shape. */
 function contactQuery(client: ReturnType<typeof crmDb>) {
 	return client
 		.select(CONTACT_COLUMNS)
 		.from(crmSchema.contacts)
-		.leftJoin(
-			crmSchema.companies,
-			and(
-				eq(crmSchema.contacts.company_id, crmSchema.companies.id),
-				eq(crmSchema.companies.site_id, crmSchema.contacts.site_id),
-			),
-		);
+		.leftJoin(crmSchema.companies, COMPANY_JOIN);
+}
+
+/** The same join under a `count(*)`. A `q` filter can reference the joined company name, so the total
+ * has to be counted over the join or it answers a different question from the page it describes. */
+function contactCountQuery(client: ReturnType<typeof crmDb>) {
+	return client
+		.select({ n: sql<number>`count(*)` })
+		.from(crmSchema.contacts)
+		.leftJoin(crmSchema.companies, COMPANY_JOIN);
 }
 
 /** Normalize an email for storage. Lowercased so `(site_id, email)` uniqueness is not defeated by
@@ -291,19 +300,7 @@ export async function listContacts(
 			.orderBy(desc(crmSchema.contacts.created_at))
 			.limit(opts.limit)
 			.offset(opts.offset),
-		// Counted over the same join, because the `q` filter can reference the joined company name.
-		crmDb(binding)
-			.select({ n: sql<number>`count(*)` })
-			.from(crmSchema.contacts)
-			.leftJoin(
-				crmSchema.companies,
-				and(
-					eq(crmSchema.contacts.company_id, crmSchema.companies.id),
-					eq(crmSchema.companies.site_id, crmSchema.contacts.site_id),
-				),
-			)
-			.where(where)
-			.get(),
+		contactCountQuery(client).where(where).get(),
 	]);
 	return { contacts, total: totalRow?.n ?? 0 };
 }
