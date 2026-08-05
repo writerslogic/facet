@@ -41,6 +41,21 @@ function filenameFor(params: ExportParams): string {
 	return `facet-${what}-${day}.${params.format}`;
 }
 
+/** Save a fetched blob as a file by clicking a transient object-URL anchor. */
+function saveBlob(blob: Blob, filename: string): void {
+	const url = URL.createObjectURL(blob);
+	try {
+		const anchor = document.createElement('a');
+		anchor.href = url;
+		anchor.download = filename;
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+	} finally {
+		URL.revokeObjectURL(url);
+	}
+}
+
 /**
  * Download an export as a file. Fetches with the bearer key, materializes a blob, and clicks a
  * transient object-URL anchor. Throws on a non-2xx response so callers can surface an error.
@@ -53,16 +68,22 @@ export async function downloadExport(apiKey: string, params: ExportParams): Prom
 		const body = (await res.json().catch(() => ({}))) as { error?: string };
 		throw new Error(body.error ?? 'export_failed');
 	}
-	const blob = await res.blob();
-	const url = URL.createObjectURL(blob);
-	try {
-		const anchor = document.createElement('a');
-		anchor.href = url;
-		anchor.download = filenameFor(params);
-		document.body.appendChild(anchor);
-		anchor.click();
-		anchor.remove();
-	} finally {
-		URL.revokeObjectURL(url);
+	saveBlob(await res.blob(), filenameFor(params));
+}
+
+/**
+ * Download one contact's data-subject export. Session-authenticated and `admin`-only, so it carries
+ * the cookie and NO bearer key — see `sessionFetch`. A plain link would work for the cookie but
+ * could not surface the error body, and this route's failures (403, 501) are exactly the ones the
+ * operator needs named.
+ */
+export async function downloadContactExport(siteId: string, contactId: string): Promise<void> {
+	const res = await fetch(`/api/crm/contacts/${contactId}/export?site_id=${siteId}`, {
+		credentials: 'same-origin',
+	});
+	if (!res.ok) {
+		const body = (await res.json().catch(() => ({}))) as { error?: string };
+		throw new Error(body.error ?? 'export_failed');
 	}
+	saveBlob(await res.blob(), `facet-contact-${contactId}.json`);
 }

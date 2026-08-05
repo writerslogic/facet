@@ -187,6 +187,19 @@ function exportResponse(url: URL): Response {
 function route(url: URL, method: string, body: unknown): Response | null {
 	const p = url.pathname;
 
+	// The demo has no CRM database, which the real Worker reports before it authenticates anything —
+	// including for a write. Answered ahead of the read-only guard so the CRM tab shows its
+	// "extension not enabled" explanation rather than a 403 that would read as a permissions problem.
+	if (p === '/api/crm' || p.startsWith('/api/crm/')) {
+		return json({ error: 'crm_unavailable' }, 501);
+	}
+
+	// No SESSION_SECRET on a static demo, so there is no operator session to report — the same 503
+	// the real /api/auth routes answer with when account auth is not configured.
+	if (p.startsWith('/api/auth/')) {
+		return json({ error: 'auth_unavailable' }, 503);
+	}
+
 	// Admin writes are refused: the demo is strictly read-only.
 	if (method !== 'GET' && p !== '/api/stats/query') {
 		return json({ error: 'demo_read_only' }, 403);

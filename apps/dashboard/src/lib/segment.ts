@@ -189,6 +189,7 @@ export type SegmentTab =
 	| 'retention'
 	| 'experiments'
 	| 'anomalies'
+	| 'crm'
 	| 'ask';
 
 /**
@@ -218,6 +219,9 @@ export interface TabSegmentSupport {
  *   /api/funnels/:id/report and /api/stats/conversions → no dimension params at all. NO filter.
  *   /api/stats/experiment → experimentResult() scopes by siteId + range only. NO filter.
  *   /api/stats/query      → the executor is handed { siteId, start, end }. NO filter.
+ *   /api/crm/*            → a contact's activity is every event its consent-verified visitor hashes
+ *                           produced; contactActivity() takes siteId + hashes and nothing else, and
+ *                           there is no date range either. NO filter.
  *
  * A tab whose level is not `full` must render this note next to its numbers. Showing filtered
  * labels over unfiltered numbers is the one outcome worse than not filtering at all.
@@ -246,6 +250,10 @@ export const TAB_SEGMENT_SUPPORT: Record<SegmentTab, TabSegmentSupport> = {
 	anomalies: {
 		level: 'none',
 		note: 'Not applied. Detection scores site-wide hourly pageviews against their own baseline, so the anomalies below cover all traffic.',
+	},
+	crm: {
+		level: 'none',
+		note: "Not applied, and there is no date range either. A contact's activity is every event Facet is allowed to attribute to them, for as long as their consent record reaches back.",
 	},
 	ask: {
 		level: 'none',

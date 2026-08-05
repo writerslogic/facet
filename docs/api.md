@@ -1323,6 +1323,9 @@ to turn it on, and note that doing so changes the DPV claims this deployment sig
 `pd:` categories it holds — including `pd:CurrentEmployment`, because a contact linked to a company
 record carries a structured employer that a free-text box did not).
 
+Every route is rate limited per *operator* (not per site, so one compromised session cannot hide
+inside its team's traffic) and write bodies are capped at 16 KB.
+
 **Auth is a session cookie, never an API key.** This is the one authenticated surface that refuses
 `Authorization: Bearer <clk_...>`. A `clk_` key authorizes aggregate analytics and is meant to be
 handed out — to agents, to a public demo dashboard — and contact PII is not something that survives
@@ -1342,7 +1345,13 @@ Lists contacts, newest first. `status` ∈ `lead \| active \| archived`; `q` is 
 match over name/email/company (LIKE metacharacters are escaped, so `q=%` matches a literal `%`). The
 company it matches on is the **resolved** one, so searching a company name finds the contacts linked
 to it as well as those carrying it as free text. `limit` defaults to 25, max 100. Returns
-`{ contacts: [...], total }`.
+`{ contacts: [...], total, role }`.
+
+`role` is the team role this request was authorized under. It is on the list responses because a
+client has no other way to learn it: `GET /api/auth/me` reports a role per *team*, and no
+session-reachable route says which team owns a given site, so a UI deciding whether to offer the
+admin-only delete and export could otherwise only guess. `offset` is capped at 100,000 — SQLite walks
+every skipped row, so an unbounded one is a full table scan.
 
 ### `POST /api/crm/contacts?site_id` (session, analyst)
 
@@ -1413,7 +1422,7 @@ Name uniqueness is an **exact** match: names are displayed as typed, so they are
 the index. Use `domain` if you want a case-insensitive identity key.
 
 `GET` takes `status`, `q` (substring over name/domain), `limit`, `offset` and returns
-`{ companies: [...], total }`.
+`{ companies: [...], total, role }`, with `role` as on the contacts list.
 
 ### `GET`/`PATCH /api/crm/companies/:id?site_id` (session, analyst)
 
@@ -1465,7 +1474,9 @@ reading as the account's traffic when it is one person's. `contacts_truncated` i
 capped fan-out is a lower bound, not a total. `visitor_hashes` is contacts multiplied by their live
 salt windows — a linkage-breadth number, **not** a headcount; `contacts_linked` is the headcount.
 When nothing is linked the response is `{ ..., "linked": false, "reason": "no_linked_contacts" }`
-rather than zeroes that would read as "this account did nothing".
+rather than zeroes that would read as "this account did nothing". When the fan-out was capped the
+reason is `none_linked_within_cap` instead — with contacts left unexamined, "nobody is linked" is a
+claim about rows nothing looked at.
 
 There is **no company export**. A data-subject export is per person by definition; a company-wide one
 would be a bulk PII dump with no data-protection meaning. Use `/companies/:id/contacts` and then the

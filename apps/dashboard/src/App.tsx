@@ -24,6 +24,7 @@ const AllSites = lazy(() =>
 const Anomalies = lazy(() =>
 	import('./components/Anomalies.js').then((m) => ({ default: m.Anomalies })),
 );
+const Crm = lazy(() => import('./components/Crm.js').then((m) => ({ default: m.Crm })));
 const AskPanel = lazy(() =>
 	import('./components/AskPanel.js').then((m) => ({ default: m.AskPanel })),
 );
@@ -92,6 +93,7 @@ type View =
 	| 'retention'
 	| 'experiments'
 	| 'anomalies'
+	| 'crm'
 	| 'ask'
 	| 'docs';
 
@@ -167,6 +169,7 @@ const TABS: { id: View; label: string }[] = [
 	{ id: 'retention', label: 'Retention' },
 	{ id: 'experiments', label: 'Experiments' },
 	{ id: 'anomalies', label: 'Anomalies' },
+	{ id: 'crm', label: 'CRM' },
 	{ id: 'ask', label: 'Ask' },
 	{ id: 'docs', label: 'Documentation' },
 ];
@@ -620,6 +623,8 @@ function Dashboard(): ReactElement {
 									range={range}
 									onInvestigate={investigate}
 								/>
+							) : view === 'crm' ? (
+								<Crm siteId={siteId} />
 							) : view === 'ask' ? (
 								<AskPanel apiKey={apiKey} siteId={siteId} range={range} />
 							) : (
