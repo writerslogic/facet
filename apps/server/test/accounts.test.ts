@@ -299,3 +299,22 @@ describe('revoking sessions', () => {
 		expect(await revokeSessions(env, 'no-such-user')).toBe(false);
 	});
 });
+
+describe('account bootstrap', () => {
+	it('never leaves a user without the team that makes them reachable', async () => {
+		// The three inserts are one batch, which for D1 is one transaction. Split apart, a failure
+		// between them strands a user who can never gain a team — every later login takes the
+		// `existing` branch and returns early, so nothing repairs it and the users table still looks
+		// healthy. This pins the invariant rather than the statement count: a refactor that drops the
+		// membership insert fails here.
+		const user = await upsertUserByEmail(env, 'bootstrap@example.com', Date.now());
+		const memberships = await userMemberships(env, user.id);
+		expect(memberships).toHaveLength(1);
+		expect(memberships[0]?.role).toBe('owner');
+		// And the team the membership names actually exists, rather than pointing at nothing.
+		const team = await env.DB.prepare('SELECT id FROM teams WHERE id = ?')
+			.bind(memberships[0]?.teamId)
+			.first<{ id: string }>();
+		expect(team?.id).toBe(memberships[0]?.teamId);
+	});
+});
