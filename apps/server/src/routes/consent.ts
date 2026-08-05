@@ -22,6 +22,7 @@ import { validationErrorHook } from '../lib/http.js';
 import {
 	deriveVisitorHash,
 	getScopedSalt,
+	saltScope,
 	resolvePolicy,
 	windowEndMs,
 	windowKey,
@@ -57,7 +58,7 @@ consentRoutes.post(
 		}
 		const now = Date.now();
 		const wk = windowKey(policy.window, now);
-		const scope = `${siteId}:${policy.window}:${wk}`;
+		const scope = saltScope(siteId, policy.window, wk);
 		const salt = await getScopedSalt(
 			c.env,
 			scope,
@@ -126,7 +127,7 @@ consentRoutes.delete(
 			return c.json({ revoked: 0 });
 		}
 		const wk = windowKey(policy.window, now);
-		const scope = `${siteId}:${policy.window}:${wk}`;
+		const scope = saltScope(siteId, policy.window, wk);
 		const salt = await getScopedSalt(
 			c.env,
 			scope,

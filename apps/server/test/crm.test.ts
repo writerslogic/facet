@@ -1308,3 +1308,82 @@ describe('a capped rollup does not claim what it did not look at', () => {
 		});
 	});
 });
+
+describe('a genuine consent statement authorizes only the person it was issued for', () => {
+	it('refuses a real, deployment-signed grant filed under another contact id', async () => {
+		// The gap signature verification cannot see. The claims name a site, a tier and a hash, but
+		// never the uid — `external_user_id_present` is a bit, not a value — so Ada's UNMODIFIED,
+		// validly-signed statement satisfies every signature and claim check when copied into a row
+		// whose `external_user_id` column says someone else. Nothing is forged, so the crypto has no
+		// objection; only recomputing the hash from the row's uid can tell the two apart.
+		//
+		// The statement is obtained the way an operator really could: the contact export returns it
+		// verbatim, deliberately, as cryptographic evidence of what was consented to.
+		const e = await withSigningKey(env);
+		const cookie = await operator(e, 'admin@example.com', 'admin');
+		await e.DB.prepare(
+			'INSERT OR REPLACE INTO site_config (site_id, tier, salt_window, updated_at) VALUES (?, ?, ?, ?)',
+		)
+			.bind(SITE, 'identified', 'day', Date.now())
+			.run();
+		const { key } = await issueKey(e, SITE, 'server', Date.now());
+		const grant = await app.request(
+			'/api/consent',
+			{
+				method: 'POST',
+				headers: { Authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+				body: JSON.stringify({
+					tier: 'identified',
+					salt_window: 'day',
+					user_id: 'ada-uid',
+					ip: '203.0.113.9',
+					user_agent: 'test-agent',
+				}),
+			},
+			e,
+		);
+		expect(grant.status).toBe(201);
+		const ada = await e.DB.prepare(
+			'SELECT visitor_hash, statement FROM consent_records WHERE site_id = ? AND external_user_id = ?',
+		)
+			.bind(SITE, 'ada-uid')
+			.first<{ visitor_hash: string; statement: string }>();
+
+		// Ada really browsed; these are her events, reachable if the gate fails.
+		const insert = e.DB.prepare(
+			`INSERT INTO events (id, site_id, name, hostname, path, referrer, visitor_hash, created_at)
+			 VALUES (?, ?, NULL, 'shop.example.com', '/pricing', '', ?, ?)`,
+		);
+		await e.DB.batch([
+			insert.bind(crypto.randomUUID(), SITE, ada?.visitor_hash as string, Date.now() - 10),
+			insert.bind(crypto.randomUUID(), SITE, ada?.visitor_hash as string, Date.now() - 5),
+		]);
+
+		// Ada's statement, byte for byte, filed under Mallory's id.
+		await e.DB.prepare(
+			`INSERT INTO consent_records
+			 (id, site_id, visitor_hash, tier, external_user_id, salt_window, window_key, gpc_at_grant, granted_at, expires_at, revoked_at, statement)
+			 SELECT ?, site_id, visitor_hash, tier, ?, salt_window, window_key, gpc_at_grant, granted_at, expires_at, revoked_at, statement
+			 FROM consent_records WHERE site_id = ? AND external_user_id = ?`,
+		)
+			.bind(crypto.randomUUID(), 'mallory-uid', SITE, 'ada-uid')
+			.run();
+
+		const mallory = await createContact(e, cookie, {
+			name: 'Mallory',
+			external_user_id: 'mallory-uid',
+		});
+		const res = await crm(e, `/contacts/${mallory.id}/analytics`, {}, cookie);
+		expect(await res.json()).toMatchObject({ linked: false, reason: 'no_active_consent' });
+
+		// And the rightful owner is unaffected — the check binds the grant, it does not break it.
+		const adaContact = await createContact(e, cookie, {
+			name: 'Ada',
+			external_user_id: 'ada-uid',
+		});
+		const hers = await crm(e, `/contacts/${adaContact.id}/analytics`, {}, cookie);
+		const body = (await hers.json()) as { linked: boolean; activity: { total: number } };
+		expect(body.linked).toBe(true);
+		expect(body.activity.total).toBe(2);
+	});
+});

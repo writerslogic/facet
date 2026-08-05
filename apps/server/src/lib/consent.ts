@@ -28,6 +28,7 @@ import {
 } from '@facet/trust';
 import type { Env } from '../env.js';
 import { chunked } from './constants.js';
+import { deriveVisitorHash, readScopedSalt, saltScope } from './identity.js';
 import { deploymentDid, getSigningKey } from './signing.js';
 
 export const CONSENT_STATEMENT_TYPE = 'facet-consent/1';
@@ -183,6 +184,55 @@ export async function storeConsentRecord(env: Env, row: ConsentRecordRow): Promi
 }
 
 /**
+ * Does this statement's hash actually belong to the uid the ROW is filed under?
+ *
+ * This is the check that makes the column safe to group by. The claims name a site, a tier and a
+ * hash, but they never name the uid — `external_user_id_present` is a bit, not a value — so a
+ * GENUINE, deployment-signed grant for Ada satisfies every other check when copied into a row whose
+ * `external_user_id` column says `bob-uid`. Signature verification cannot catch that: nothing is
+ * forged. Bob's contact page would simply show Ada's browsing.
+ *
+ * The binding is recoverable because the identified pre-image is `uid:<uid>|salt|siteId`, and the
+ * claims carry the window the salt belongs to. Recomputing the hash from the ROW's uid and requiring
+ * it to equal the SIGNED one closes the replay: a statement now authorizes exactly the person it was
+ * issued for.
+ *
+ * A missing salt fails closed. It cannot happen for a live grant — retention drops a consent record
+ * at `granted_at < cutoff` and its salt only at `window_end < cutoff`, and a window always ends after
+ * the grant inside it, so the salt outlives the record — but "the salt is gone" and "this hash is
+ * someone else's" are indistinguishable from here, and the safe reading of an unverifiable link is
+ * that there is no link.
+ */
+async function hashBelongsToUid(
+	env: Env,
+	siteId: string,
+	externalUserId: string,
+	claims: ConsentClaims,
+	saltCache: Map<string, string | null>,
+): Promise<boolean> {
+	const scope = saltScope(siteId, claims.salt_window, claims.window_key);
+	let salt = saltCache.get(scope);
+	if (salt === undefined) {
+		salt = await readScopedSalt(env, scope);
+		saltCache.set(scope, salt);
+	}
+	if (!salt) return false;
+	// An empty uid would fall through `buildPreimage`'s identified branch to the ip/ua pre-image and
+	// compare an unrelated hash, so it is rejected here rather than answered by accident.
+	if (!externalUserId) return false;
+	// `ip`/`ua` are structurally required by `DeriveInputs` and unused on the identified branch, whose
+	// pre-image is `uid:<uid>|salt|siteId`. Blanks state that rather than smuggling in values this
+	// check has no business knowing.
+	const expected = await deriveVisitorHash(
+		'identified',
+		{ ip: '', ua: '', uid: externalUserId },
+		salt,
+		siteId,
+	);
+	return expected === claims.visitor_hash;
+}
+
+/**
  * The ONE bridge from a CRM contact to analytics. Resolve a site's opaque `external_user_id` to the
  * visitor hashes it is currently allowed to be linked to — one per salt window with a live grant.
  *
@@ -222,9 +272,9 @@ export async function findLinkedVisitorHashes(
  * from having no consent record at all.
  *
  * The `external_user_id` COLUMN groups the results and the SIGNED claims authorize them: the column
- * says which contact asked, the statement says what they may see. A row whose column names one uid
- * while pointing at another person's hash still has to survive the signature check, which is what
- * stops the grouping key from becoming an authorization key.
+ * says which contact asked, the statement says what they may see. Those two are tied together by
+ * `hashBelongsToUid` and not by the signature — a genuine statement carries no uid to check, so
+ * verification alone would happily let one person's grant be filed under another's id.
  *
  * The uid list is CHUNKED across statements rather than bound in one. D1 rejects any query carrying
  * more than 100 bound parameters, and this one spends two of them on `site_id` and `now` — so a
@@ -244,6 +294,8 @@ export async function findLinkedVisitorHashesForMany(
 	const key = await loading;
 	const iss = deploymentDid(url);
 	const seen = new Map<string, Set<string>>();
+	// Rows routinely share a salt window, so the salt is fetched once per window rather than per row.
+	const saltCache = new Map<string, string | null>();
 	for (const batch of chunked(lookup.externalUserIds)) {
 		const placeholders = batch.map(() => '?').join(', ');
 		const { results } = await env.DB.prepare(
@@ -266,6 +318,8 @@ export async function findLinkedVisitorHashesForMany(
 			if (p.site_id !== lookup.siteId) continue;
 			if (p.tier !== 'identified') continue;
 			if (!p.external_user_id_present) continue;
+			if (!(await hashBelongsToUid(env, lookup.siteId, row.external_user_id, p, saltCache)))
+				continue;
 			const hashes = seen.get(row.external_user_id) ?? new Set<string>();
 			hashes.add(p.visitor_hash);
 			seen.set(row.external_user_id, hashes);
