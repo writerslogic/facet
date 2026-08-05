@@ -141,4 +141,57 @@ describe('enforceRetention', () => {
 			await count('SELECT COUNT(*) AS n FROM consent_records WHERE id = ?', 'c-fresh'),
 		).toBe(1);
 	});
+
+	it('purges magic-link tokens on their own expiry, not the raw window', async () => {
+		// The distinction under test. A token expired one minute ago is FRESH by the ninety-day raw
+		// cutoff, so a sweep that reused `cutoff` here would keep it for another eighty-nine days —
+		// along with the email address it carries — despite it having been unredeemable the whole time.
+		await env.DB.prepare(
+			'INSERT INTO auth_tokens (id, token_hash, email, expires_at, used_at, created_at) VALUES (?,?,?,?,?,?)',
+		)
+			.bind('t-expired', 'h1', 'expired@example.com', NOW - 60_000, null, FRESH)
+			.run();
+		await env.DB.prepare(
+			'INSERT INTO auth_tokens (id, token_hash, email, expires_at, used_at, created_at) VALUES (?,?,?,?,?,?)',
+		)
+			.bind('t-live', 'h2', 'live@example.com', NOW + 60_000, null, NOW)
+			.run();
+		// Created before the raw cutoff and long dead, but the point is that expiry alone decides.
+		await env.DB.prepare(
+			'INSERT INTO auth_tokens (id, token_hash, email, expires_at, used_at, created_at) VALUES (?,?,?,?,?,?)',
+		)
+			.bind('t-ancient', 'h3', 'ancient@example.com', OLD, OLD, OLD)
+			.run();
+
+		await enforceRetention(env, NOW);
+
+		expect(await count('SELECT COUNT(*) AS n FROM auth_tokens WHERE id = ?', 't-expired')).toBe(
+			0,
+		);
+		expect(await count('SELECT COUNT(*) AS n FROM auth_tokens WHERE id = ?', 't-ancient')).toBe(
+			0,
+		);
+		// An unexpired token is still redeemable, so purging it would break a link already in an inbox.
+		expect(await count('SELECT COUNT(*) AS n FROM auth_tokens WHERE id = ?', 't-live')).toBe(1);
+	});
+
+	it('leaves no operator email behind once the tokens carrying it expire', async () => {
+		// The privacy claim, asserted on the column rather than the row count: `auth_tokens.email` is
+		// the only place a would-be operator's address is stored before they ever sign in, so a request
+		// for an address that never became an account must leave nothing at all behind.
+		await env.DB.prepare(
+			'INSERT INTO auth_tokens (id, token_hash, email, expires_at, used_at, created_at) VALUES (?,?,?,?,?,?)',
+		)
+			.bind('t-never-used', 'h4', 'stranger@example.com', NOW - 1, null, FRESH)
+			.run();
+
+		await enforceRetention(env, NOW);
+
+		expect(
+			await count(
+				'SELECT COUNT(*) AS n FROM auth_tokens WHERE email = ?',
+				'stranger@example.com',
+			),
+		).toBe(0);
+	});
 });

@@ -25,8 +25,29 @@ import {
 } from '../lib/accounts.js';
 import { requireAdmin } from '../lib/auth.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
+import { rateLimit } from '../lib/ratelimit.js';
+import { clientIp } from '../lib/request-meta.js';
 
 export const authRoutes = new Hono<AppEnv>();
+
+/**
+ * The two unauthenticated routes are limited by client IP; nothing else on this router is reachable
+ * without either a session or ADMIN_TOKEN.
+ *
+ * `/request` writes a row on every call and cannot do otherwise: looking up whether the address has
+ * an account first is precisely the check that would leak that it does, so the insert happens for any
+ * well-formed email an anonymous caller offers. That makes this the only thing bounding `auth_tokens`
+ * against an anonymous writer — and on a deployment with an email binding, the only thing bounding
+ * how many messages that writer can aim at somebody else's inbox.
+ *
+ * `/verify` is the guess-the-token surface. The secret is 192 bits, so the limit is not what makes
+ * guessing infeasible; it stops the attempt from costing a D1 read apiece.
+ *
+ * Separate buckets deliberately. Shared, a flood of `/request` from one office NAT would lock every
+ * operator behind it out of redeeming the link they legitimately received.
+ */
+const requestLimit = rateLimit((c) => `auth-request:${clientIp(c.req.raw)}`);
+const verifyLimit = rateLimit((c) => `auth-verify:${clientIp(c.req.raw)}`);
 
 const RequestSchema = v.object({
 	email: v.pipe(v.string(), v.email(), v.maxLength(254)),
@@ -45,11 +66,20 @@ function requireSecret(env: AppEnv['Bindings']): string {
 // Request a magic link. Always 202 (never reveals whether the email has an account). The link the user
 // clicks is `${origin}/api/auth/verify?token=<token>`; delivery by email is a deployment concern (bind a
 // Cloudflare Email sender). The token itself is created here regardless.
-authRoutes.post('/request', vValidator('json', RequestSchema, validationErrorHook), async (c) => {
-	requireSecret(c.env);
-	await createMagicToken(c.env, c.req.valid('json').email, Date.now());
-	return c.body(null, 202);
-});
+//
+// The limiter runs BEFORE the body validator, unlike `/api/event` where auth has to run first to know
+// which bucket to charge. Here the bucket is the IP, known without reading the body at all, so a flood
+// of malformed bodies is charged rather than waved through.
+authRoutes.post(
+	'/request',
+	requestLimit,
+	vValidator('json', RequestSchema, validationErrorHook),
+	async (c) => {
+		requireSecret(c.env);
+		await createMagicToken(c.env, c.req.valid('json').email, Date.now());
+		return c.body(null, 202);
+	},
+);
 
 // Fully self-hosted bootstrap / invite: an operator holding ADMIN_TOKEN mints a magic link directly and
 // gets it back in the response (safe — the caller is trusted). This means a self-hoster needs NO email or
@@ -69,24 +99,29 @@ authRoutes.post(
 
 // Exchange a magic-link token for a session cookie. Accepts the token in the JSON body (SPA) or a `token`
 // query param (direct link click).
-authRoutes.post('/verify', vValidator('json', VerifySchema, validationErrorHook), async (c) => {
-	const secret = requireSecret(c.env);
-	const now = Date.now();
-	const email = await consumeMagicToken(c.env, c.req.valid('json').token, now);
-	if (!email) {
-		throw new ApiError('invalid_token', 401, 'the link is invalid, used, or expired');
-	}
-	const user = await upsertUserByEmail(c.env, email, now);
-	const session = await signSession(user.id, secret, now, user.sessionEpoch);
-	setCookie(c, SESSION_COOKIE, session, {
-		httpOnly: true,
-		secure: true,
-		sameSite: 'Lax',
-		path: '/',
-		maxAge: 30 * 24 * 60 * 60,
-	});
-	return c.json({ user });
-});
+authRoutes.post(
+	'/verify',
+	verifyLimit,
+	vValidator('json', VerifySchema, validationErrorHook),
+	async (c) => {
+		const secret = requireSecret(c.env);
+		const now = Date.now();
+		const email = await consumeMagicToken(c.env, c.req.valid('json').token, now);
+		if (!email) {
+			throw new ApiError('invalid_token', 401, 'the link is invalid, used, or expired');
+		}
+		const user = await upsertUserByEmail(c.env, email, now);
+		const session = await signSession(user.id, secret, now, user.sessionEpoch);
+		setCookie(c, SESSION_COOKIE, session, {
+			httpOnly: true,
+			secure: true,
+			sameSite: 'Lax',
+			path: '/',
+			maxAge: 30 * 24 * 60 * 60,
+		});
+		return c.json({ user });
+	},
+);
 
 // The signed-in user and their team roles, or 401.
 authRoutes.get('/me', async (c) => {
