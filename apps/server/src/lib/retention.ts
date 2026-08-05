@@ -1,6 +1,9 @@
 // Retention cleanup: delete raw events, sessions, salts, and identity mappings older than the rolling
 // window. `event_rollups` are durable history and are never deleted. Invoked from the cron handler.
 //
+// Spent magic-link tokens are swept here too, on their own much shorter window — see the delete for
+// why it is `now` and not the raw cutoff.
+//
 // The optional CRM has its own window and its own function. Contacts are NOT on any schedule — a
 // contact is a business record that is deleted by an explicit act, never by a cron — but the audit
 // log recording who read them is, because it is the one CRM table that grows on its own.
@@ -43,6 +46,16 @@ export async function enforceRetention(env: Env, now: number): Promise<void> {
 	// Consent records aged past the window: the events they governed are gone, so drop the mapping and
 	// the at-rest raw uid. (Elevation already stops the instant a record expires or is revoked.)
 	await db(env).delete(schema.consentRecords).where(lt(schema.consentRecords.granted_at, cutoff));
+	// Magic-link tokens, keyed on their OWN expiry rather than the raw window — a token's life is
+	// fifteen minutes, so ageing it out over ninety days would keep it for the other eighty-nine and a
+	// half for no reason. `consumeMagicToken` already refuses any row whose `expires_at` has passed, so
+	// nothing redeemable is removed here and a replay hits the same 401 either way.
+	//
+	// It is a retention concern rather than a housekeeping one: `auth_tokens` was written by two paths
+	// and read by one, and deleted by NOTHING, so every login attempt a deployment ever served left a
+	// permanent row holding the operator's email address long after the link it authorised went dead.
+	// That is exactly the accumulation this job exists to stop, on the one table that was missed.
+	await db(env).delete(schema.authTokens).where(lt(schema.authTokens.expiresAt, now));
 }
 
 /**
