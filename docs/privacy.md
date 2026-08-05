@@ -212,6 +212,14 @@ Deleting the old salts means expired days can never be re-hashed even if raw inp
 resurfaced. **Aggregated rollups are durable and are never deleted**, so long-range trend
 history survives without retaining any raw, potentially re-identifiable rows.
 
+**Magic-link tokens** are swept by the same cron, but on their own expiry rather than
+`RAW_RETENTION_DAYS` — a sign-in link lives 15 minutes, so ageing it out over ninety days would
+retain it for the other eighty-nine. This is the one row in the system that holds an email address
+for somebody who is not (yet) an operator: `POST /api/auth/request` deliberately cannot check
+whether an address has an account before writing, because that check is what would leak the answer.
+Once the link expires the row is deleted, so an address that was typed into the sign-in form —
+correctly or not — and never used leaves nothing behind.
+
 **Analytics Engine.** A deployment may additionally bind Analytics Engine as a columnar mirror of
 the same derived event columns (no new identifier, no raw IP — see
 [`apps/server/src/lib/ae.ts`](../apps/server/src/lib/ae.ts)). Cloudflare stores an AE data point for
