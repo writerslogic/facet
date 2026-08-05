@@ -472,6 +472,105 @@ describe('GET /api/crm/audit', () => {
 		expect((await crm(env, '/audit?action=contact.everything', {}, cookie)).status).toBe(400);
 	});
 
+	it('reports the horizon, so an empty page cannot read as "this never happened"', async () => {
+		// The log is the one CRM table that ages out. Without the window, "no entries" is
+		// indistinguishable from "it aged out" — and an auditor concluding the former when the latter
+		// is true has drawn exactly the wrong conclusion from an access log.
+		const e = { ...env, CRM_AUDIT_RETENTION_DAYS: '30' } as TestEnv;
+		const { cookie } = await operator(e, 'admin@example.com', 'admin');
+		const before = Date.now();
+		const body = (await (await crm(e, '/audit', {}, cookie)).json()) as {
+			retention_days: number;
+			covers_since: number;
+		};
+		const after = Date.now();
+		expect(body.retention_days).toBe(30);
+		// Bracketed by the request itself: the horizon is 30 days behind the moment the server
+		// answered, which lies between these two readings.
+		expect(body.covers_since).toBeGreaterThanOrEqual(before - 30 * DAY);
+		expect(body.covers_since).toBeLessThanOrEqual(after - 30 * DAY);
+	});
+
+	it('reports the default horizon when the deployment configured none', async () => {
+		const { cookie } = await operator(env, 'admin@example.com', 'admin');
+		const body = (await (await crm(env, '/audit', {}, cookie)).json()) as {
+			retention_days: number;
+		};
+		expect(body.retention_days).toBe(365);
+	});
+
+	it('names the actor, because an id nobody can resolve is not accountability', async () => {
+		const { id: userId, cookie } = await operator(env, 'admin@example.com', 'admin');
+		const res = await crm(env, '/audit', {}, cookie);
+		const body = (await res.json()) as {
+			entries: (AuditRow & { actor_email: string | null })[];
+		};
+		expect(body.entries[0]?.actor_user_id).toBe(userId);
+		expect(body.entries[0]?.actor_email).toBe('admin@example.com');
+	});
+
+	it('keeps the entry when the account behind it is gone, with no email to give it', async () => {
+		const { id: userId, cookie } = await operator(env, 'admin@example.com', 'admin');
+		await crm(env, '/contacts', {}, cookie);
+		// A closed account cannot be given a name back, and inventing one would be worse than the
+		// blank. The id stays either way, so the entry still says *someone specific* did this.
+		await env.DB.prepare('DELETE FROM users WHERE id = ?').bind(userId).run();
+		// The session outlives the row, which is what makes this reachable at all: sessions are
+		// stateless and verify against the secret, not against a user lookup.
+		const res = await crm(env, '/audit', {}, cookie);
+		const body = (await res.json()) as {
+			entries: (AuditRow & { actor_email: string | null })[];
+		};
+		expect(body.entries.length).toBeGreaterThan(0);
+		expect(body.entries.every((e) => e.actor_user_id === userId)).toBe(true);
+		expect(body.entries.every((e) => e.actor_email === null)).toBe(true);
+	});
+
+	it('resolves a full page of distinct actors', async () => {
+		// A page caps at 100 entries, so it can name 100 distinct operators — and D1 refuses a
+		// statement carrying more than 100 bound parameters. One lookup for the whole page therefore
+		// sits EXACTLY on that ceiling, correct only while two unrelated limits keep their current
+		// relationship, which is why the resolve chunks at the same margin as every other IN list.
+		//
+		// 99 seeded, because reading the log writes an entry of its own: this page carries exactly the
+		// 100 distinct actors that are the most a single page can ever name.
+		const { cookie } = await operator(env, 'admin@example.com', 'admin');
+		const now = Date.now();
+		const users: D1PreparedStatement[] = [];
+		const entries: D1PreparedStatement[] = [];
+		for (let i = 0; i < 99; i++) {
+			const id = `actor-${i}`;
+			users.push(
+				env.DB.prepare('INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)').bind(
+					id,
+					`op${i}@example.com`,
+					now,
+				),
+			);
+			entries.push(
+				(env.CRM_DB as D1Database)
+					.prepare(
+						'INSERT INTO crm_audit_log (id, site_id, actor_user_id, actor_role, action, target_id, occurred_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+					)
+					.bind(`entry-${i}`, SITE, id, 'analyst', 'contact.list', null, now + i),
+			);
+		}
+		await env.DB.batch(users);
+		await (env.CRM_DB as D1Database).batch(entries);
+
+		const res = await crm(env, '/audit?limit=100', {}, cookie);
+		expect(res.status).toBe(200);
+		const body = (await res.json()) as {
+			entries: (AuditRow & { actor_email: string | null })[];
+		};
+		expect(body.entries).toHaveLength(100);
+		const resolved = body.entries.filter((e) => e.actor_user_id.startsWith('actor-'));
+		expect(resolved).toHaveLength(99);
+		expect(
+			resolved.every((e) => e.actor_email === `op${e.actor_user_id.slice(6)}@example.com`),
+		).toBe(true);
+	});
+
 	it('pages within the same bounds as every other CRM list', async () => {
 		const { cookie } = await operator(env, 'admin@example.com', 'admin');
 		for (let i = 0; i < 3; i++) {

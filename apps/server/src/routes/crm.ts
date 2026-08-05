@@ -81,16 +81,17 @@ import {
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv, Env } from '../env.js';
-import type { Role } from '../lib/accounts.js';
+import { type Role, emailsByUserId } from '../lib/accounts.js';
 import { requireTeamRole } from '../lib/auth.js';
 import {
 	eraseConsentByExternalUserId,
 	findLinkedVisitorHashes,
 	findLinkedVisitorHashesForMany,
 } from '../lib/consent.js';
-import { CRM_MAX_BODY_BYTES } from '../lib/constants.js';
+import { CRM_MAX_BODY_BYTES, DAY_MS } from '../lib/constants.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
 import { rateLimit } from '../lib/ratelimit.js';
+import { crmAuditRetentionDays } from '../lib/retention.js';
 
 export const crmRoutes = new Hono<AppEnv>();
 
@@ -624,6 +625,16 @@ crmRoutes.get('/companies/:id/analytics', crmGate('analyst', 'company.analytics'
  * There is no way to write here. No route updates or deletes an entry, deleting a contact leaves its
  * entries standing, and only the retention cron removes anything: a log the people it names can edit
  * records nothing. Reading it is itself recorded, by the same gate as every other route.
+ *
+ * EACH ENTRY IS ANSWERED WITH THE ACTOR'S EMAIL, resolved at read time from the analytics database's
+ * `users` table. It is stored as an id — the stable identifier, and one that does not leave an email
+ * behind in the log after the account is closed — but "operator 8f3a1c…" is a record, not
+ * accountability, and an audit log nobody can act on is decoration. This is a deliberate disclosure
+ * and worth naming as one: it tells a team admin the addresses of the colleagues who read this site's
+ * contacts, which no other session-reachable route does. It is bounded to exactly those people —
+ * everyone in the log holds a role on this admin's own team, because that is what authorized the
+ * access being reported — and it is the smallest thing that makes the log usable for the purpose it
+ * exists for. `null` where the account has since been closed; the id stays either way.
  */
 crmRoutes.get(
 	'/audit',
@@ -638,6 +649,31 @@ crmRoutes.get(
 			limit: query.limit ?? CRM_DEFAULT_PAGE,
 			offset: query.offset ?? 0,
 		});
-		return c.json({ entries, total, role: c.get('role') });
+		// One lookup for the page, not one per row: an operator appears on many entries and a page of
+		// their own activity would otherwise be 25 identical queries.
+		const emails = await emailsByUserId(
+			c.env,
+			entries.map((e) => e.actor_user_id),
+		);
+		const retentionDays = crmAuditRetentionDays(c.env);
+		return c.json({
+			entries: entries.map((e) => ({
+				...e,
+				actor_email: emails.get(e.actor_user_id) ?? null,
+			})),
+			total,
+			role: c.get('role'),
+			// NEVER A SILENT HORIZON. This log is the one CRM table that ages out, so "no entries"
+			// means either that nothing happened or that it happened too long ago — and from the rows
+			// alone those are indistinguishable. A reader concluding the first when the second is true
+			// has drawn exactly the wrong conclusion from an audit log, so the window comes back with
+			// every page rather than living only in a config file the reader cannot see.
+			//
+			// `covers_since` is the guarantee, not the oldest row: purging runs hourly, so entries a
+			// little older than this may still be present. It is the point before which nothing can be
+			// relied on to still be here.
+			retention_days: retentionDays,
+			covers_since: Date.now() - retentionDays * DAY_MS,
+		});
 	},
 );

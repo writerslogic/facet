@@ -6,7 +6,7 @@
 // and "this person did nothing" are different claims, and zeroes assert the second one. The API is
 // careful to distinguish them; throwing that away in the render would undo it.
 
-import { Download, Link2Off } from 'lucide-react';
+import { Download, Link2Off, ScrollText } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useContactAnalytics, useDeleteContact, useUpdateContact } from '../../hooks/crm.js';
 import { type CrmContact, linkReasonText } from '../../lib/crm.js';
@@ -78,6 +78,7 @@ export function ContactDetail({
 	canAdminister,
 	onDeleted,
 	onOpenCompany,
+	onOpenAudit,
 }: {
 	siteId: string;
 	contact: CrmContact;
@@ -87,6 +88,10 @@ export function ContactDetail({
 	onDeleted: (consentRecordsErased: number) => void;
 	/** Jump to the linked company. Omitted when there is nothing to jump to. */
 	onOpenCompany?: (companyId: string) => void;
+	/** Open the access log filtered to this person — "who has looked at this record", which is the
+	 * question a subject-access request or a suspected leak asks, and one a whole-site log answers
+	 * only by being read end to end. */
+	onOpenAudit?: (targetId: string) => void;
 }): ReactElement {
 	const [editing, setEditing] = useState(false);
 	const [saved, setSaved] = useState<string | null>(null);
@@ -148,6 +153,16 @@ export function ContactDetail({
 				</div>
 				<div className="flex shrink-0 flex-wrap items-center gap-1.5">
 					<StatusChip status={contact.status} />
+					{onOpenAudit ? (
+						<button
+							type="button"
+							onClick={() => onOpenAudit(contact.id)}
+							className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium text-xs transition"
+						>
+							<ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+							Access log
+						</button>
+					) : null}
 					<button
 						type="button"
 						onClick={() => {

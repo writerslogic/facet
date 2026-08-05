@@ -11,6 +11,7 @@ import { sessionFetch } from '../api.js';
 import {
 	type CompanyAnalytics,
 	type ContactAnalytics,
+	type CrmAuditEntry,
 	type CrmCompany,
 	type CrmContact,
 	crmBlockOf,
@@ -140,6 +141,68 @@ export function useCompanyAnalytics(siteId: string, id: string) {
 	});
 }
 
+/**
+ * One page of the access log, with the two facts a reader needs beside the rows.
+ *
+ * `covers_since`/`retention_days` are the horizon: this is the one CRM table that ages out, so an
+ * empty page means either that nothing happened or that it happened too long ago, and the rows alone
+ * cannot tell those apart. The server reports the window so the panel can.
+ */
+export interface CrmAuditPage {
+	entries: CrmAuditEntry[];
+	total: number;
+	role?: string;
+	retention_days: number;
+	covers_since: number;
+}
+
+/** The audit filters, all exact matches — the log holds ids and action names, not prose to search. */
+export interface CrmAuditParams {
+	/** `''` means every action. */
+	action: string;
+	/** A contact or company id; `''` means every target. */
+	targetId: string;
+	/** An operator id; `''` means every operator. */
+	actorUserId: string;
+	offset: number;
+}
+
+/**
+ * The access log for this site.
+ *
+ * Deliberately NOT cached across filter changes the way the list queries are: the point of this view
+ * is to answer "what has happened", and a stale answer to that is worse than a slow one. `staleTime`
+ * is left at the client default (60s) rather than raised, and every CRM mutation elsewhere in the tab
+ * invalidates it, because every one of them writes an entry.
+ */
+export function useCrmAudit(siteId: string, params: CrmAuditParams) {
+	return useQuery({
+		queryKey: ['crm', 'audit', siteId, params],
+		queryFn: () => {
+			const qs = new URLSearchParams({
+				site_id: siteId,
+				limit: String(CRM_PAGE_SIZE),
+				offset: String(params.offset),
+			});
+			if (params.action) qs.set('action', params.action);
+			if (params.targetId) qs.set('target_id', params.targetId);
+			if (params.actorUserId) qs.set('actor_user_id', params.actorUserId);
+			return sessionFetch<CrmAuditPage>(`/api/crm/audit?${qs.toString()}`);
+		},
+		enabled: Boolean(siteId),
+		retry,
+	});
+}
+
+/**
+ * Mark the access log stale. Called by every mutation here, because every one of them writes an
+ * entry — the log is a record of requests, not of records, so a change that leaves it untouched in
+ * the cache would show an admin a page that is missing the very act they just performed.
+ */
+function auditIsStale(qc: ReturnType<typeof useQueryClient>, siteId: string): Promise<void> {
+	return qc.invalidateQueries({ queryKey: ['crm', 'audit', siteId] });
+}
+
 /** Field values a create/update submits. Empty strings are meaningful: the API normalises them to
  * NULL, which is how a form clears a field it previously set. */
 export type CrmFields = Record<string, string>;
@@ -152,7 +215,10 @@ export function useCreateContact(siteId: string) {
 				method: 'POST',
 				body,
 			}),
-		onSuccess: () => qc.invalidateQueries({ queryKey: ['crm', 'contacts', siteId] }),
+		onSuccess: () => {
+			void qc.invalidateQueries({ queryKey: ['crm', 'contacts', siteId] });
+			void auditIsStale(qc, siteId);
+		},
 	});
 }
 
@@ -172,6 +238,7 @@ export function useUpdateContact(siteId: string, id: string) {
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-analytics', siteId] });
 			// A changed external_user_id changes what the analytics link resolves to.
 			void qc.invalidateQueries({ queryKey: ['crm', 'contact-analytics', siteId, id] });
+			void auditIsStale(qc, siteId);
 		},
 	});
 }
@@ -188,6 +255,7 @@ export function useDeleteContact(siteId: string) {
 			void qc.invalidateQueries({ queryKey: ['crm', 'contacts', siteId] });
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-contacts', siteId] });
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-analytics', siteId] });
+			void auditIsStale(qc, siteId);
 		},
 	});
 }
@@ -205,6 +273,7 @@ export function useCreateCompany(siteId: string) {
 			// The contact form's company picker reads its own query; without this a company created
 			// here is missing from the picker until the cache expires.
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-options', siteId] });
+			void auditIsStale(qc, siteId);
 		},
 	});
 }
@@ -223,6 +292,7 @@ export function useUpdateCompany(siteId: string, id: string) {
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-options', siteId] });
 			// A renamed company is the resolved `company` label on every one of its contacts.
 			void qc.invalidateQueries({ queryKey: ['crm', 'contacts', siteId] });
+			void auditIsStale(qc, siteId);
 		},
 	});
 }
@@ -241,6 +311,7 @@ export function useDeleteCompany(siteId: string) {
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-options', siteId] });
 			// Every unlinked contact's `company` and `company_id` changed.
 			void qc.invalidateQueries({ queryKey: ['crm', 'contacts', siteId] });
+			void auditIsStale(qc, siteId);
 		},
 	});
 }
