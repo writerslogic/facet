@@ -192,9 +192,15 @@ describe('the operator’s own session', () => {
 		);
 		renderPanel(<SessionPanel />);
 
-		// Not a blank line above the address: a whitespace name is unset, as it is everywhere else.
-		expect(await screen.findByText('ada@example.com')).toBeInTheDocument();
-		expect(screen.getAllByText('ada@example.com')).toHaveLength(1);
+		await screen.findByText('ada@example.com');
+
+		// Asserted on the STRUCTURE, not on a count. Keeping the blank name leaves the email present
+		// exactly once either way — it just demotes it under an empty line — so "appears once" passes
+		// on the bug. What changes is how many identity lines there are and which one comes first.
+		const panel = screen.getByRole('heading', { name: 'Your account' }).closest('section');
+		const lines = panel?.querySelectorAll('p[data-selectable]');
+		expect(lines).toHaveLength(1);
+		expect(lines?.[0]?.textContent).toBe('ada@example.com');
 	});
 
 	it('renders nothing at all when there is no session to end', async () => {
