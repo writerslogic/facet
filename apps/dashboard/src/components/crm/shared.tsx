@@ -72,12 +72,17 @@ export function CrmAccessNotice({
 	onRetry,
 	retrying,
 	subject = 'contacts',
+	forbidden,
 }: {
 	error: unknown;
 	onRetry?: () => void;
 	retrying?: boolean;
 	/** What could not be read, for the transient-failure message. */
 	subject?: string;
+	/** Replaces the 403 explanation. The default names `analyst` and says the reader has no CRM
+	 * access, both of which are wrong for a surface gated on `admin` — and a refusal that names the
+	 * wrong requirement sends the reader to ask for a role that would not have helped. */
+	forbidden?: { title: string; body: ReactNode };
 }): ReactElement | null {
 	if (!error) return null;
 	const block = crmBlockOf(error);
@@ -91,7 +96,10 @@ export function CrmAccessNotice({
 			/>
 		);
 	}
-	const { icon: Icon, title, body } = BLOCKS[block];
+	const override = block === 'forbidden' ? forbidden : undefined;
+	const { icon: Icon, title: defaultTitle, body: defaultBody } = BLOCKS[block];
+	const title = override?.title ?? defaultTitle;
+	const body = override?.body ?? defaultBody;
 	return (
 		<div className="surface rounded-2xl p-8 text-center">
 			<span

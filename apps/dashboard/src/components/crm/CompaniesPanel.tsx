@@ -18,12 +18,15 @@ export function CompaniesPanel({
 	selectedId,
 	onSelect,
 	onOpenContact,
+	onOpenAudit,
 }: {
 	siteId: string;
 	/** Owned by the tab shell so a contact's company link can select one from the other panel. */
 	selectedId: string;
 	onSelect: (companyId: string) => void;
 	onOpenContact: (contactId: string) => void;
+	/** Open the access log filtered to one company. */
+	onOpenAudit: (targetId: string) => void;
 }): ReactElement {
 	// The role the server served this list under — the only authoritative answer available to
 	// the browser. See `canAdministerCrm`.
@@ -252,6 +255,7 @@ export function CompaniesPanel({
 						company={selected.data.company}
 						canAdminister={canAdminister}
 						onOpenContact={onOpenContact}
+						onOpenAudit={onOpenAudit}
 						onDeleted={(unlinked) => {
 							setDeleted(
 								unlinked === 1

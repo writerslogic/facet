@@ -84,6 +84,26 @@ export type CompanyAnalytics = CompanyRollupCounts &
 		| { linked: true; visitor_hashes: number; activity: CrmActivity }
 	);
 
+/**
+ * One access-log entry, as `GET /api/crm/audit` returns it.
+ *
+ * `target_id` is a contact or company id and nothing resolves it to a name — deliberately, because
+ * the log holds no contact fields, and once a record is erased its id points at nothing. So the UI
+ * shows the id and offers to filter by it rather than pretending to know who it was.
+ */
+export interface CrmAuditEntry {
+	id: string;
+	site_id: string;
+	actor_user_id: string;
+	/** Null once the account is closed. The id remains, so the entry still names someone specific. */
+	actor_email: string | null;
+	/** The role the request was AUTHORIZED under, not the role that operator holds today. */
+	actor_role: string;
+	action: string;
+	target_id: string | null;
+	occurred_at: number;
+}
+
 /** The reason a CRM request cannot succeed, in a form the UI can turn into one specific sentence. */
 export type CrmBlock = 'unavailable' | 'accounts-off' | 'signed-out' | 'forbidden';
 
@@ -136,6 +156,64 @@ export function canAdministerCrm(role: string | undefined): boolean {
 /** The closed status sets, for the form controls. Declared once so both forms stay in step. */
 export const CONTACT_STATUSES: ContactStatus[] = ['lead', 'active', 'archived'];
 export const COMPANY_STATUSES: CompanyStatus[] = ['lead', 'active', 'archived'];
+
+/**
+ * What kind of act an audit action was, which is what a reader scanning a page of them is actually
+ * looking for. An erasure and a list read are both "an access" and are not remotely the same event.
+ *
+ * `export` is separated from the other reads because it is the single request that discloses the most
+ * about one person, and `erase` from the other writes because it is the only irreversible one.
+ */
+export type AuditTone = 'erase' | 'export' | 'write' | 'read';
+
+export function auditTone(action: string): AuditTone {
+	if (action.endsWith('.delete')) return 'erase';
+	if (action === 'contact.export') return 'export';
+	if (action.endsWith('.create') || action.endsWith('.update')) return 'write';
+	return 'read';
+}
+
+/**
+ * Prose for an audit action. Unknown codes fall back to the code, for the same reason
+ * `linkReasonText` does: a server that starts recording something this build has no name for should
+ * show the name it does have, not drop the row.
+ */
+export function auditActionText(action: string): string {
+	switch (action) {
+		case 'contact.list':
+			return 'Listed contacts';
+		case 'contact.create':
+			return 'Created a contact';
+		case 'contact.read':
+			return 'Opened a contact';
+		case 'contact.update':
+			return 'Edited a contact';
+		case 'contact.delete':
+			return 'Erased a contact';
+		case 'contact.analytics':
+			return 'Viewed a contact’s analytics';
+		case 'contact.export':
+			return 'Exported a contact’s data';
+		case 'company.list':
+			return 'Listed companies';
+		case 'company.create':
+			return 'Created a company';
+		case 'company.read':
+			return 'Opened a company';
+		case 'company.update':
+			return 'Edited a company';
+		case 'company.delete':
+			return 'Deleted a company';
+		case 'company.contacts':
+			return 'Listed a company’s contacts';
+		case 'company.analytics':
+			return 'Viewed a company rollup';
+		case 'audit.read':
+			return 'Read the access log';
+		default:
+			return action;
+	}
+}
 
 /** Prose for a `linked: false` reason code. Unknown codes fall back to the code itself rather than
  * to silence — a reason the reader cannot see is worse than an unfamiliar one. */

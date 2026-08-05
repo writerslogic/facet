@@ -18,14 +18,19 @@
 import { type ReactElement, useState } from 'react';
 import { cn } from '../lib/cn.js';
 import { SegmentNotice } from './CubeFilterBar.js';
+import { AuditPanel } from './crm/AuditPanel.js';
 import { CompaniesPanel } from './crm/CompaniesPanel.js';
 import { ContactsPanel } from './crm/ContactsPanel.js';
 
-type Section = 'contacts' | 'companies';
+type Section = 'contacts' | 'companies' | 'audit';
 
 const SECTIONS: { id: Section; label: string }[] = [
 	{ id: 'contacts', label: 'Contacts' },
 	{ id: 'companies', label: 'Companies' },
+	// Always offered, never hidden behind a role check. The browser cannot prove its own role until a
+	// list response reports one, and a tab that appears late is worse than a tab that explains itself:
+	// the panel answers a 403 by naming the role it needs, which is the thing the reader has to know.
+	{ id: 'audit', label: 'Access log' },
 ];
 
 /** Roving-tabindex arrow navigation, as `role="tablist"` promises to assistive tech. Returns true
@@ -48,10 +53,11 @@ function onSectionKey(key: string, current: Section, select: (id: Section) => vo
 
 export function Crm({ siteId }: { siteId: string }): ReactElement {
 	const [section, setSection] = useState<Section>('contacts');
-	// Both selections live here so the two panels can hand off to each other: a contact's employer
-	// opens the company, and a company's roster opens the person.
+	// Every selection lives here so the panels can hand off to each other: a contact's employer opens
+	// the company, a company's roster opens the person, and either one opens its own access history.
 	const [contactId, setContactId] = useState('');
 	const [companyId, setCompanyId] = useState('');
+	const [auditTarget, setAuditTarget] = useState('');
 
 	const openCompany = (id: string): void => {
 		setCompanyId(id);
@@ -60,6 +66,12 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 	const openContact = (id: string): void => {
 		setContactId(id);
 		if (id) setSection('contacts');
+	};
+	/** Open the log filtered to one record — the question a subject-access request or a suspected
+	 * leak actually asks, and one a page of every access cannot answer. */
+	const openAudit = (id: string): void => {
+		setAuditTarget(id);
+		setSection('audit');
 	};
 
 	return (
@@ -116,14 +128,18 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 						selectedId={contactId}
 						onSelect={setContactId}
 						onOpenCompany={openCompany}
+						onOpenAudit={openAudit}
 					/>
-				) : (
+				) : section === 'companies' ? (
 					<CompaniesPanel
 						siteId={siteId}
 						selectedId={companyId}
 						onSelect={setCompanyId}
 						onOpenContact={openContact}
+						onOpenAudit={openAudit}
 					/>
+				) : (
+					<AuditPanel siteId={siteId} targetId={auditTarget} onTarget={setAuditTarget} />
 				)}
 			</div>
 		</div>

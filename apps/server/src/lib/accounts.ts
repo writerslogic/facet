@@ -2,10 +2,11 @@
 // tokens, and team roles. This is entirely separate from the cookieless VISITOR model — these are the
 // humans who log in to view analytics. No password is ever stored; only a SHA-256 of a one-time token.
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
+import { chunked } from './constants.js';
 import { constantTimeEqualHex, randomHex, sha256Hex } from './crypto.js';
 
 /** The session cookie name, shared by the auth routes and the site-access middleware. */
@@ -179,6 +180,35 @@ export async function upsertUserByEmail(
 		.insert(schema.memberships)
 		.values({ teamId, userId, role: 'owner', createdAt: now });
 	return { id: userId, email: e };
+}
+
+/**
+ * Emails for a set of operator ids, keyed by id.
+ *
+ * Exists for the CRM audit log, which stores `actor_user_id` because that is the stable identifier
+ * and because a log that copied an email would still hold it after the account was closed. An id
+ * nothing can resolve is not accountability, though, so the reader resolves it — and only the reader,
+ * so the resolution follows the account rather than being frozen at write time.
+ *
+ * An id with no row simply does not appear: a closed account leaves entries that name it and cannot
+ * be given a name back, which is the honest answer rather than an invented one.
+ *
+ * CHUNKED at `D1_MAX_IN_PARAMS`. One audit page can carry up to 100 distinct actors, and D1's ceiling
+ * is exactly 100 bound parameters — so a full page would sit precisely on the cliff, and stay correct
+ * only while two unrelated limits keep their current relationship. This takes the same margin every
+ * other `IN` list in the codebase takes instead.
+ */
+export async function emailsByUserId(env: Env, userIds: string[]): Promise<Map<string, string>> {
+	const byId = new Map<string, string>();
+	const unique = [...new Set(userIds)];
+	for (const batch of chunked(unique)) {
+		const rows = await db(env)
+			.select({ id: schema.users.id, email: schema.users.email })
+			.from(schema.users)
+			.where(inArray(schema.users.id, batch));
+		for (const row of rows) byId.set(row.id, row.email);
+	}
+	return byId;
 }
 
 /** A user's team memberships (team id + role). */

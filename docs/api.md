@@ -1488,8 +1488,8 @@ per-contact export, which accounts for each person separately.
 
 The access log. **Every authorized request to any route above writes one entry, before its handler
 runs** — reads included, which is the point: a delete leaves a hole you can see, a read leaves
-nothing. An entry is `{ id, site_id, actor_user_id, actor_role, action, target_id, occurred_at }`,
-and the response is `{ entries: [...], total, role }`, newest first.
+nothing. An entry is `{ id, site_id, actor_user_id, actor_role, action, target_id, occurred_at,
+actor_email }`, and the response is `{ entries: [...], total, role }`, newest first.
 
 Written **first**, not last. Logging afterwards means any failure between the disclosure and the
 record — a D1 error, a crash — leaves an access that happened and was never written down, and for a
@@ -1506,6 +1506,13 @@ company the request named, or `null` for a collection route and for a **create**
 not exist yet when the entry is written. `actor_role` is the role the request was
 **authorized under**, stored rather than resolved later, so "an admin exported this" stays true after
 they are demoted. All three filters are exact matches; a log of ids has no fragments to search for.
+
+`actor_email` is resolved at read time from `users` in the analytics database — the log stores the
+id, which is stable and leaves no email behind once an account is closed, but "operator 8f3a1c…" is a
+record rather than accountability. It is `null` where the account is gone; the id stays either way.
+This is a **deliberate disclosure**: it tells a team admin the addresses of the colleagues who read
+this site's contacts, which no other session-reachable route does. Everyone who can appear in the log
+holds a role on that admin's own team, since that is what authorized the access being reported.
 
 `admin` rather than `analyst`, and not for the usual reason — no entry carries contact PII. It is
 that entries are about the deployment's own *operators*: a log of what each colleague read is

@@ -6,7 +6,7 @@
 // contacts_total` is rendered above the figures on every response — linked or not — and a truncated
 // rollup says it is a lower bound rather than presenting a capped sum as a total.
 
-import { Link2Off, Users } from 'lucide-react';
+import { Link2Off, ScrollText, Users } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import {
 	CRM_PAGE_SIZE,
@@ -189,6 +189,7 @@ export function CompanyDetail({
 	canAdminister,
 	onDeleted,
 	onOpenContact,
+	onOpenAudit,
 }: {
 	siteId: string;
 	company: CrmCompany;
@@ -196,6 +197,8 @@ export function CompanyDetail({
 	canAdminister: boolean;
 	onDeleted: (contactsUnlinked: number) => void;
 	onOpenContact: (contactId: string) => void;
+	/** Open the access log filtered to this company. */
+	onOpenAudit?: (targetId: string) => void;
 }): ReactElement {
 	const [editing, setEditing] = useState(false);
 	const [rosterOffset, setRosterOffset] = useState(0);
@@ -246,6 +249,16 @@ export function CompanyDetail({
 				</div>
 				<div className="flex shrink-0 flex-wrap items-center gap-1.5">
 					<StatusChip status={company.status} />
+					{onOpenAudit ? (
+						<button
+							type="button"
+							onClick={() => onOpenAudit(company.id)}
+							className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium text-xs transition"
+						>
+							<ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+							Access log
+						</button>
+					) : null}
 					<button
 						type="button"
 						onClick={() => setEditing(true)}
