@@ -1,4 +1,5 @@
-// CRM endpoints — the optional contacts extension. Two gates apply to every route here, in order.
+// CRM endpoints — the optional contacts-and-companies extension. Two gates apply to every route
+// here, in order.
 //
 // 1. THE BINDING. No `CRM_DB` means this deployment has no CRM database: 501 `crm_unavailable`,
 //    before authentication, uniformly, including for paths that do not exist. The router-wide guard
@@ -12,18 +13,27 @@
 //    one compiled in. A key that leaks costs you aggregate pageview counts. A key that could read
 //    /api/crm/contacts would cost you your customers' names, emails and phone numbers.
 //
-//    Roles: `analyst` reads and edits contacts; `admin` is required to DELETE one or to export it.
-//    Those two are the irreversible and the bulk-disclosure operations, and `viewer` — who can see
-//    aggregate analytics — has no CRM access at all, because PII is a different kind of access, not
-//    more of the same one.
+//    Roles: `analyst` reads and edits contacts and companies; `admin` is required to DELETE either
+//    or to export a contact. Those are the irreversible and the bulk-disclosure operations, and
+//    `viewer` — who can see aggregate analytics — has no CRM access at all, because PII is a
+//    different kind of access, not more of the same one.
 //
-// The contact→analytics link (`GET /:id/analytics`) never queries events by anything a contact row
-// controls. It resolves `external_user_id` through `findLinkedVisitorHashes`, which returns hashes
-// only from consent statements that verify against the deployment key — so a contact with no active
-// consent is simply not connected to any analytics, and there is no code path that could make it so.
+// The contact→analytics link (`GET /contacts/:id/analytics`) never queries events by anything a
+// contact row controls. It resolves `external_user_id` through `findLinkedVisitorHashes`, which
+// returns hashes only from consent statements that verify against the deployment key — so a contact
+// with no active consent is simply not connected to any analytics, and there is no code path that
+// could make it so.
+//
+// The company rollup (`GET /companies/:id/analytics`) is that same gate applied per contact and
+// summed, never a query over "the company". See the handler for why it carries no k-anonymity floor
+// and why it reports two contact counts rather than one.
 
 import {
-	CONTACTS_DEFAULT_PAGE,
+	CRM_DEFAULT_PAGE,
+	CompanyContactsQuerySchema,
+	CompanyCreateSchema,
+	CompanyListQuerySchema,
+	CompanyUpdateSchema,
 	ContactCreateSchema,
 	ContactListQuerySchema,
 	ContactUpdateSchema,
@@ -32,27 +42,40 @@ import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import {
+	COMPANY_ROLLUP_MAX_CONTACTS,
 	CONTACT_EXPORT_MAX_EVENTS,
 	contactActivity,
 	contactConsentRecords,
 	contactEvents,
 } from '../db/contact-analytics.js';
 import {
+	type Company,
 	type Contact,
+	companyContactLinkage,
+	deleteCompany,
 	deleteContact,
+	getCompany,
 	getContact,
+	insertCompany,
 	insertContact,
+	listCompanies,
+	listCompanyContacts,
 	listContacts,
 	requireCrm,
 	requireCrmDb,
 	uniqueConstraintText,
+	updateCompany,
 	updateContact,
 } from '../db/crm.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv, Env } from '../env.js';
 import { requireTeamRole } from '../lib/auth.js';
-import { eraseConsentByExternalUserId, findLinkedVisitorHashes } from '../lib/consent.js';
+import {
+	eraseConsentByExternalUserId,
+	findLinkedVisitorHashes,
+	findLinkedVisitorHashesForMany,
+} from '../lib/consent.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
 
 export const crmRoutes = new Hono<AppEnv>();
@@ -109,7 +132,7 @@ crmRoutes.get(
 		const { contacts, total } = await listContacts(requireCrmDb(c.env), c.get('siteId'), {
 			status: query.status,
 			q: query.q,
-			limit: query.limit ?? CONTACTS_DEFAULT_PAGE,
+			limit: query.limit ?? CRM_DEFAULT_PAGE,
 			offset: query.offset ?? 0,
 		});
 		return c.json({ contacts, total });
@@ -266,5 +289,187 @@ crmRoutes.get('/contacts/:id/export', requireTeamRole('admin'), async (c) => {
 			events_truncated: activity.total > events.length,
 			events_limit: CONTACT_EXPORT_MAX_EVENTS,
 		},
+	});
+});
+
+/** Resolve a company or raise the canonical 404, scoped by the authorized site exactly as contacts
+ * are — a company id from another site is indistinguishable from one that does not exist. */
+async function loadCompany(env: Env, siteId: string, id: string): Promise<Company> {
+	const company = await getCompany(requireCrmDb(env), siteId, id);
+	if (!company) {
+		throw new ApiError('not_found', 404);
+	}
+	return company;
+}
+
+/** Map a company unique-constraint violation onto the field that actually collided. Safe to name for
+ * the same reason it is on contacts: the caller holds a role on this site and submitted the value. */
+function companyConflict(err: unknown): never {
+	const conflict = uniqueConstraintText(err);
+	if (conflict) {
+		throw new ApiError(
+			'company_exists',
+			409,
+			/domain/i.test(conflict)
+				? 'a company with this domain already exists'
+				: 'a company with this name already exists',
+		);
+	}
+	throw err;
+}
+
+crmRoutes.get(
+	'/companies',
+	requireTeamRole('analyst'),
+	vValidator('query', CompanyListQuerySchema, validationErrorHook),
+	async (c) => {
+		const query = c.req.valid('query');
+		const { companies, total } = await listCompanies(requireCrmDb(c.env), c.get('siteId'), {
+			status: query.status,
+			q: query.q,
+			limit: query.limit ?? CRM_DEFAULT_PAGE,
+			offset: query.offset ?? 0,
+		});
+		return c.json({ companies, total });
+	},
+);
+
+crmRoutes.post(
+	'/companies',
+	requireTeamRole('analyst'),
+	vValidator('json', CompanyCreateSchema, validationErrorHook),
+	async (c) => {
+		const body = c.req.valid('json');
+		await assertOwnerExists(c.env, body.owner_user_id);
+		// site_id comes from the guard's authorized query parameter, NEVER the body.
+		const company = await insertCompany(
+			requireCrmDb(c.env),
+			c.get('siteId'),
+			body,
+			Date.now(),
+		).catch(companyConflict);
+		return c.json({ company }, 201);
+	},
+);
+
+crmRoutes.get('/companies/:id', requireTeamRole('analyst'), async (c) => {
+	const company = await loadCompany(c.env, c.get('siteId'), c.req.param('id'));
+	return c.json({ company });
+});
+
+crmRoutes.patch(
+	'/companies/:id',
+	requireTeamRole('analyst'),
+	vValidator('json', CompanyUpdateSchema, validationErrorHook),
+	async (c) => {
+		const body = c.req.valid('json');
+		await assertOwnerExists(c.env, body.owner_user_id);
+		const company = await updateCompany(
+			requireCrmDb(c.env),
+			c.get('siteId'),
+			c.req.param('id') ?? '',
+			body,
+			Date.now(),
+		).catch(companyConflict);
+		if (!company) {
+			throw new ApiError('not_found', 404);
+		}
+		return c.json({ company });
+	},
+);
+
+/**
+ * Delete a company. Its contacts survive — deleting an organization is not an erasure request about
+ * the people in it, and a person's record has its own lifecycle and its own DELETE. Each contact's
+ * `company_id` is cleared and the company's name is written back into their free-text `company`, so
+ * "where does this person work" answers the same before and after; only the structured link is gone.
+ *
+ * `admin` rather than `analyst` because it is irreversible and it rewrites rows the caller did not
+ * name — the same reason deleting a contact is.
+ */
+crmRoutes.delete('/companies/:id', requireTeamRole('admin'), async (c) => {
+	const result = await deleteCompany(requireCrmDb(c.env), c.get('siteId'), c.req.param('id'));
+	if (!result) {
+		throw new ApiError('not_found', 404);
+	}
+	return c.json({ deleted: true, contacts_unlinked: result.contacts_unlinked });
+});
+
+crmRoutes.get(
+	'/companies/:id/contacts',
+	requireTeamRole('analyst'),
+	vValidator('query', CompanyContactsQuerySchema, validationErrorHook),
+	async (c) => {
+		const siteId = c.get('siteId');
+		const company = await loadCompany(c.env, siteId, c.req.param('id') ?? '');
+		const query = c.req.valid('query');
+		const { contacts, total } = await listCompanyContacts(
+			requireCrmDb(c.env),
+			siteId,
+			company.id,
+			{ limit: query.limit ?? CRM_DEFAULT_PAGE, offset: query.offset ?? 0 },
+		);
+		return c.json({ contacts, total });
+	},
+);
+
+/**
+ * A company's analytics: the sum over its contacts, each one still individually consent-gated.
+ *
+ * WHY THIS DISCLOSES NOTHING NEW. Every hash summed here came out of `findLinkedVisitorHashesForMany`
+ * — the same verified-statement gate the per-contact route uses, applied per contact. A contact with
+ * no active signed consent contributes nothing, so the aggregate is exactly the union of the
+ * individual results the SAME caller can already fetch one at a time, attributed, from
+ * `/contacts/:id/analytics`. It is strictly less revealing than the calls it replaces.
+ *
+ * WHY THERE IS NO K-ANONYMITY FLOOR, despite `K_ANON` existing for the analytics breakdowns. That
+ * floor protects visitors who the operator has no other route to: suppressing a value seen by fewer
+ * than three people is what stops a breakdown singling one out. Here the subjects are contacts whose
+ * data this caller can already retrieve individually and by name. A floor would suppress a
+ * two-contact company's rollup while both of their pages stayed readable — hiding a legitimate answer
+ * while protecting nobody. Applying it would be cargo cult, not privacy.
+ *
+ * WHAT DOES NEED SAYING is the denominator. "142 pageviews" for a twelve-person account reads as the
+ * account's traffic when it may be one person's, and an operator who mistakes it for the whole will
+ * start reasoning about the eleven who never consented. So `contacts_total` and `contacts_linked` are
+ * reported side by side and one-of-twelve is visible as one-of-twelve.
+ */
+crmRoutes.get('/companies/:id/analytics', requireTeamRole('analyst'), async (c) => {
+	const siteId = c.get('siteId');
+	const company = await loadCompany(c.env, siteId, c.req.param('id'));
+	const linkage = await companyContactLinkage(
+		requireCrmDb(c.env),
+		siteId,
+		company.id,
+		COMPANY_ROLLUP_MAX_CONTACTS,
+	);
+	const byUid = await findLinkedVisitorHashesForMany(c.env, new URL(c.req.url), {
+		siteId,
+		externalUserIds: linkage.external_user_ids,
+		now: Date.now(),
+	});
+	const hashes = [...new Set([...byUid.values()].flat())];
+	const counts = {
+		contacts_total: linkage.contacts_total,
+		contacts_linked: byUid.size,
+		contacts_considered: linkage.external_user_ids.length,
+		// Never a silent cap. A truncated rollup is a lower bound, not a total, and a reader cannot
+		// tell the difference from the numbers alone.
+		contacts_truncated: linkage.truncated,
+		contacts_limit: COMPANY_ROLLUP_MAX_CONTACTS,
+	};
+	if (hashes.length === 0) {
+		// Same honesty as the contact route: zeroes would read as "this account did nothing", which is
+		// a different claim from "nobody here has authorized a link".
+		return c.json({ ...counts, linked: false, reason: 'no_linked_contacts' });
+	}
+	return c.json({
+		...counts,
+		linked: true,
+		// Deliberately NOT called `windows` like the contact response. There it is one person's live
+		// salt windows; here it is contacts multiplied by theirs, so reusing the name would invite
+		// reading a linkage-breadth number as a headcount. `contacts_linked` is the headcount.
+		visitor_hashes: hashes.length,
+		activity: await contactActivity(c.env, siteId, hashes),
 	});
 });

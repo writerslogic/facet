@@ -64,10 +64,13 @@ describe('CRM-enabled deployment', () => {
 	});
 
 	it('names the personal data it holds and the subject it holds it about', () => {
+		// `pd:CurrentEmployment` is the companies extension: a contact linked to an organization
+		// record carries a structured employer, which the free-text `company` box was not.
 		expect(claims['dpv:hasPersonalData']).toEqual([
 			'pd:Name',
 			'pd:EmailAddress',
 			'pd:TelephoneNumber',
+			'pd:CurrentEmployment',
 		]);
 		expect(claims['dpv:hasDataSubject']).toBe('dpv:Customer');
 		// Naming pd: terms requires the extension's namespace to be in the context, or the document
