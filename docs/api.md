@@ -1243,6 +1243,12 @@ This is **the lever the CRM audit log points at.** The log names the operator wh
 contact table; without this route the only person who could act on that was that operator, which is
 precisely the wrong person when the question is whether their session was stolen.
 
+In the dashboard: **Settings → Operator sessions**, above the site selection because sessions belong
+to a person and to the whole deployment, not to the site being managed. It takes a pasted user id
+rather than offering a picker, for the same reason the route is behind `ADMIN_TOKEN` — there is no
+user directory to pick from. The ids come from the **Who** column of the CRM access log. Revoking is
+not a lockout: roles and data are untouched and the person can sign in again immediately.
+
 It sits behind `ADMIN_TOKEN` rather than a team role, and that is a deliberate limit. Team admins
 have no user-management surface at all today — they cannot list their members, rename them, or remove
 them — so a route reaching across to another person's sessions would be the first of its kind,
@@ -1335,6 +1341,11 @@ until it expires — deleting the cookie does nothing to it.
 Ends **every** session this operator holds, anywhere, and clears the cookie of the browser that
 asked. Returns `204`, or `401 unauthenticated`. This is the remedy for a session you believe was
 stolen; `/logout` is not.
+
+In the dashboard: **Settings → Your account**, which sits outside the admin-token gate because this
+is authorized by your own cookie. It renders only when `/api/auth/me` resolves, so a deployment
+without `SESSION_SECRET` — which has no accounts at all — shows nothing rather than a panel
+explaining it cannot be used.
 
 It works by moving the user's `session_epoch` past the one every outstanding token carries. Each
 token records the epoch it was signed at and resolves only while the two still match, so one

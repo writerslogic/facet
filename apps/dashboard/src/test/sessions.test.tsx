@@ -17,7 +17,7 @@
 //     happened. `Error: not_found` preserves that distinction and hides it.
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { OperatorSessionsPanel } from '../components/settings/OperatorSessionsPanel.js';
@@ -178,6 +178,25 @@ describe('the operator’s own session', () => {
 		expect(calls.some((c) => c.method === 'POST')).toBe(false);
 	});
 
+	it('falls back to the email when the account carries a blank name', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async () => ({
+				ok: true,
+				status: 200,
+				json: async () => ({
+					user: { id: 'u-ada', email: 'ada@example.com', name: '   ' },
+					memberships: [],
+				}),
+			})),
+		);
+		renderPanel(<SessionPanel />);
+
+		// Not a blank line above the address: a whitespace name is unset, as it is everywhere else.
+		expect(await screen.findByText('ada@example.com')).toBeInTheDocument();
+		expect(screen.getAllByText('ada@example.com')).toHaveLength(1);
+	});
+
 	it('renders nothing at all when there is no session to end', async () => {
 		mockApi({ meStatus: 401, meError: 'unauthenticated' });
 		const { container } = renderPanel(<SessionPanel />);
@@ -186,15 +205,33 @@ describe('the operator’s own session', () => {
 	});
 
 	it('renders nothing, rather than throwing, when a 200 is not the expected shape', async () => {
-		// A proxy page, an SSO login form, a later server. Settings renders this panel, so a throw
-		// here takes the whole admin area down — and the panel has nothing to act on either way.
-		vi.stubGlobal(
-			'fetch',
-			vi.fn(async () => ({ ok: true, status: 200, json: async () => ({ ok: true }) })),
-		);
-		const { container } = renderPanel(<SessionPanel />);
+		// A proxy page, an SSO login form, a later server: parses fine, is not this shape.
+		const fetchMock = vi.fn(async () => ({
+			ok: true,
+			status: 200,
+			json: async () => ({ ok: true }),
+		}));
+		vi.stubGlobal('fetch', fetchMock);
 
-		await waitFor(() => expect(container).toBeEmptyDOMElement());
+		// The SIBLING is the assertion, not an empty container. A throw during render unmounts the
+		// whole tree, which empties the container too — so "renders nothing" and "took everything
+		// down with it" are indistinguishable unless something that must survive is standing next to
+		// it. In Settings that sibling is the entire admin area.
+		renderPanel(
+			<div>
+				<SessionPanel />
+				<p>the rest of settings</p>
+			</div>,
+		);
+
+		await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+		// Let the response land and React commit the render it causes; the throw, if any, is there.
+		await act(async () => {
+			await new Promise((resolve) => setTimeout(resolve, 0));
+		});
+
+		expect(screen.getByText('the rest of settings')).toBeInTheDocument();
+		expect(screen.queryByText('Your account')).not.toBeInTheDocument();
 	});
 
 	it('renders nothing on a deployment that has no accounts', async () => {

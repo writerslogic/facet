@@ -58,6 +58,10 @@ export function SessionPanel(): ReactElement | null {
 	const user = me.data?.user;
 	if (!user?.email) return null;
 
+	// `||`, not `??`: a blank name is unset, which is how the server treats every blank string it is
+	// given. `??` keeps the empty one and renders a nameless row above the email.
+	const displayName = user.name?.trim() || user.email;
+
 	return (
 		<Panel
 			title="Your account"
@@ -69,13 +73,13 @@ export function SessionPanel(): ReactElement | null {
 						data-selectable
 						className="truncate font-medium text-[color:var(--ink)] text-sm"
 					>
-						{user.name ?? user.email}
+						{displayName}
 					</p>
-					{user.name ? (
+					{displayName === user.email ? null : (
 						<p data-selectable className="truncate text-[color:var(--muted)] text-xs">
 							{user.email}
 						</p>
-					) : null}
+					)}
 					<code
 						data-selectable
 						className="mt-0.5 block truncate font-mono text-[color:var(--faint)] text-[11px]"
