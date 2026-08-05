@@ -525,6 +525,7 @@ statsRoutes.get('/stats/report', requireSiteAccess, async (c) => {
 
 	const url = new URL(c.req.url);
 	const did = deploymentDid(url);
+	if (!did) throw new ApiError('did_unavailable', 501);
 	const created = new Date().toISOString();
 	const s = await summary(c.env, { siteId, start, end });
 	const doc = buildAnalyticsReportCredential({

@@ -41,6 +41,16 @@ return `404`, and `/.well-known/jwks.json` returns an empty key set. `/.well-kno
 separate: it needs no signing key, only a disclosure contact you choose (`FACET_SECURITY_CONTACT`),
 and returns `404` until you set one.
 
+**Serve the deployment on a domain name, not an IP address.** The deployment DID is built from the
+host the request arrived on, and that DID is signed into every credential's `issuer` and
+`verificationMethod`, into each consent statement's `iss`, and into anything the transparency log
+registers. did:web forbids an IP address in a DID (it requires the identifier to match the TLS
+certificate name), and the DID syntax has no room for an IPv6 literal's brackets at all. Rather than
+sign a claim about an identity no verifier can resolve, a deployment reached at an address that
+cannot be a `did:web` refuses: `/.well-known/did.json` and `/.well-known/did-configuration.json`
+return `404`, and `/api/attestation/privacy`, `/api/scitt/attestation`, `/api/stats/report` and
+`/api/consent` return `501 did_unavailable`. Every other analytics feature is unaffected.
+
 ## Verifying a deployment
 
 1. **Fetch the keys and identity.** `GET /.well-known/jwks.json` and `/.well-known/did.json`. The DID

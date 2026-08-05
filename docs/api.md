@@ -682,11 +682,17 @@ correct content type:
 | --- | --- |
 | `/.well-known/security.txt` | RFC 9116 disclosure contact (Contact, Expires, Canonical, and Policy if you set one). `404` until you set `FACET_SECURITY_CONTACT` — Facet never publishes a contact you did not choose. |
 | `/.well-known/jwks.json` | The deployment's public signing key(s) as a JWK Set. Empty (`{"keys":[]}`) when signing is unconfigured. |
-| `/.well-known/did.json` | did:web DID document (`did:web:<host>`); Multikey verification method from the JWKS key. `404` unless an Ed25519 key is configured. |
-| `/.well-known/did-configuration.json` | DIF Domain Linkage Credential binding the origin to the DID (`404` unless Ed25519 configured). |
+| `/.well-known/did.json` | did:web DID document (`did:web:<host>`); Multikey verification method from the JWKS key. `404` unless an Ed25519 key is configured, or if the host cannot be a `did:web` (see below). |
+| `/.well-known/did-configuration.json` | DIF Domain Linkage Credential binding the origin to the DID (same `404` conditions). |
 | `/.well-known/facet-privacy.json` | Machine-readable privacy manifest with W3C DPV (`https://w3id.org/dpv#`) claims + deployment properties. Always available. |
 
 These endpoints are public and unauthenticated.
+
+The deployment DID is derived from the request host. did:web forbids an IP address there and the DID
+syntax cannot express an IPv6 literal's brackets, so a deployment reached at an address rather than a
+name has no DID — the two documents above `404`, and every endpoint that would sign that DID into a
+credential (`/api/attestation/privacy`, `/api/scitt/attestation`, `/api/stats/report`, `/api/consent`)
+returns `501 did_unavailable` instead of issuing one no verifier could resolve. Serve on a domain name.
 
 ## Verifiable credentials
 

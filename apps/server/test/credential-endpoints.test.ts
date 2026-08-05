@@ -94,6 +94,19 @@ describe('GET /api/attestation/privacy', () => {
 		);
 		expect(res.status).toBe(501);
 	});
+
+	// The `issuer` and `verificationMethod` above are the request host verbatim. did:web forbids an
+	// IP address there, so this deployment refuses to sign rather than issue a credential whose
+	// issuer no verifier can resolve — a signed claim about an identity that does not exist.
+	it('501s did_unavailable when the host cannot be a did:web', async () => {
+		const res = await createApp().request(
+			'https://192.0.2.10/api/attestation/privacy',
+			{},
+			withKey(),
+		);
+		expect(res.status).toBe(501);
+		expect(await res.json()).toEqual({ error: 'did_unavailable' });
+	});
 });
 
 describe('GET /api/stats/report', () => {
@@ -126,6 +139,16 @@ describe('GET /api/stats/report', () => {
 			env,
 		);
 		expect(res.status).toBe(501);
+	});
+
+	it('501s did_unavailable when the host cannot be a did:web', async () => {
+		const res = await createApp().request(
+			`https://192.0.2.10/api/stats/report?site_id=${SITE}&start=${T0}&end=${END}`,
+			{ headers: { Authorization: `Bearer ${apiKey}` } },
+			withKey(),
+		);
+		expect(res.status).toBe(501);
+		expect(await res.json()).toEqual({ error: 'did_unavailable' });
 	});
 
 	it('rejects a cross-site key with 403', async () => {

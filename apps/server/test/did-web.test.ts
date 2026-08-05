@@ -22,9 +22,9 @@ beforeEach(async () => {
 	publicKid = gen.publicJwk.kid as string;
 });
 
-function req(path: string, signing: boolean) {
+function req(path: string, signing: boolean, host = 'facet.example') {
 	const useEnv = signing ? { ...env, FACET_SIGNING_JWK: privateJwk } : env;
-	return createApp().request(`https://facet.example${path}`, {}, useEnv);
+	return createApp().request(`https://${host}${path}`, {}, useEnv);
 }
 
 describe('GET /.well-known/did.json', () => {
@@ -43,6 +43,20 @@ describe('GET /.well-known/did.json', () => {
 	it('404s when signing is unconfigured', async () => {
 		const res = await req('/.well-known/did.json', false);
 		expect(res.status).toBe(404);
+	});
+
+	// The deployment DID is built from the REQUEST host, and every artefact it goes into is signed.
+	// A host the did:web spec cannot express has no DID document, so none is invented for it.
+	it('404s did_unavailable when the host cannot be a did:web', async () => {
+		for (const host of ['192.0.2.10', '192.0.2.10:8443', '[2001:db8::1]']) {
+			const res = await req('/.well-known/did.json', true, host);
+			expect(res.status).toBe(404);
+			expect(await res.json()).toEqual({ error: 'did_unavailable' });
+		}
+		// The refusal is the IP, not the port or the digits: a name is still served.
+		const ok = await req('/.well-known/did.json', true, 'facet.example:8443');
+		expect(ok.status).toBe(200);
+		expect(((await ok.json()) as DidDocument).id).toBe('did:web:facet.example%3A8443');
 	});
 });
 
@@ -63,6 +77,14 @@ describe('GET /.well-known/did-configuration.json', () => {
 	it('404s when signing is unconfigured', async () => {
 		const res = await req('/.well-known/did-configuration.json', false);
 		expect(res.status).toBe(404);
+	});
+
+	// The linkage credential is SIGNED and names the DID as both issuer and subject, so an
+	// unresolvable DID here would be a signature on a claim about an identity that cannot exist.
+	it('404s did_unavailable when the host cannot be a did:web', async () => {
+		const res = await req('/.well-known/did-configuration.json', true, '192.0.2.10');
+		expect(res.status).toBe(404);
+		expect(await res.json()).toEqual({ error: 'did_unavailable' });
 	});
 });
 

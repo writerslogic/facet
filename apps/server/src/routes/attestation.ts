@@ -43,6 +43,7 @@ attestationRoutes.get('/privacy', async (c) => {
 	const key = r.key;
 	const now = Date.now();
 	const did = deploymentDid(new URL(c.req.url));
+	if (!did) return c.json({ error: 'did_unavailable' }, 501);
 	const created = new Date(now).toISOString();
 	// Sign the RATS evidence so the credential can reference its content-ref digest.
 	const evidence = await signProcessEvidence(await buildProcessEvidence(c.env), key, { now });

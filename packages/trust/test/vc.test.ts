@@ -187,6 +187,49 @@ describe('did:web', () => {
 		expect(() => didWebToUrl('did:web:evil.example%2fpath')).toThrow();
 	});
 
+	// The host is the ONE request-derived value the deployment copies verbatim into every signed
+	// artifact it issues (a credential's `issuer`, its `verificationMethod`, a consent statement's
+	// `iss`), so the two spec constraints on it are enforced at the mint, not just on resolution.
+	it('refuses a host the did:web spec cannot express', () => {
+		// did:web: "it MUST NOT include IP addresses." The ABNF would accept these digits and dots.
+		expect(() => didWebFromHost('192.0.2.10')).toThrow(/must not include IP addresses/);
+		expect(() => didWebFromHost('192.0.2.10:8443')).toThrow(/must not include IP addresses/);
+		// A URL parser reads a bare number and an 0x literal as IPv4 too, so the rule is "the last
+		// label is a number", not "it looks like a dotted quad".
+		expect(() => didWebFromHost('12345')).toThrow(/must not include IP addresses/);
+		expect(() => didWebFromHost('0x7f000001')).toThrow(/must not include IP addresses/);
+		// ...and the rule is about the LAST label only: these are ordinary names, not addresses.
+		expect(didWebFromHost('a12345')).toBe('did:web:a12345');
+		expect(didWebFromHost('192.0.2.10.example')).toBe('did:web:192.0.2.10.example');
+
+		// DID Core §3.1: `idchar = ALPHA / DIGIT / "." / "-" / "_" / pct-encoded`. An IPv6 literal's
+		// brackets, and every other character a URL host may legally carry, are outside it.
+		expect(() => didWebFromHost('[2001:db8::1]')).toThrow(/idchar/);
+		expect(() => didWebFromHost('facet.example/evil')).toThrow(/idchar/);
+		expect(() => didWebFromHost('a$b.example')).toThrow(/idchar/);
+		expect(() => didWebFromHost('')).toThrow(/idchar/);
+		// `_` is legal per the ABNF and still refused: did:web additionally requires the identifier to
+		// match the TLS certificate name, and no public CA issues for an underscore label.
+		expect(() => didWebFromHost('my_app.example')).toThrow(/idchar/);
+
+		// A legitimate name, with and without a port, is untouched.
+		expect(didWebFromHost('facet.example')).toBe('did:web:facet.example');
+		expect(didWebFromHost('facet.example:8443')).toBe('did:web:facet.example%3A8443');
+	});
+
+	it('refuses to resolve a DID naming an IP address', () => {
+		// Same predicate on the way back in: without it this hands an attacker-chosen literal address
+		// to `resolveDidWeb`'s fetch.
+		expect(() => didWebToUrl('did:web:192.0.2.10')).toThrow(/must not include IP addresses/);
+		expect(() => didWebToUrl('did:web:192.0.2.10%3A8443')).toThrow(/must not include IP/);
+		expect(() => didWebToUrl('did:web:12345:tenant:a')).toThrow(
+			/must not include IP addresses/,
+		);
+		expect(didWebToUrl('did:web:192.0.2.10.example')).toBe(
+			'https://192.0.2.10.example/.well-known/did.json',
+		);
+	});
+
 	it('verifies a full domain linkage against the DID document', async () => {
 		const { key, publicJwk } = await edKey();
 		const did = didWebFromHost('facet.example');

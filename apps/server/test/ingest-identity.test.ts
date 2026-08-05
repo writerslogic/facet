@@ -15,6 +15,9 @@ import { deploymentDid } from '../src/lib/signing.js';
 
 const SITE = '77777777-7777-4777-8777-777777777777';
 const url = new URL('https://facet.example/api/event');
+// null for a host that cannot be a did:web; this fixture signs a real grant, so it needs the issuer.
+const ISS = deploymentDid(url);
+if (ISS === null) throw new Error('test host must be expressible as a did:web');
 const NOW = Date.UTC(2026, 6, 15, 12);
 const IP = '203.0.113.9';
 const UA =
@@ -96,7 +99,7 @@ describe('ingestEvent under the identity spectrum', () => {
 			const stmt = await signConsent(
 				key,
 				{
-					iss: deploymentDid(url),
+					iss: ISS,
 					site_id: SITE,
 					visitor_hash: vh,
 					tier: 'pseudonymous',
