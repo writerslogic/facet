@@ -28,6 +28,11 @@ describe('analytics-only deployment', () => {
 		expect(claims['dpv:hasPurpose']).toBe('dpv:ServiceOptimisation');
 		expect(claims['dpv:hasLegalBasis']).toBe('dpv:LegitimateInterest');
 		expect(claims['dpv:hasTechnicalOrganisationalMeasure']).toEqual(['dpv:Pseudonymisation']);
+		// Nothing here is read one record at a time by a named operator, so there is no access log and
+		// no claim of one.
+		expect(claims['dpv:hasTechnicalOrganisationalMeasure']).not.toContain(
+			'dpv:ActivityMonitoring',
+		);
 	});
 
 	it('names no stored personal data and no data subject, because it holds neither', () => {
@@ -61,6 +66,9 @@ describe('CRM-enabled deployment', () => {
 		expect(measures).toContain('dpv:Pseudonymisation');
 		expect(measures).toContain('dpv:AccessControlMethod');
 		expect(measures).not.toEqual(['dpv:Pseudonymisation']);
+		// The CRM audit log. Access control says who MAY read a contact; this says the deployment
+		// records who did, and it is claimed only where such a record exists to be claimed.
+		expect(measures).toContain('dpv:ActivityMonitoring');
 	});
 
 	it('names the personal data it holds and the subject it holds it about', () => {

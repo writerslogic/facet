@@ -1,4 +1,4 @@
-// CRM endpoints — the optional contacts-and-companies extension. Two gates apply to every route
+// CRM endpoints — the optional contacts-and-companies extension. Three gates apply to every route
 // here, in order.
 //
 // 1. THE BINDING. No `CRM_DB` means this deployment has no CRM database: 501 `crm_unavailable`,
@@ -17,6 +17,10 @@
 //    or to export a contact. Those are the irreversible and the bulk-disclosure operations, and
 //    `viewer` — who can see aggregate analytics — has no CRM access at all, because PII is a
 //    different kind of access, not more of the same one.
+//
+// 3. THE RECORD. Every request that clears both gates is written to the CRM audit log BEFORE its
+//    handler runs. `crmGate` below is what binds the three together, so a route cannot be given a
+//    role without also being given an audited action.
 //
 // The contact→analytics link (`GET /contacts/:id/analytics`) never queries events by anything a
 // contact row controls. It resolves `external_user_id` through `findLinkedVisitorHashes`, which
@@ -37,11 +41,14 @@ import {
 	ContactCreateSchema,
 	ContactListQuerySchema,
 	ContactUpdateSchema,
+	type CrmAuditAction,
+	CrmAuditListQuerySchema,
 } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
-import { Hono } from 'hono';
+import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { every } from 'hono/combine';
 import {
 	COMPANY_ROLLUP_MAX_CONTACTS,
 	CONTACT_EXPORT_MAX_EVENTS,
@@ -63,6 +70,8 @@ import {
 	listCompanies,
 	listCompanyContacts,
 	listContacts,
+	listCrmAudit,
+	recordCrmAccess,
 	requireCrm,
 	requireCrmDb,
 	uniqueConstraintText,
@@ -72,6 +81,7 @@ import {
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv, Env } from '../env.js';
+import type { Role } from '../lib/accounts.js';
 import { requireTeamRole } from '../lib/auth.js';
 import {
 	eraseConsentByExternalUserId,
@@ -108,10 +118,71 @@ crmRoutes.use(
  * legitimate traffic and would punish their colleagues for it; keying per operator caps the session
  * that is actually doing it.
  *
- * Applied AFTER the role guard at every call site, matching /api/event: an unauthenticated request is
- * rejected before it can consume anyone's bucket, and `userId` is only set once a session resolves.
+ * Applied AFTER the role guard — see `crmGate`, which is now the only thing that applies it — matching
+ * /api/event: an unauthenticated request is rejected before it can consume anyone's bucket, and
+ * `userId` is only set once a session resolves.
  */
 const crmRateLimit = rateLimit((c) => `crm:${c.get('userId') ?? 'unauthenticated'}`);
+
+/**
+ * Record this request in the CRM audit log, then run it.
+ *
+ * BEFORE, NOT AFTER, and that ordering is the whole design. Logging afterwards means the log write
+ * is the last thing to happen, so any failure between the disclosure and the record — a D1 error, an
+ * eviction, a crash — leaves an access that happened and was never written down, and for a DELETE
+ * there is then nothing left to notice the gap against. Logging first inverts every one of those:
+ * the insert throws, the handler never runs, and nothing was read or changed. The order that can
+ * fail open is not available to an audit log.
+ *
+ * What it costs is precision about outcome. A request that goes on to 404 or to fail validation is
+ * recorded exactly like one that succeeded, so an entry states that an operator was authorized to do
+ * this to this id, not that it worked. That is the honest reading, and for the id-probing case it is
+ * the more useful one — a run of `contact.read` entries against ids that do not exist is a signal
+ * that a log of successes only would have thrown away.
+ *
+ * A create therefore names no target: the record it makes does not exist yet when its entry is
+ * written, and recording the new id would mean writing the entry afterwards, which is the ordering
+ * this rejects. The row's own `created_at` sits beside the entry's `occurred_at`, so the two are
+ * still correlatable — and a create is the one action that discloses nothing.
+ *
+ * The actor is re-checked rather than assumed. `crmGate` always runs `requireTeamRole` first, so
+ * both are set; if this middleware is ever mounted without it, an entry naming nobody is worse than
+ * a 401.
+ */
+function auditCrm(action: CrmAuditAction): MiddlewareHandler<AppEnv> {
+	return async (c, next) => {
+		const actorUserId = c.get('userId');
+		const actorRole = c.get('role');
+		if (!actorUserId || !actorRole) {
+			throw new ApiError('unauthorized', 401);
+		}
+		await recordCrmAccess(requireCrmDb(c.env), c.get('siteId'), {
+			actorUserId,
+			actorRole,
+			action,
+			// Undefined on the collection routes, which name no single record.
+			targetId: c.req.param('id') ?? null,
+			occurredAt: Date.now(),
+		});
+		return next();
+	};
+}
+
+/**
+ * The one gate every CRM route passes: a team role, the per-operator rate limit, and the audit entry,
+ * composed in that order and applied as a single middleware.
+ *
+ * Composed rather than listed at each route because these three are one decision, not three. The
+ * previous form repeated `requireTeamRole(x), crmRateLimit` at fourteen call sites, which made
+ * "authorized but unrecorded" a thing a new route could quietly be — you cannot forget the audit
+ * action here without also forgetting the role, and a route with no role guard is not a route anyone
+ * ships. The order matters too: a request rejected for its role, or shed by the rate limiter, never
+ * reached the data and so is not an access to record — and letting it write one would hand a single
+ * session the ability to fill the audit table with entries for requests it was never allowed to make.
+ */
+function crmGate(need: Role, action: CrmAuditAction): MiddlewareHandler<AppEnv> {
+	return every(requireTeamRole(need), crmRateLimit, auditCrm(action));
+}
 
 /** Resolve a contact or raise the canonical 404. Scoped by the authorized site, so a contact id from
  * another site is indistinguishable from one that does not exist. */
@@ -195,8 +266,7 @@ function linkedHashes(
  */
 crmRoutes.get(
 	'/contacts',
-	requireTeamRole('analyst'),
-	crmRateLimit,
+	crmGate('analyst', 'contact.list'),
 	vValidator('query', ContactListQuerySchema, validationErrorHook),
 	async (c) => {
 		const query = c.req.valid('query');
@@ -212,8 +282,7 @@ crmRoutes.get(
 
 crmRoutes.post(
 	'/contacts',
-	requireTeamRole('analyst'),
-	crmRateLimit,
+	crmGate('analyst', 'contact.create'),
 	vValidator('json', ContactCreateSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
@@ -229,15 +298,14 @@ crmRoutes.post(
 	},
 );
 
-crmRoutes.get('/contacts/:id', requireTeamRole('analyst'), crmRateLimit, async (c) => {
+crmRoutes.get('/contacts/:id', crmGate('analyst', 'contact.read'), async (c) => {
 	const contact = await loadContact(c.env, c.get('siteId'), c.req.param('id'));
 	return c.json({ contact });
 });
 
 crmRoutes.patch(
 	'/contacts/:id',
-	requireTeamRole('analyst'),
-	crmRateLimit,
+	crmGate('analyst', 'contact.update'),
 	vValidator('json', ContactUpdateSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
@@ -267,7 +335,7 @@ crmRoutes.patch(
  * keyed by a salted hash, and with the consent record gone nothing can ever re-associate them with a
  * person; destroying the link is what erasure of the identifiable data means here.
  */
-crmRoutes.delete('/contacts/:id', requireTeamRole('admin'), crmRateLimit, async (c) => {
+crmRoutes.delete('/contacts/:id', crmGate('admin', 'contact.delete'), async (c) => {
 	const siteId = c.get('siteId');
 	const contact = await loadContact(c.env, siteId, c.req.param('id') ?? '');
 	// The two writes land in DIFFERENT databases and D1 has no transaction spanning them, so one of
@@ -293,7 +361,7 @@ crmRoutes.delete('/contacts/:id', requireTeamRole('admin'), crmRateLimit, async 
 /** A contact's analytics, if and only if an active signed consent record authorizes the link. When
  * it does not, the response says so explicitly rather than returning zeroes that read like "this
  * person did nothing" — `linked: false` and a reason are the honest answer. */
-crmRoutes.get('/contacts/:id/analytics', requireTeamRole('analyst'), crmRateLimit, async (c) => {
+crmRoutes.get('/contacts/:id/analytics', crmGate('analyst', 'contact.analytics'), async (c) => {
 	const siteId = c.get('siteId');
 	const contact = await loadContact(c.env, siteId, c.req.param('id'));
 	if (!contact.external_user_id) {
@@ -320,7 +388,7 @@ crmRoutes.get('/contacts/:id/analytics', requireTeamRole('analyst'), crmRateLimi
  * (their claims are a derived hash, a tier and a window), so including them adds cryptographic
  * evidence of what was consented to without widening what the export reveals.
  */
-crmRoutes.get('/contacts/:id/export', requireTeamRole('admin'), crmRateLimit, async (c) => {
+crmRoutes.get('/contacts/:id/export', crmGate('admin', 'contact.export'), async (c) => {
 	const siteId = c.get('siteId');
 	const contact = await loadContact(c.env, siteId, c.req.param('id'));
 	const externalUserId = contact.external_user_id;
@@ -377,8 +445,7 @@ function companyConflict(err: unknown): never {
 
 crmRoutes.get(
 	'/companies',
-	requireTeamRole('analyst'),
-	crmRateLimit,
+	crmGate('analyst', 'company.list'),
 	vValidator('query', CompanyListQuerySchema, validationErrorHook),
 	async (c) => {
 		const query = c.req.valid('query');
@@ -394,8 +461,7 @@ crmRoutes.get(
 
 crmRoutes.post(
 	'/companies',
-	requireTeamRole('analyst'),
-	crmRateLimit,
+	crmGate('analyst', 'company.create'),
 	vValidator('json', CompanyCreateSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
@@ -411,15 +477,14 @@ crmRoutes.post(
 	},
 );
 
-crmRoutes.get('/companies/:id', requireTeamRole('analyst'), crmRateLimit, async (c) => {
+crmRoutes.get('/companies/:id', crmGate('analyst', 'company.read'), async (c) => {
 	const company = await loadCompany(c.env, c.get('siteId'), c.req.param('id'));
 	return c.json({ company });
 });
 
 crmRoutes.patch(
 	'/companies/:id',
-	requireTeamRole('analyst'),
-	crmRateLimit,
+	crmGate('analyst', 'company.update'),
 	vValidator('json', CompanyUpdateSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
@@ -447,7 +512,7 @@ crmRoutes.patch(
  * `admin` rather than `analyst` because it is irreversible and it rewrites rows the caller did not
  * name — the same reason deleting a contact is.
  */
-crmRoutes.delete('/companies/:id', requireTeamRole('admin'), crmRateLimit, async (c) => {
+crmRoutes.delete('/companies/:id', crmGate('admin', 'company.delete'), async (c) => {
 	const result = await deleteCompany(requireCrmDb(c.env), c.get('siteId'), c.req.param('id'));
 	if (!result) {
 		throw new ApiError('not_found', 404);
@@ -457,8 +522,7 @@ crmRoutes.delete('/companies/:id', requireTeamRole('admin'), crmRateLimit, async
 
 crmRoutes.get(
 	'/companies/:id/contacts',
-	requireTeamRole('analyst'),
-	crmRateLimit,
+	crmGate('analyst', 'company.contacts'),
 	vValidator('query', CompanyContactsQuerySchema, validationErrorHook),
 	async (c) => {
 		const siteId = c.get('siteId');
@@ -495,7 +559,7 @@ crmRoutes.get(
  * start reasoning about the eleven who never consented. So `contacts_total` and `contacts_linked` are
  * reported side by side and one-of-twelve is visible as one-of-twelve.
  */
-crmRoutes.get('/companies/:id/analytics', requireTeamRole('analyst'), crmRateLimit, async (c) => {
+crmRoutes.get('/companies/:id/analytics', crmGate('analyst', 'company.analytics'), async (c) => {
 	const siteId = c.get('siteId');
 	const company = await loadCompany(c.env, siteId, c.req.param('id'));
 	const linkage = await companyContactLinkage(
@@ -543,3 +607,37 @@ crmRoutes.get('/companies/:id/analytics', requireTeamRole('analyst'), crmRateLim
 		activity: await contactActivity(c.env, siteId, hashes),
 	});
 });
+
+/**
+ * Read this site's audit log: who touched the contact store, what they touched, and when.
+ *
+ * `admin` rather than `analyst`, and not for the usual reason. Nothing in an entry is contact PII —
+ * every field is an id, a role, an action name or a timestamp — so this is not the bulk-disclosure
+ * argument that gates the export. It is that the entries are about the deployment's own OPERATORS: a
+ * log of what each colleague read is oversight in an administrator's hands and surveillance in a
+ * peer's, and the person answerable for how contact data is used is the one who should hold it.
+ *
+ * The filters are the three questions worth asking of an access log — what happened to this record,
+ * what did this operator do, who does this kind of thing — and each is an exact match, because a log
+ * of ids has no fragments to search for.
+ *
+ * There is no way to write here. No route updates or deletes an entry, deleting a contact leaves its
+ * entries standing, and only the retention cron removes anything: a log the people it names can edit
+ * records nothing. Reading it is itself recorded, by the same gate as every other route.
+ */
+crmRoutes.get(
+	'/audit',
+	crmGate('admin', 'audit.read'),
+	vValidator('query', CrmAuditListQuerySchema, validationErrorHook),
+	async (c) => {
+		const query = c.req.valid('query');
+		const { entries, total } = await listCrmAudit(requireCrmDb(c.env), c.get('siteId'), {
+			action: query.action,
+			actorUserId: query.actor_user_id,
+			targetId: query.target_id,
+			limit: query.limit ?? CRM_DEFAULT_PAGE,
+			offset: query.offset ?? 0,
+		});
+		return c.json({ entries, total, role: c.get('role') });
+	},
+);

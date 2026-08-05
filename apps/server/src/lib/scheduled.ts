@@ -4,7 +4,7 @@
 import type { Env } from '../env.js';
 import { HOUR_MS } from './constants.js';
 import { createLogger } from './log.js';
-import { enforceRetention } from './retention.js';
+import { enforceCrmAuditRetention, enforceRetention } from './retention.js';
 import { runRollups } from './rollups.js';
 import { dayKey } from './salt.js';
 import { buildSessions } from './sessions.js';
@@ -35,6 +35,13 @@ registerJob({
 registerJob({
 	name: 'retention',
 	run: (env, now) => enforceRetention(env, now),
+});
+// Optional: age out the CRM audit log on its own, longer window. No-op unless CRM_DB is bound.
+registerJob({
+	name: 'crm-audit-retention',
+	run: async (env, now) => {
+		await enforceCrmAuditRetention(env, now);
+	},
 });
 // Optional: deliver anomaly-alert webhooks. No-op unless WEBHOOK_URL is configured.
 registerJob({

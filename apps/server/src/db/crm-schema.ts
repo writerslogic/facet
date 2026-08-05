@@ -12,6 +12,8 @@
 // designed in rather than deferred:
 //   • Contacts are NOT on the raw-event retention schedule (`lib/retention.ts`). A contact is a
 //     business record with its own lifecycle; deleting it is an explicit act, not a cron side effect.
+//     `crm_audit_log` is the one table here that IS on a schedule, on its own longer window, because
+//     it is the one that grows without anybody deciding to add a row.
 //   • No column here caches a derived `visitor_hash`. The ONLY bridge to analytics is
 //     `external_user_id`, resolved at read time through an active `identified` consent record. When
 //     retention purges that record (or its identity salt), the link severs on its own — nothing here
@@ -107,5 +109,53 @@ export const contacts = sqliteTable(
 		// makes the analytics link deterministic — one contact per identified visitor, per site.
 		uniqueIndex('idx_contacts_site_email').on(t.site_id, t.email),
 		uniqueIndex('idx_contacts_site_extuser').on(t.site_id, t.external_user_id),
+	],
+);
+
+/**
+ * Who touched the contact store, what they touched, and when. One row per authorized `/api/crm`
+ * request, written BEFORE the handler runs.
+ *
+ * WHY IT IS HERE rather than in the analytics database. Every row names a `target_id`, which is a
+ * pointer into this database's PII, and the analytics database is deliberately free of anything that
+ * resolves to a named person. Keeping the log beside the data it describes also means an unbound
+ * deployment has no audit table for the same reason it has no contacts — the extension does not
+ * exist — and that the log and the row it records are one database apart rather than two, which is
+ * the only reason the two writes can be reasoned about at all.
+ *
+ * WHAT IT DELIBERATELY DOES NOT HOLD is any contact FIELD. It records that contact `x` was read, not
+ * what reading it returned, so the log is a record about the OPERATOR and only a pointer to the
+ * subject. That is what makes it safe to outlive the contact: once the row is deleted the pointer
+ * resolves to nothing, so an erasure request does not have to reach in here — and must not, since a
+ * log an operator can clear by deleting the contact is not evidence of anything. Nothing in the API
+ * updates or deletes these rows; only the retention cron does.
+ *
+ * `actor_role` is stored rather than resolved at read time because it is the role the request was
+ * AUTHORIZED under. Roles change; "an admin exported this" has to stay true after they are demoted.
+ */
+export const crmAuditLog = sqliteTable(
+	'crm_audit_log',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		/** `users.id` in the ANALYTICS database, so no foreign key is possible — the same cross-database
+		 * limitation as `contacts.owner_user_id`, and the same reason it is validated in the Worker. */
+		actor_user_id: text('actor_user_id').notNull(),
+		actor_role: text('actor_role').notNull(),
+		/** One of `CRM_AUDIT_ACTIONS`. A closed set, so the log is filterable by equality. */
+		action: text('action').notNull(),
+		/** The contact or company the request named, or NULL for a collection-level action. */
+		target_id: text('target_id'),
+		occurred_at: integer('occurred_at').notNull(),
+	},
+	(t) => [
+		// The default view: one site's log, newest first. Also what the actor and action filters scan.
+		index('idx_crm_audit_site_time').on(t.site_id, t.occurred_at),
+		// "Everything anyone did to this contact" — the question an erasure or subject-access request
+		// asks, and the one a site-and-time scan answers worst.
+		index('idx_crm_audit_site_target').on(t.site_id, t.target_id),
+		// Retention purges across every site at once, so it needs the timestamp leading. Same shape and
+		// same reason as `idx_identity_salts_window_end` in the analytics schema.
+		index('idx_crm_audit_occurred').on(t.occurred_at),
 	],
 );

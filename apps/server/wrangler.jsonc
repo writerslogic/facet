@@ -49,6 +49,13 @@
     // /.well-known/facet-privacy.json. Do not bind this and leave that
     // unchanged; the deployment would be signing a false statement.
     //
+    // It also starts an ACCESS LOG. Every authorized /api/crm request is
+    // written to crm_audit_log in this same database before its handler
+    // runs — reads included, since a delete leaves a hole you can see and a
+    // read leaves nothing. That is a third claim the attestation gains
+    // (dpv:ActivityMonitoring) and the one CRM table on a retention
+    // schedule: CRM_AUDIT_RETENTION_DAYS below, default 365.
+    //
     // To turn it on:
     //   wrangler d1 create facet-crm
     //   pnpm --filter @facet/server migrate:crm:remote
@@ -63,6 +70,15 @@
   "vars": {
     // Rolling retention window for raw events, in days.
     "RAW_RETENTION_DAYS": "90"
+    // Rolling retention window for the CRM access log, in days. Only read
+    // when CRM_DB is bound; unset means 365. Deliberately longer than the
+    // raw-event window — raw events are visitors' data and the short window
+    // IS the privacy measure, while these entries record what OPERATORS did
+    // with contact data, and an access log that expires before the misuse
+    // it evidences is noticed has protected nobody. A value below 1 falls
+    // back to the default rather than putting the cutoff at or after now
+    // and wiping the log on every run.
+    //   ,"CRM_AUDIT_RETENTION_DAYS": "365"
   },
   // Workers AI: translates natural-language analytics questions into a constrained query intent.
   "ai": {

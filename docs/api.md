@@ -1324,7 +1324,9 @@ to turn it on, and note that doing so changes the DPV claims this deployment sig
 record carries a structured employer that a free-text box did not).
 
 Every route is rate limited per *operator* (not per site, so one compromised session cannot hide
-inside its team's traffic) and write bodies are capped at 16 KB.
+inside its team's traffic), write bodies are capped at 16 KB, and every authorized request — reads
+included — is written to the [audit log](#get-apicrmauditsite_idactionactor_user_idtarget_idlimitoffset-session-admin)
+before its handler runs.
 
 **Auth is a session cookie, never an API key.** This is the one authenticated surface that refuses
 `Authorization: Bearer <clk_...>`. A `clk_` key authorizes aggregate analytics and is meant to be
@@ -1337,7 +1339,7 @@ that. Every route takes `?site_id=<uuid>`, and the caller must hold a role on th
 | --- | --- |
 | `viewer` | no access at all |
 | `analyst` | list, read, create, update, view the analytics link |
-| `admin` / `owner` | the above, plus delete and export |
+| `admin` / `owner` | the above, plus delete, export, and read the audit log |
 
 ### `GET /api/crm/contacts?site_id&status&q&limit&offset` (session, analyst)
 
@@ -1481,6 +1483,46 @@ claim about rows nothing looked at.
 There is **no company export**. A data-subject export is per person by definition; a company-wide one
 would be a bulk PII dump with no data-protection meaning. Use `/companies/:id/contacts` and then the
 per-contact export, which accounts for each person separately.
+
+### `GET /api/crm/audit?site_id&action&actor_user_id&target_id&limit&offset` (session, admin)
+
+The access log. **Every authorized request to any route above writes one entry, before its handler
+runs** — reads included, which is the point: a delete leaves a hole you can see, a read leaves
+nothing. An entry is `{ id, site_id, actor_user_id, actor_role, action, target_id, occurred_at }`,
+and the response is `{ entries: [...], total, role }`, newest first.
+
+Written **first**, not last. Logging afterwards means any failure between the disclosure and the
+record — a D1 error, a crash — leaves an access that happened and was never written down, and for a
+delete there is then nothing left to notice the gap against. Writing first inverts that: if the log
+write fails the request fails `500` and nothing was read or changed. The cost is that an entry states
+an operator was *authorized* to do this to this id, not that it succeeded; a request that goes on to
+`404` is recorded like any other. For the id-probing case that is the more useful reading anyway.
+
+`action` is one of `contact.list`, `contact.create`, `contact.read`, `contact.update`,
+`contact.delete`, `contact.analytics`, `contact.export`, `company.list`, `company.create`,
+`company.read`, `company.update`, `company.delete`, `company.contacts`, `company.analytics`,
+`audit.read` — a closed set, so the log is filterable by equality. `target_id` is the contact or
+company the request named, or `null` for a collection route and for a **create**, whose record does
+not exist yet when the entry is written. `actor_role` is the role the request was
+**authorized under**, stored rather than resolved later, so "an admin exported this" stays true after
+they are demoted. All three filters are exact matches; a log of ids has no fragments to search for.
+
+`admin` rather than `analyst`, and not for the usual reason — no entry carries contact PII. It is
+that entries are about the deployment's own *operators*: a log of what each colleague read is
+oversight in an administrator's hands and surveillance in a peer's. Reading it is itself recorded.
+
+**Nothing can write here.** There is no update or delete route, and deleting a contact leaves its
+entries standing — they name it by id and hold none of its fields, so once the row is gone the
+pointer resolves to nothing and there is no personal data left for an erasure request to reach. A log
+an operator can clear by deleting the contact is not evidence of anything.
+
+The log is the one CRM table on a retention schedule. `CRM_AUDIT_RETENTION_DAYS` (default **365**)
+is enforced by the hourly cron; a value below `1` falls back to the default rather than putting the
+cutoff at or after now and wiping the log on every run. It is deliberately longer than
+`RAW_RETENTION_DAYS`: raw events are visitors' data and the short window *is* the privacy measure,
+while these entries record what operators did with contact data, and an access log that expires
+before the misuse it evidences is noticed has protected nobody. Contacts themselves remain on no
+schedule at all.
 
 ---
 

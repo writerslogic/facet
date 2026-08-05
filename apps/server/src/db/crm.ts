@@ -6,10 +6,11 @@
 // never from a body, so a session with a role on one site cannot reach another site's contacts even
 // by guessing a contact id. That covers the contact→company link too: the foreign key proves the
 // company row exists, not that it belongs to the caller's site, so the site predicate is the check
-// and the constraint is only the backstop.
+// and the constraint is only the backstop. `purgeCrmAudit` is the one exception and says why: it runs
+// from cron, on behalf of no request, and a per-site purge would be the same delete run N times.
 
-import { normalizeCompanyDomain } from '@facet/shared';
-import { type SQL, and, desc, eq, isNotNull, or, sql } from 'drizzle-orm';
+import { type CrmAuditAction, normalizeCompanyDomain } from '@facet/shared';
+import { type SQL, and, desc, eq, isNotNull, lt, or, sql } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/d1';
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { MiddlewareHandler } from 'hono';
@@ -658,4 +659,87 @@ export async function deleteCompany(
 	// Lost a race with a concurrent delete: the batch changed nothing, and 404 is the honest answer.
 	if (deleted.length === 0) return undefined;
 	return { company, contacts_unlinked: counted[0]?.n ?? 0 };
+}
+
+/** One entry as the audit log stores and returns it. There is no separate wire shape: every column
+ * is already an id, a role, an action name or a timestamp, so there is nothing to redact on the way
+ * out that was safe to record on the way in. */
+export type CrmAuditEntry = typeof crmSchema.crmAuditLog.$inferSelect;
+
+/** What an audit entry is written from. The actor and role come from the session guard that
+ * authorized the request, never from anything the caller sent. */
+export interface CrmAuditInput {
+	actorUserId: string;
+	actorRole: string;
+	action: CrmAuditAction;
+	targetId: string | null;
+	occurredAt: number;
+}
+
+/** Append one entry. Insert-only by design — nothing in this module updates or deletes an entry
+ * except `purgeCrmAudit`, so a recorded access cannot be rewritten by the operator it names. */
+export async function recordCrmAccess(
+	binding: D1Database,
+	siteId: string,
+	entry: CrmAuditInput,
+): Promise<void> {
+	await crmDb(binding).insert(crmSchema.crmAuditLog).values({
+		id: crypto.randomUUID(),
+		site_id: siteId,
+		actor_user_id: entry.actorUserId,
+		actor_role: entry.actorRole,
+		action: entry.action,
+		target_id: entry.targetId,
+		occurred_at: entry.occurredAt,
+	});
+}
+
+export interface ListCrmAuditOptions {
+	/** Typed to the closed set rather than to `string`: an action outside it matches nothing, so
+	 * accepting one would answer "no such access" to a question that was never asked. */
+	action?: CrmAuditAction;
+	actorUserId?: string;
+	targetId?: string;
+	limit: number;
+	offset: number;
+}
+
+/** One site's audit entries, newest first. Every filter is an equality — see the wire schema for why
+ * there is no substring search over a log of ids. */
+export async function listCrmAudit(
+	binding: D1Database,
+	siteId: string,
+	opts: ListCrmAuditOptions,
+): Promise<{ entries: CrmAuditEntry[]; total: number }> {
+	const filters = [eq(crmSchema.crmAuditLog.site_id, siteId)];
+	if (opts.action) filters.push(eq(crmSchema.crmAuditLog.action, opts.action));
+	if (opts.actorUserId) {
+		filters.push(eq(crmSchema.crmAuditLog.actor_user_id, opts.actorUserId));
+	}
+	if (opts.targetId) filters.push(eq(crmSchema.crmAuditLog.target_id, opts.targetId));
+	const where = and(...filters);
+	const client = crmDb(binding);
+	const [entries, totalRow] = await Promise.all([
+		client
+			.select()
+			.from(crmSchema.crmAuditLog)
+			.where(where)
+			// Two requests inside the same millisecond would otherwise come back in an arbitrary and
+			// unstable order, which for a paged log means an entry can be shown twice or skipped. `id`
+			// is the tiebreak because it is the only unique column.
+			.orderBy(desc(crmSchema.crmAuditLog.occurred_at), desc(crmSchema.crmAuditLog.id))
+			.limit(opts.limit)
+			.offset(opts.offset),
+		client.select({ n: sql<number>`count(*)` }).from(crmSchema.crmAuditLog).where(where).get(),
+	]);
+	return { entries, total: totalRow?.n ?? 0 };
+}
+
+/** Delete audit entries older than `cutoff`, across every site — the retention cron acts for the
+ * deployment, not for a request, and there is no site to scope it to. Returns rows deleted. */
+export async function purgeCrmAudit(binding: D1Database, cutoff: number): Promise<number> {
+	const res = await crmDb(binding)
+		.delete(crmSchema.crmAuditLog)
+		.where(lt(crmSchema.crmAuditLog.occurred_at, cutoff));
+	return res.meta.changes ?? 0;
 }

@@ -205,6 +205,48 @@ export const CompanyListQuerySchema = v.object({
 /** Query for `GET /api/crm/companies/:id/contacts` — the same page bounds, no independent filter. */
 export const CompanyContactsQuerySchema = v.object(pageBounds);
 
+/**
+ * Every action the CRM audit log records — one per route, and the closed set is the point.
+ *
+ * A free-form action string would make the log filterable only by whatever spelling each handler
+ * happened to use, and "was this contact exported?" has to be answerable by equality rather than by
+ * guessing at synonyms. The names are `<subject>.<verb>` so a prefix filter reads as "everything
+ * anyone did to contacts".
+ *
+ * `audit.read` is in the set because reading the log is itself an access worth recording: it names
+ * which operator looked at which contact, so it is the one route whose readers a deployment most
+ * wants to know.
+ */
+export const CRM_AUDIT_ACTIONS = [
+	'contact.list',
+	'contact.create',
+	'contact.read',
+	'contact.update',
+	'contact.delete',
+	'contact.analytics',
+	'contact.export',
+	'company.list',
+	'company.create',
+	'company.read',
+	'company.update',
+	'company.delete',
+	'company.contacts',
+	'company.analytics',
+	'audit.read',
+] as const;
+
+export const CrmAuditActionSchema = v.picklist(CRM_AUDIT_ACTIONS);
+
+/** Query for `GET /api/crm/audit`. Every filter is an exact match on a recorded column — there is no
+ * substring search, because the log holds ids and action names rather than anything a person would
+ * search for by fragment. */
+export const CrmAuditListQuerySchema = v.object({
+	action: v.optional(CrmAuditActionSchema),
+	actor_user_id: optionalText(64),
+	target_id: optionalText(64),
+	...pageBounds,
+});
+
 export type ContactStatus = v.InferOutput<typeof ContactStatusSchema>;
 export type ContactCreateInput = v.InferOutput<typeof ContactCreateSchema>;
 export type ContactUpdateInput = v.InferOutput<typeof ContactUpdateSchema>;
@@ -213,3 +255,5 @@ export type CompanyStatus = v.InferOutput<typeof CompanyStatusSchema>;
 export type CompanyCreateInput = v.InferOutput<typeof CompanyCreateSchema>;
 export type CompanyUpdateInput = v.InferOutput<typeof CompanyUpdateSchema>;
 export type CompanyListQueryInput = v.InferOutput<typeof CompanyListQuerySchema>;
+export type CrmAuditAction = v.InferOutput<typeof CrmAuditActionSchema>;
+export type CrmAuditListQueryInput = v.InferOutput<typeof CrmAuditListQuerySchema>;

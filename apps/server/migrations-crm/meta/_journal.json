@@ -15,6 +15,13 @@
       "when": 1785902667995,
       "tag": "0001_perfect_tombstone",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1785912191326,
+      "tag": "0002_marvelous_agent_zero",
+      "breakpoints": true
     }
   ]
 }

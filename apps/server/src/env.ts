@@ -18,6 +18,10 @@ export interface Env {
 	AE?: AnalyticsEngineDataset;
 	/** Rolling retention window for raw events, in days (string var). */
 	RAW_RETENTION_DAYS: string;
+	/** Rolling retention window for the CRM audit log, in days (string var). Optional: unset means the
+	 * default in `constants.ts`, which is deliberately longer than the raw-event window because the log
+	 * records what OPERATORS did rather than what visitors did. Only read when `CRM_DB` is bound. */
+	CRM_AUDIT_RETENTION_DAYS?: string;
 	/** Cloudflare account id (var), used for Analytics Engine SQL-over-HTTP reads. */
 	CF_ACCOUNT_ID: string;
 	/** Cloudflare API token (Worker secret) for Analytics Engine SQL-over-HTTP reads. */

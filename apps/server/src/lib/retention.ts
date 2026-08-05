@@ -1,11 +1,20 @@
 // Retention cleanup: delete raw events, sessions, salts, and identity mappings older than the rolling
 // window. `event_rollups` are durable history and are never deleted. Invoked from the cron handler.
+//
+// The optional CRM has its own window and its own function. Contacts are NOT on any schedule — a
+// contact is a business record that is deleted by an explicit act, never by a cron — but the audit
+// log recording who read them is, because it is the one CRM table that grows on its own.
 
 import { lt } from 'drizzle-orm';
+import { purgeCrmAudit } from '../db/crm.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
-import { DAY_MS, DEFAULT_RAW_RETENTION_DAYS } from './constants.js';
+import {
+	DAY_MS,
+	DEFAULT_CRM_AUDIT_RETENTION_DAYS,
+	DEFAULT_RAW_RETENTION_DAYS,
+} from './constants.js';
 
 /**
  * The deployment's raw-data window in days — the ONE reading of `RAW_RETENTION_DAYS`. Every caller
@@ -34,4 +43,31 @@ export async function enforceRetention(env: Env, now: number): Promise<void> {
 	// Consent records aged past the window: the events they governed are gone, so drop the mapping and
 	// the at-rest raw uid. (Elevation already stops the instant a record expires or is revoked.)
 	await db(env).delete(schema.consentRecords).where(lt(schema.consentRecords.granted_at, cutoff));
+}
+
+/**
+ * The audit log's window in days — the ONE reading of `CRM_AUDIT_RETENTION_DAYS`, validated exactly
+ * as `retentionDays` validates its own var and for the same reason: a zero or negative value puts the
+ * cutoff at or after `now` and every run would erase the log it was meant to age.
+ */
+export function crmAuditRetentionDays(env: Env): number {
+	const days = Number.parseInt(env.CRM_AUDIT_RETENTION_DAYS ?? '', 10);
+	return Number.isInteger(days) && days >= 1 ? days : DEFAULT_CRM_AUDIT_RETENTION_DAYS;
+}
+
+/**
+ * Purge audit entries older than `CRM_AUDIT_RETENTION_DAYS`. A no-op on a deployment with no CRM
+ * binding, which has no such table — the extension being off means it does not exist, not that it is
+ * empty.
+ *
+ * Separate from `enforceRetention` rather than folded into it because they are different windows over
+ * different databases, and because the cron isolates failures per job: an unreachable `CRM_DB` must
+ * not be able to stop raw events being purged from the analytics one.
+ *
+ * Returns entries purged, which is zero on an unbound deployment for the same reason it is zero on a
+ * quiet one.
+ */
+export async function enforceCrmAuditRetention(env: Env, now: number): Promise<number> {
+	if (!env.CRM_DB) return 0;
+	return purgeCrmAudit(env.CRM_DB, now - crmAuditRetentionDays(env) * DAY_MS);
 }
