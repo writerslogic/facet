@@ -289,7 +289,7 @@ use `top_events` / `GET /api/stats/interactions` when you want that split.
 ```
 
 `source` says which store answered. A deployment with Analytics Engine configured
-(`analytics_engine_datasets` bound, plus the `CF_ACCOUNT_ID` var and `CF_API_TOKEN` secret) is
+(`AE_BEST_EFFORT_ENABLED=true`, `analytics_engine_datasets` bound, plus the `CF_ACCOUNT_ID` var and `CF_API_TOKEN` secret) is
 served from the columnar mirror; every other deployment — and any query the mirror cannot express —
 falls back to D1, which is always exact. **When `sampled` is `true` the figures are estimates:**
 Analytics Engine samples under load, `events` and `pageviews` are sampling-corrected, and `visitors`
@@ -1403,7 +1403,8 @@ authentication, so an unbound deployment answers uniformly. See `apps/server/wra
 to turn it on, and note that doing so changes the DPV claims this deployment signs at
 `/.well-known/facet-privacy.json` (it gains `dpv:Store`, `dpv:Erase`, `dpv:Consent`, and the
 `pd:` categories it holds — including `pd:CurrentEmployment`, because a contact linked to a company
-record carries a structured employer that a free-text box did not).
+record carries a structured employer that a free-text box did not, and `pd:Transactional`, because a
+deal linked to `contact_id` attaches a monetary pipeline value to a named person).
 
 Every route is rate limited per *operator* (not per site, so one compromised session cannot hide
 inside its team's traffic), write bodies are capped at 16 KB, and every authorized request — reads
@@ -1417,10 +1418,10 @@ that. Every route takes `?site_id=<uuid>`, and the caller must hold a role on th
 (assign one with `PATCH /api/sites/:id/team`). `503 auth_unavailable` without `SESSION_SECRET`;
 `401 unauthorized` without a session; `403 forbidden` when the role is insufficient.
 
-| Role | Contacts and companies |
+| Role | Contacts, companies and deals |
 | --- | --- |
 | `viewer` | no access at all |
-| `analyst` | list, read, create, update, view the analytics link |
+| `analyst` | list, read, create, update, view the analytics link, read the pipeline summary |
 | `admin` / `owner` | the above, plus delete, export, and read the audit log |
 
 ### `GET /api/crm/contacts?site_id&status&q&limit&offset` (session, analyst)
@@ -1566,6 +1567,49 @@ There is **no company export**. A data-subject export is per person by definitio
 would be a bulk PII dump with no data-protection meaning. Use `/companies/:id/contacts` and then the
 per-contact export, which accounts for each person separately.
 
+### `GET /api/crm/deals?site_id&stage&company_id&contact_id&q&limit&offset` (session, analyst)
+
+Lists deals, newest first. `stage` ∈ `lead \| qualified \| proposal \| negotiation \| won \| lost`; `q`
+is a bounded substring match over the deal name; `company_id`/`contact_id` filter to that record's
+deals. `limit` defaults to 25, max 100. Returns `{ deals: [...], total, role }`.
+
+### `POST /api/crm/deals?site_id` (session, analyst)
+
+Body: `{ name, company_id?, contact_id?, stage?, value?, currency?, expected_close_date?, notes?,
+owner_user_id? }`. `name` is required. `value` is cents, matching how every other money amount in this
+ecosystem avoids float rounding, and `currency` is a three-letter ISO 4217 code, uppercased on the
+wire; they are one fact recorded in two columns, so sending one without the other is
+`400 deal_value_needs_currency`. `expected_close_date` is Unix ms. A `company_id`/`contact_id` that
+does not match a record on this site is `400 unknown_reference` — there is no unique index on `deals`,
+so a stale reference is the only write failure a caller's input can cause. An `owner_user_id` that
+matches no user is `400 unknown_owner`. Returns `201`.
+
+A deal linked to `contact_id` makes that contact's data include `pd:Transactional`, the same way
+`company_id` on a contact adds `pd:CurrentEmployment`.
+
+### `GET`/`PATCH /api/crm/deals/:id?site_id` (session, analyst)
+
+`PATCH` is partial: only keys present in the body are written. A `name` present in the body must still
+be non-blank. A deal belonging to another site is `404 not_found`.
+
+### `DELETE /api/crm/deals/:id?site_id` (session, admin)
+
+**Deletes the deal**, matching contact delete rather than company delete: there is nothing here to
+preserve by unlinking first, since a deleted deal is the opportunity itself going away, not a person or
+organization losing a label. Returns `{ "deleted": true }`.
+
+### `GET /api/crm/pipeline?site_id` (session, analyst)
+
+The pipeline summary, one row per currency: `{ pipeline: [{ currency, open_value, open_count,
+won_value, won_count }] }`. `open_value`/`won_value` are cents, summed in SQL across every deal on the
+site. Deals with no `value`/`currency` are excluded, not counted as zero — a deal nobody has priced is
+not a $0 deal. Values are never summed across currencies, which is why this is a list of per-currency
+rows rather than one grand total that would add unlike units. `open` is every non-terminal stage;
+`won`/`lost` are the only terminal ones, and `lost` deals count toward neither `open` nor `won`.
+
+A top-level path — not `/deals/pipeline` — for the same reason `/audit` is top-level: it is a distinct
+resource, not a deal by that id.
+
 ### `GET /api/crm/audit?site_id&action&actor_user_id&target_id&limit&offset` (session, admin)
 
 The access log. **Every authorized request to any route above writes one entry, before its handler
@@ -1583,9 +1627,10 @@ an operator was *authorized* to do this to this id, not that it succeeded; a req
 `action` is one of `contact.list`, `contact.create`, `contact.read`, `contact.update`,
 `contact.delete`, `contact.analytics`, `contact.export`, `company.list`, `company.create`,
 `company.read`, `company.update`, `company.delete`, `company.contacts`, `company.analytics`,
-`audit.read` — a closed set, so the log is filterable by equality. `target_id` is the contact or
-company the request named, or `null` for a collection route and for a **create**, whose record does
-not exist yet when the entry is written. `actor_role` is the role the request was
+`deal.list`, `deal.create`, `deal.read`, `deal.update`, `deal.delete`, `deal.pipeline`,
+`audit.read` — a closed set, so the log is filterable by equality. `target_id` is the contact,
+company or deal the request named, or `null` for a collection route and for a **create**, whose
+record does not exist yet when the entry is written. `actor_role` is the role the request was
 **authorized under**, stored rather than resolved later, so "an admin exported this" stays true after
 they are demoted. All three filters are exact matches; a log of ids has no fragments to search for.
 
