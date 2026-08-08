@@ -106,6 +106,19 @@ async function createCompany(
 	return json.company;
 }
 
+async function createDeal(
+	e: TestEnv,
+	cookie: string,
+	body: Record<string, unknown>,
+): Promise<{ id: string; stage: string; value: number | null; currency: string | null }> {
+	const res = await crm(e, '/deals', { method: 'POST', body: JSON.stringify(body) }, cookie);
+	expect(res.status).toBe(201);
+	const json = (await res.json()) as {
+		deal: { id: string; stage: string; value: number | null; currency: string | null };
+	};
+	return json.deal;
+}
+
 beforeEach(async () => {
 	await seedSite(env);
 });
@@ -121,6 +134,9 @@ describe('the binding is the gate', () => {
 			'/companies/anything',
 			'/companies/anything/contacts',
 			'/companies/anything/analytics',
+			'/deals',
+			'/deals/anything',
+			'/pipeline',
 		]) {
 			const res = await crm(e, path);
 			expect(res.status).toBe(501);
@@ -171,6 +187,10 @@ describe('contact PII is not reachable with an API key', () => {
 			['/companies/abc', {}],
 			['/companies/abc/contacts', {}],
 			['/companies/abc/analytics', {}],
+			['/deals', {}],
+			['/deals', { method: 'POST', body: '{"name":"x"}' }],
+			['/deals/abc', {}],
+			['/pipeline', {}],
 		] as const) {
 			const res = await crm(env, path, { ...init, headers: auth });
 			expect(res.status).toBe(401);
@@ -230,10 +250,31 @@ describe('roles', () => {
 		).toBe(403);
 	});
 
+	it('lets an analyst manage deals, but not delete one', async () => {
+		const cookie = await operator(env, 'analyst@example.com', 'analyst');
+		const deal = await createDeal(env, cookie, { name: 'Acme renewal' });
+		expect((await crm(env, '/deals', {}, cookie)).status).toBe(200);
+		expect((await crm(env, '/pipeline', {}, cookie)).status).toBe(200);
+		expect(
+			(
+				await crm(
+					env,
+					`/deals/${deal.id}`,
+					{ method: 'PATCH', body: JSON.stringify({ stage: 'qualified' }) },
+					cookie,
+				)
+			).status,
+		).toBe(200);
+		expect((await crm(env, `/deals/${deal.id}`, { method: 'DELETE' }, cookie)).status).toBe(
+			403,
+		);
+	});
+
 	it('gives a viewer no CRM access at all', async () => {
 		const cookie = await operator(env, 'viewer@example.com', 'viewer');
 		expect((await crm(env, '/contacts', {}, cookie)).status).toBe(403);
 		expect((await crm(env, '/companies', {}, cookie)).status).toBe(403);
+		expect((await crm(env, '/deals', {}, cookie)).status).toBe(403);
 	});
 
 	it('blocks an operator with no role on the site', async () => {
@@ -1440,5 +1481,238 @@ describe('the PII routes are bounded, not just authenticated', () => {
 		);
 		// The ceiling itself is still reachable, so this is a bound and not an off-by-one.
 		expect((await crm(env, `/contacts?offset=${CRM_MAX_OFFSET}`, {}, cookie)).status).toBe(200);
+	});
+});
+
+describe('deals', () => {
+	it('refuses a deal with no name', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const res = await crm(env, '/deals', { method: 'POST', body: JSON.stringify({}) }, cookie);
+		expect(res.status).toBe(400);
+	});
+
+	it('requires value and currency together, in either direction', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const valueOnly = await crm(
+			env,
+			'/deals',
+			{ method: 'POST', body: JSON.stringify({ name: 'Acme renewal', value: 500_00 }) },
+			cookie,
+		);
+		expect(valueOnly.status).toBe(400);
+		const currencyOnly = await crm(
+			env,
+			'/deals',
+			{ method: 'POST', body: JSON.stringify({ name: 'Acme renewal', currency: 'USD' }) },
+			cookie,
+		);
+		expect(currencyOnly.status).toBe(400);
+		const both = await crm(
+			env,
+			'/deals',
+			{
+				method: 'POST',
+				body: JSON.stringify({ name: 'Acme renewal', value: 500_00, currency: 'usd' }),
+			},
+			cookie,
+		);
+		expect(both.status).toBe(201);
+		// Uppercased on the way in, so `usd` and `USD` land in the same pipeline bucket.
+		expect(await both.json()).toMatchObject({ deal: { currency: 'USD' } });
+	});
+
+	it('defaults to the lead stage and lets a PATCH move it through the pipeline', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const deal = await createDeal(env, cookie, { name: 'Acme renewal' });
+		expect(deal.stage).toBe('lead');
+		const res = await crm(
+			env,
+			`/deals/${deal.id}`,
+			{ method: 'PATCH', body: JSON.stringify({ stage: 'won' }) },
+			cookie,
+		);
+		expect(res.status).toBe(200);
+		expect(await res.json()).toMatchObject({ deal: { stage: 'won' } });
+	});
+
+	it('scopes reads to the authorized site', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const deal = await createDeal(env, cookie, { name: 'Acme renewal' });
+		await env.CRM_DB.prepare('UPDATE deals SET site_id = ? WHERE id = ?')
+			.bind('99999999-9999-4999-8999-999999999999', deal.id)
+			.run();
+		expect((await crm(env, `/deals/${deal.id}`, {}, cookie)).status).toBe(404);
+	});
+
+	it('links a deal to a company and a contact on the same site, by id', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const company = await createCompany(env, cookie, { name: 'Acme' });
+		const contact = await createContact(env, cookie, { name: 'Ada' });
+		const deal = await createDeal(env, cookie, {
+			name: 'Acme renewal',
+			company_id: company.id,
+			contact_id: contact.id,
+		});
+		const res = await crm(env, `/deals/${deal.id}`, {}, cookie);
+		expect(await res.json()).toMatchObject({
+			deal: { company_id: company.id, contact_id: contact.id },
+		});
+	});
+
+	it('rejects a company_id or contact_id that resolves to nothing', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const badCompany = await crm(
+			env,
+			'/deals',
+			{ method: 'POST', body: JSON.stringify({ name: 'x', company_id: 'nope' }) },
+			cookie,
+		);
+		expect(badCompany.status).toBe(400);
+		const badContact = await crm(
+			env,
+			'/deals',
+			{ method: 'POST', body: JSON.stringify({ name: 'x', contact_id: 'nope' }) },
+			cookie,
+		);
+		expect(badContact.status).toBe(400);
+	});
+
+	it('rejects a company_id belonging to another site, which the foreign key would accept', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const company = await createCompany(env, cookie, { name: 'Acme' });
+		await env.CRM_DB.prepare('UPDATE companies SET site_id = ? WHERE id = ?')
+			.bind('99999999-9999-4999-8999-999999999999', company.id)
+			.run();
+		const res = await crm(
+			env,
+			'/deals',
+			{ method: 'POST', body: JSON.stringify({ name: 'x', company_id: company.id }) },
+			cookie,
+		);
+		expect(res.status).toBe(400);
+		expect(await res.json()).toMatchObject({ error: 'unknown_company' });
+	});
+
+	it('filters by stage, company and a substring of the name', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const company = await createCompany(env, cookie, { name: 'Acme' });
+		await createDeal(env, cookie, {
+			name: 'Acme renewal',
+			company_id: company.id,
+			stage: 'won',
+		});
+		await createDeal(env, cookie, { name: 'Acme upsell', company_id: company.id });
+		await createDeal(env, cookie, { name: 'Globex trial' });
+
+		type DealsPage = { deals: { name: string }[]; total: number };
+
+		const byStage = await crm(env, '/deals?stage=won', {}, cookie);
+		expect(((await byStage.json()) as DealsPage).total).toBe(1);
+
+		const byCompany = await crm(env, `/deals?company_id=${company.id}`, {}, cookie);
+		expect(((await byCompany.json()) as DealsPage).total).toBe(2);
+
+		const byName = await crm(env, '/deals?q=upsell', {}, cookie);
+		const found = (await byName.json()) as DealsPage;
+		expect(found.total).toBe(1);
+		expect(found.deals[0]?.name).toBe('Acme upsell');
+	});
+
+	it('really deletes a deal and 404s a second delete', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const deal = await createDeal(env, cookie, { name: 'Acme renewal' });
+		expect((await crm(env, `/deals/${deal.id}`, { method: 'DELETE' }, cookie)).status).toBe(
+			200,
+		);
+		expect((await crm(env, `/deals/${deal.id}`, { method: 'DELETE' }, cookie)).status).toBe(
+			404,
+		);
+	});
+});
+
+describe('deleting a contact or company unlinks its deals rather than destroying them', () => {
+	it('nulls contact_id when the contact is erased, and the deal survives', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const contact = await createContact(env, cookie, { name: 'Ada' });
+		const deal = await createDeal(env, cookie, {
+			name: 'Acme renewal',
+			contact_id: contact.id,
+		});
+
+		expect(
+			(await crm(env, `/contacts/${contact.id}`, { method: 'DELETE' }, cookie)).status,
+		).toBe(200);
+
+		const after = await crm(env, `/deals/${deal.id}`, {}, cookie);
+		expect(after.status).toBe(200);
+		expect(await after.json()).toMatchObject({ deal: { contact_id: null } });
+	});
+
+	it('nulls company_id when the company is deleted, and reports how many deals were unlinked', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const company = await createCompany(env, cookie, { name: 'Acme' });
+		const dealA = await createDeal(env, cookie, { name: 'Renewal', company_id: company.id });
+		const dealB = await createDeal(env, cookie, { name: 'Upsell', company_id: company.id });
+
+		const res = await crm(env, `/companies/${company.id}`, { method: 'DELETE' }, cookie);
+		expect(res.status).toBe(200);
+		expect(await res.json()).toMatchObject({ deleted: true, deals_unlinked: 2 });
+
+		for (const id of [dealA.id, dealB.id]) {
+			const after = await crm(env, `/deals/${id}`, {}, cookie);
+			expect(await after.json()).toMatchObject({ deal: { company_id: null } });
+		}
+	});
+});
+
+describe('the deal pipeline is summed per currency', () => {
+	it('groups open and won value separately, and excludes lost and unpriced deals', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		await createDeal(env, cookie, {
+			name: 'A',
+			stage: 'qualified',
+			value: 100_00,
+			currency: 'USD',
+		});
+		await createDeal(env, cookie, {
+			name: 'B',
+			stage: 'negotiation',
+			value: 200_00,
+			currency: 'USD',
+		});
+		await createDeal(env, cookie, { name: 'C', stage: 'won', value: 300_00, currency: 'USD' });
+		// Excluded: a terminal loss, and a deal nobody has priced yet.
+		await createDeal(env, cookie, { name: 'D', stage: 'lost', value: 400_00, currency: 'USD' });
+		await createDeal(env, cookie, { name: 'E', stage: 'qualified' });
+		// A second currency stays in its own bucket rather than being added to the first.
+		await createDeal(env, cookie, {
+			name: 'F',
+			stage: 'qualified',
+			value: 50_00,
+			currency: 'EUR',
+		});
+
+		const res = await crm(env, '/pipeline', {}, cookie);
+		expect(res.status).toBe(200);
+		const { pipeline } = (await res.json()) as {
+			pipeline: {
+				currency: string;
+				open_value: number;
+				open_count: number;
+				won_value: number;
+				won_count: number;
+			}[];
+		};
+		expect(pipeline).toEqual([
+			{ currency: 'EUR', open_value: 50_00, open_count: 1, won_value: 0, won_count: 0 },
+			{ currency: 'USD', open_value: 300_00, open_count: 2, won_value: 300_00, won_count: 1 },
+		]);
+	});
+
+	it('reports nothing for a site with no priced deals, rather than a bucket of zeroes', async () => {
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		await createDeal(env, cookie, { name: 'Unpriced' });
+		const res = await crm(env, '/pipeline', {}, cookie);
+		expect(await res.json()).toEqual({ pipeline: [] });
 	});
 });

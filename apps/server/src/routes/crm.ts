@@ -43,6 +43,9 @@ import {
 	ContactUpdateSchema,
 	type CrmAuditAction,
 	CrmAuditListQuerySchema,
+	DealCreateSchema,
+	DealListQuerySchema,
+	DealUpdateSchema,
 } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { eq } from 'drizzle-orm';
@@ -59,24 +62,31 @@ import {
 import {
 	type Company,
 	type Contact,
+	type Deal,
 	companyContactLinkage,
+	dealPipelineSummary,
 	deleteCompany,
 	deleteContact,
+	deleteDeal,
 	foreignKeyViolation,
 	getCompany,
 	getContact,
+	getDeal,
 	insertCompany,
 	insertContact,
+	insertDeal,
 	listCompanies,
 	listCompanyContacts,
 	listContacts,
 	listCrmAudit,
+	listDeals,
 	recordCrmAccess,
 	requireCrm,
 	requireCrmDb,
 	uniqueConstraintText,
 	updateCompany,
 	updateContact,
+	updateDeal,
 } from '../db/crm.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
@@ -506,10 +516,11 @@ crmRoutes.patch(
 );
 
 /**
- * Delete a company. Its contacts survive — deleting an organization is not an erasure request about
- * the people in it, and a person's record has its own lifecycle and its own DELETE. Each contact's
- * `company_id` is cleared and the company's name is written back into their free-text `company`, so
- * "where does this person work" answers the same before and after; only the structured link is gone.
+ * Delete a company. Its contacts and deals survive — deleting an organization is not an erasure
+ * request about the people in it, and a person's record has its own lifecycle and its own DELETE.
+ * Each contact's `company_id` is cleared and the company's name is written back into their free-text
+ * `company`, so "where does this person work" answers the same before and after; each deal's
+ * `company_id` is simply cleared, since a deal has no free-text fallback to fall back to.
  *
  * `admin` rather than `analyst` because it is irreversible and it rewrites rows the caller did not
  * name — the same reason deleting a contact is.
@@ -519,7 +530,11 @@ crmRoutes.delete('/companies/:id', crmGate('admin', 'company.delete'), async (c)
 	if (!result) {
 		throw new ApiError('not_found', 404);
 	}
-	return c.json({ deleted: true, contacts_unlinked: result.contacts_unlinked });
+	return c.json({
+		deleted: true,
+		contacts_unlinked: result.contacts_unlinked,
+		deals_unlinked: result.deals_unlinked,
+	});
 });
 
 crmRoutes.get(
@@ -608,6 +623,107 @@ crmRoutes.get('/companies/:id/analytics', crmGate('analyst', 'company.analytics'
 		visitor_hashes: hashes.length,
 		activity: await contactActivity(c.env, siteId, hashes),
 	});
+});
+
+/** Resolve a deal or raise the canonical 404, scoped by the authorized site exactly as contacts and
+ * companies are. */
+async function loadDeal(env: Env, siteId: string, id: string): Promise<Deal> {
+	const deal = await getDeal(requireCrmDb(env), siteId, id);
+	if (!deal) {
+		throw new ApiError('not_found', 404);
+	}
+	return deal;
+}
+
+/** Map a failed deal write onto the status it deserves, or rethrow. There is no unique index on
+ * `deals`, so the only write failure a caller's input can cause is a stale `company_id`/`contact_id`. */
+function dealReferenceError(err: unknown): never {
+	if (foreignKeyViolation(err)) {
+		throw new ApiError(
+			'unknown_reference',
+			400,
+			'company_id or contact_id does not match a record on this site',
+		);
+	}
+	throw err;
+}
+
+crmRoutes.get(
+	'/deals',
+	crmGate('analyst', 'deal.list'),
+	vValidator('query', DealListQuerySchema, validationErrorHook),
+	async (c) => {
+		const query = c.req.valid('query');
+		const { deals, total } = await listDeals(requireCrmDb(c.env), c.get('siteId'), {
+			stage: query.stage,
+			companyId: query.company_id,
+			contactId: query.contact_id,
+			q: query.q,
+			limit: query.limit ?? CRM_DEFAULT_PAGE,
+			offset: query.offset ?? 0,
+		});
+		return c.json({ deals, total, role: c.get('role') });
+	},
+);
+
+crmRoutes.post(
+	'/deals',
+	crmGate('analyst', 'deal.create'),
+	vValidator('json', DealCreateSchema, validationErrorHook),
+	async (c) => {
+		const body = c.req.valid('json');
+		await assertOwnerExists(c.env, body.owner_user_id);
+		const deal = await insertDeal(requireCrmDb(c.env), c.get('siteId'), body, Date.now()).catch(
+			dealReferenceError,
+		);
+		return c.json({ deal }, 201);
+	},
+);
+
+/** The pipeline summary, one row per currency. A top-level path — not `/deals/pipeline` — for the same
+ * reason `/audit` is top-level rather than nested: it is a distinct resource, not a deal by that id,
+ * and keeping it out of the `/deals/:id` segment removes any ambiguity about which one a literal path
+ * segment named "pipeline" would ever resolve to. */
+crmRoutes.get('/pipeline', crmGate('analyst', 'deal.pipeline'), async (c) => {
+	const summary = await dealPipelineSummary(requireCrmDb(c.env), c.get('siteId'));
+	return c.json({ pipeline: summary });
+});
+
+crmRoutes.get('/deals/:id', crmGate('analyst', 'deal.read'), async (c) => {
+	const deal = await loadDeal(c.env, c.get('siteId'), c.req.param('id'));
+	return c.json({ deal });
+});
+
+crmRoutes.patch(
+	'/deals/:id',
+	crmGate('analyst', 'deal.update'),
+	vValidator('json', DealUpdateSchema, validationErrorHook),
+	async (c) => {
+		const body = c.req.valid('json');
+		await assertOwnerExists(c.env, body.owner_user_id);
+		const deal = await updateDeal(
+			requireCrmDb(c.env),
+			c.get('siteId'),
+			c.req.param('id') ?? '',
+			body,
+			Date.now(),
+		).catch(dealReferenceError);
+		if (!deal) {
+			throw new ApiError('not_found', 404);
+		}
+		return c.json({ deal });
+	},
+);
+
+/** `admin`, matching contact/company delete: irreversible, and unlike those two there is nothing here
+ * to preserve by unlinking first — a deal deleted is the opportunity itself going away, not a person or
+ * an organization losing a label. */
+crmRoutes.delete('/deals/:id', crmGate('admin', 'deal.delete'), async (c) => {
+	const deleted = await deleteDeal(requireCrmDb(c.env), c.get('siteId'), c.req.param('id') ?? '');
+	if (!deleted) {
+		throw new ApiError('not_found', 404);
+	}
+	return c.json({ deleted: true });
 });
 
 /**

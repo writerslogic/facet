@@ -56,6 +56,9 @@ export type Contact = typeof crmSchema.contacts.$inferSelect;
 /** A company as stored. */
 export type Company = typeof crmSchema.companies.$inferSelect;
 
+/** A deal as stored. */
+export type Deal = typeof crmSchema.deals.$inferSelect;
+
 /** The fields a caller may set. `id`/`site_id`/`created_at`/`updated_at` are server-owned. */
 export interface ContactInput {
 	external_user_id?: string | null;
@@ -76,6 +79,20 @@ export interface CompanyInput {
 	name?: string | null;
 	domain?: string | null;
 	status?: string;
+	notes?: string | null;
+	owner_user_id?: string | null;
+}
+
+/** The fields a caller may set on a deal. `value`/`currency` are validated as both-or-neither by the
+ * wire schema before this is ever called. */
+export interface DealInput {
+	name?: string;
+	company_id?: string | null;
+	contact_id?: string | null;
+	stage?: string;
+	value?: number | null;
+	currency?: string | null;
+	expected_close_date?: number | null;
 	notes?: string | null;
 	owner_user_id?: string | null;
 }
@@ -459,16 +476,25 @@ export async function updateContact(
 
 /** Really delete a contact — the row is gone, not flagged. A tombstone carrying an email is still
  * that person's personal data, so an erasure request cannot be answered with one. Returns the
- * deleted row so the caller can act on its `external_user_id` before it is lost. */
+ * deleted row so the caller can act on its `external_user_id` before it is lost.
+ *
+ * Any deal naming this contact survives, unlinked — same "unlink, don't destroy" precedent as
+ * `deleteCompany` on `contacts.company_id`, in the same D1 batch so a deal can never be left pointing
+ * at a contact id that no longer exists. */
 export async function deleteContact(
 	binding: D1Database,
 	siteId: string,
 	id: string,
 ): Promise<Contact | undefined> {
-	const deleted = await crmDb(binding)
-		.delete(crmSchema.contacts)
-		.where(and(eq(crmSchema.contacts.site_id, siteId), eq(crmSchema.contacts.id, id)))
-		.returning();
+	const client = crmDb(binding);
+	const atContact = and(eq(crmSchema.deals.site_id, siteId), eq(crmSchema.deals.contact_id, id));
+	const [, deleted] = await client.batch([
+		client.update(crmSchema.deals).set({ contact_id: null }).where(atContact),
+		client
+			.delete(crmSchema.contacts)
+			.where(and(eq(crmSchema.contacts.site_id, siteId), eq(crmSchema.contacts.id, id)))
+			.returning(),
+	]);
 	return deleted[0];
 }
 
@@ -608,23 +634,24 @@ export async function updateCompany(
 }
 
 /**
- * Delete a company, moving its contacts back to free text first.
+ * Delete a company, moving its contacts back to free text first and unlinking its deals.
  *
  * Deleting an organization must not delete people, and it must not silently erase where they work
  * either: `company_id` is nulled, and the company's name is written into each contact's `company`
  * column, so the answer a read gives for "where does this person work" is the same before and after.
  * That write-back is also what satisfies the foreign key — no row references the company by the time
- * it goes.
+ * it goes. Deals have no equivalent free-text fallback (their own `name` already describes the
+ * opportunity), so they are unlinked only.
  *
- * Both statements go in one D1 batch, which is a transaction. Run separately, a failure between them
- * would leave contacts detached from a company that still exists: not a crash, just a quietly wrong
- * state that nothing would ever surface.
+ * All statements go in one D1 batch, which is a transaction. Run separately, a failure between them
+ * would leave contacts or deals detached from a company that still exists: not a crash, just a quietly
+ * wrong state that nothing would ever surface.
  */
 export async function deleteCompany(
 	binding: D1Database,
 	siteId: string,
 	id: string,
-): Promise<{ company: Company; contacts_unlinked: number } | undefined> {
+): Promise<{ company: Company; contacts_unlinked: number; deals_unlinked: number } | undefined> {
 	const client = crmDb(binding);
 	const company = await getCompany(binding, siteId, id);
 	if (!company) return undefined;
@@ -632,7 +659,11 @@ export async function deleteCompany(
 		eq(crmSchema.contacts.site_id, siteId),
 		eq(crmSchema.contacts.company_id, company.id),
 	);
-	const [counted, , deleted] = await client.batch([
+	const atCompanyDeals = and(
+		eq(crmSchema.deals.site_id, siteId),
+		eq(crmSchema.deals.company_id, company.id),
+	);
+	const [counted, , deals, deleted] = await client.batch([
 		// Counted inside the transaction rather than by materialising the rows: `.returning()` on the
 		// update would pull one row per contact across the wire to produce a single integer, which for
 		// a large account is tens of thousands of rows read to count them.
@@ -651,6 +682,13 @@ export async function deleteCompany(
 				company_id: null,
 			})
 			.where(atCompany),
+		// `.returning()` here (unlike contacts above) because a company's deal count is orders of
+		// magnitude smaller than its contact count, so pulling the ids costs nothing worth avoiding.
+		client
+			.update(crmSchema.deals)
+			.set({ company_id: null })
+			.where(atCompanyDeals)
+			.returning({ id: crmSchema.deals.id }),
 		client
 			.delete(crmSchema.companies)
 			.where(and(eq(crmSchema.companies.site_id, siteId), eq(crmSchema.companies.id, id)))
@@ -658,7 +696,199 @@ export async function deleteCompany(
 	]);
 	// Lost a race with a concurrent delete: the batch changed nothing, and 404 is the honest answer.
 	if (deleted.length === 0) return undefined;
-	return { company, contacts_unlinked: counted[0]?.n ?? 0 };
+	return { company, contacts_unlinked: counted[0]?.n ?? 0, deals_unlinked: deals.length };
+}
+
+/** Resolve a contact id to a contact on this site, or raise the 400 a bad link deserves. Same
+ * reasoning as `resolveCompany`: the foreign key proves the row exists, not that it belongs to the
+ * caller's site. */
+async function resolveContact(
+	client: ReturnType<typeof crmDb>,
+	siteId: string,
+	contactId: string,
+): Promise<Contact> {
+	const contact = await client
+		.select()
+		.from(crmSchema.contacts)
+		.where(and(eq(crmSchema.contacts.site_id, siteId), eq(crmSchema.contacts.id, contactId)))
+		.get();
+	if (!contact) {
+		throw new ApiError(
+			'unknown_contact',
+			400,
+			'contact_id does not match a contact on this site',
+		);
+	}
+	return contact;
+}
+
+export async function insertDeal(
+	binding: D1Database,
+	siteId: string,
+	input: DealInput,
+	now: number,
+): Promise<Deal> {
+	const client = crmDb(binding);
+	const companyId = orNull(input.company_id);
+	const contactId = orNull(input.contact_id);
+	if (companyId) await resolveCompany(client, siteId, companyId);
+	if (contactId) await resolveContact(client, siteId, contactId);
+	const row = {
+		id: crypto.randomUUID(),
+		site_id: siteId,
+		name: orNull(input.name) ?? '',
+		company_id: companyId,
+		contact_id: contactId,
+		stage: input.stage ?? 'lead',
+		value: input.value ?? null,
+		currency: orNull(input.currency),
+		expected_close_date: input.expected_close_date ?? null,
+		notes: orNull(input.notes),
+		owner_user_id: orNull(input.owner_user_id),
+		created_at: now,
+		updated_at: now,
+	};
+	await client.insert(crmSchema.deals).values(row);
+	return row;
+}
+
+export function getDeal(
+	binding: D1Database,
+	siteId: string,
+	id: string,
+): Promise<Deal | undefined> {
+	return crmDb(binding)
+		.select()
+		.from(crmSchema.deals)
+		.where(and(eq(crmSchema.deals.site_id, siteId), eq(crmSchema.deals.id, id)))
+		.get();
+}
+
+export interface ListDealsOptions {
+	stage?: string;
+	companyId?: string;
+	contactId?: string;
+	/** Substring match over the deal name. */
+	q?: string;
+	limit: number;
+	offset: number;
+}
+
+export async function listDeals(
+	binding: D1Database,
+	siteId: string,
+	opts: ListDealsOptions,
+): Promise<{ deals: Deal[]; total: number }> {
+	const filters = [eq(crmSchema.deals.site_id, siteId)];
+	if (opts.stage) filters.push(eq(crmSchema.deals.stage, opts.stage));
+	if (opts.companyId) filters.push(eq(crmSchema.deals.company_id, opts.companyId));
+	if (opts.contactId) filters.push(eq(crmSchema.deals.contact_id, opts.contactId));
+	if (opts.q) filters.push(likeMatch(crmSchema.deals.name, opts.q));
+	const where = and(...filters);
+	const client = crmDb(binding);
+	const [deals, totalRow] = await Promise.all([
+		client
+			.select()
+			.from(crmSchema.deals)
+			.where(where)
+			.orderBy(desc(crmSchema.deals.created_at))
+			.limit(opts.limit)
+			.offset(opts.offset),
+		client.select({ n: sql<number>`count(*)` }).from(crmSchema.deals).where(where).get(),
+	]);
+	return { deals, total: totalRow?.n ?? 0 };
+}
+
+/** Partial update, same rule as `updateContact`/`updateCompany`: only keys present in `input` are
+ * written. Re-resolves `company_id`/`contact_id` when either is being changed, for the same reason
+ * `insertDeal` resolves them on create — a stale or foreign-site id must not silently attach. */
+export async function updateDeal(
+	binding: D1Database,
+	siteId: string,
+	id: string,
+	input: DealInput,
+	now: number,
+): Promise<Deal | undefined> {
+	const client = crmDb(binding);
+	const set: Record<string, string | number | null> = { updated_at: now };
+	if ('name' in input) set.name = orNull(input.name) ?? '';
+	if ('company_id' in input) {
+		const companyId = orNull(input.company_id);
+		set.company_id = companyId ? (await resolveCompany(client, siteId, companyId)).id : null;
+	}
+	if ('contact_id' in input) {
+		const contactId = orNull(input.contact_id);
+		set.contact_id = contactId ? (await resolveContact(client, siteId, contactId)).id : null;
+	}
+	if ('stage' in input && input.stage) set.stage = input.stage;
+	if ('value' in input) set.value = input.value ?? null;
+	if ('currency' in input) set.currency = orNull(input.currency);
+	if ('expected_close_date' in input) set.expected_close_date = input.expected_close_date ?? null;
+	if ('notes' in input) set.notes = orNull(input.notes);
+	if ('owner_user_id' in input) set.owner_user_id = orNull(input.owner_user_id);
+	const updated = await client
+		.update(crmSchema.deals)
+		.set(set)
+		.where(and(eq(crmSchema.deals.site_id, siteId), eq(crmSchema.deals.id, id)))
+		.returning();
+	return updated[0];
+}
+
+export async function deleteDeal(
+	binding: D1Database,
+	siteId: string,
+	id: string,
+): Promise<Deal | undefined> {
+	const deleted = await crmDb(binding)
+		.delete(crmSchema.deals)
+		.where(and(eq(crmSchema.deals.site_id, siteId), eq(crmSchema.deals.id, id)))
+		.returning();
+	return deleted[0];
+}
+
+/** One currency's slice of the pipeline: open value (every non-terminal stage) and won value, each
+ * with its own count. Deliberately per-currency rather than one grand total — summing `value` across
+ * currencies would produce a number that means nothing, so the caller decides how to present multiple
+ * rows rather than this function silently picking one currency or adding unlike units. Deals with no
+ * `value`/`currency` are excluded, not counted as zero: a deal nobody has priced is not a $0 deal. */
+export interface PipelineCurrencySummary {
+	currency: string;
+	open_value: number;
+	open_count: number;
+	won_value: number;
+	won_count: number;
+}
+
+export async function dealPipelineSummary(
+	binding: D1Database,
+	siteId: string,
+): Promise<PipelineCurrencySummary[]> {
+	// Summed in SQL, not pulled row-by-row and reduced in the Worker — a site's whole deal history
+	// would otherwise cross the wire to compute four numbers per currency. `'won'`/`'lost'` are
+	// hardcoded rather than read from `DEAL_STAGES` because this is SQL text, not JS; the two terminal
+	// stages are exhaustively enumerated in the schema comment beside `deals.stage`.
+	const isWon = sql`${crmSchema.deals.stage} = 'won'`;
+	const isOpen = sql`${crmSchema.deals.stage} not in ('won', 'lost')`;
+	const rows = await crmDb(binding)
+		.select({
+			currency: crmSchema.deals.currency,
+			open_value: sql<number>`coalesce(sum(case when ${isOpen} then ${crmSchema.deals.value} end), 0)`,
+			open_count: sql<number>`sum(case when ${isOpen} then 1 else 0 end)`,
+			won_value: sql<number>`coalesce(sum(case when ${isWon} then ${crmSchema.deals.value} end), 0)`,
+			won_count: sql<number>`sum(case when ${isWon} then 1 else 0 end)`,
+		})
+		.from(crmSchema.deals)
+		.where(
+			and(
+				eq(crmSchema.deals.site_id, siteId),
+				isNotNull(crmSchema.deals.currency),
+				isNotNull(crmSchema.deals.value),
+			),
+		)
+		.groupBy(crmSchema.deals.currency)
+		.orderBy(crmSchema.deals.currency);
+	// `currency` is excluded-when-null by the WHERE above, but the column type stays nullable.
+	return rows.filter((r): r is PipelineCurrencySummary => r.currency !== null);
 }
 
 /** One entry as the audit log stores and returns it. There is no separate wire shape: every column

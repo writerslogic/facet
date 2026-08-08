@@ -86,6 +86,11 @@ export function privacyDpvClaims(env: Env): Record<string, unknown> {
 			'pd:EmailAddress',
 			'pd:TelephoneNumber',
 			'pd:CurrentEmployment',
+			// `deals.contact_id` links a monetary pipeline value to a named person. `pd:Transactional`
+			// ("information about a purchasing, spending or income") is the DPV term for that, and it is
+			// claimed unconditionally once `deals` exists — same structural-capability reasoning as
+			// `pd:CurrentEmployment` above, since most contacts will have no deal at all.
+			'pd:Transactional',
 		],
 	};
 }

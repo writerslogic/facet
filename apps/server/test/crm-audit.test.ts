@@ -190,6 +190,13 @@ describe('every route records the access before it performs it', () => {
 			cookie,
 		);
 		const companyId = ((await company.json()) as { company: { id: string } }).company.id;
+		const deal = await crm(
+			env,
+			'/deals',
+			{ method: 'POST', body: JSON.stringify({ name: 'Acme renewal' }) },
+			cookie,
+		);
+		const dealId = ((await deal.json()) as { deal: { id: string } }).deal.id;
 		for (const path of [
 			'/contacts',
 			`/contacts/${contactId}`,
@@ -199,12 +206,17 @@ describe('every route records the access before it performs it', () => {
 			`/companies/${companyId}`,
 			`/companies/${companyId}/contacts`,
 			`/companies/${companyId}/analytics`,
+			'/deals',
+			`/deals/${dealId}`,
+			'/pipeline',
 			'/audit',
 		]) {
 			await crm(env, path, {}, cookie);
 		}
 		await crm(env, `/contacts/${contactId}`, { method: 'PATCH', body: '{}' }, cookie);
 		await crm(env, `/companies/${companyId}`, { method: 'PATCH', body: '{}' }, cookie);
+		await crm(env, `/deals/${dealId}`, { method: 'PATCH', body: '{}' }, cookie);
+		await crm(env, `/deals/${dealId}`, { method: 'DELETE' }, cookie);
 		await crm(env, `/contacts/${contactId}`, { method: 'DELETE' }, cookie);
 		await crm(env, `/companies/${companyId}`, { method: 'DELETE' }, cookie);
 

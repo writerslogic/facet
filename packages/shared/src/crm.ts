@@ -205,6 +205,70 @@ export const CompanyListQuerySchema = v.object({
 /** Query for `GET /api/crm/companies/:id/contacts` — the same page bounds, no independent filter. */
 export const CompanyContactsQuerySchema = v.object(pageBounds);
 
+/** Deal lifecycle. `won`/`lost` are terminal; a pipeline total treats every other stage as open. */
+export const DealStageSchema = v.picklist([
+	'lead',
+	'qualified',
+	'proposal',
+	'negotiation',
+	'won',
+	'lost',
+]);
+
+export const DEAL_NOTES_MAX_LEN = 4000;
+
+/** Three-letter ISO 4217 code, uppercased on the wire so `USD` and `usd` are the same currency rather
+ * than two buckets in a pipeline total. */
+const CurrencySchema = v.pipe(v.string(), v.length(3), v.toUpperCase());
+
+const dealFields = {
+	name: v.pipe(v.string(), v.maxLength(200)),
+	company_id: optionalText(64),
+	contact_id: optionalText(64),
+	stage: v.optional(DealStageSchema),
+	/** Cents. Whole dollars/pounds/etc times 100, matching how every other money amount in this
+	 * ecosystem (Stripe, DEVPLAN's planned ecommerce tracking) avoids float rounding. */
+	value: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+	currency: v.optional(CurrencySchema),
+	/** Unix ms, matching every other timestamp on the wire. */
+	expected_close_date: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+	notes: optionalText(DEAL_NOTES_MAX_LEN),
+	owner_user_id: optionalText(64),
+};
+
+const DealFieldsSchema = v.object(dealFields);
+
+/** `value` and `currency` are one fact recorded in two columns — a value with no currency cannot be
+ * summed into a pipeline total, and a currency with no value names nothing. Shared by create and
+ * update so the two can never drift on what "paired" means. */
+function moneyIsPaired<T extends { value?: number; currency?: string }>(b: T): boolean {
+	return Boolean(b.value) === Boolean(b.currency);
+}
+
+/** Create a deal. The name is required and is the display value, matching `CompanyCreateSchema`. */
+export const DealCreateSchema = v.pipe(
+	DealFieldsSchema,
+	v.check((b) => Boolean(b.name.trim()), 'deal_needs_a_name'),
+	v.check(moneyIsPaired, 'deal_value_needs_currency'),
+);
+
+/** Partial update. `name` may be omitted, but a present `name` must still be non-blank — the column is
+ * NOT NULL and blanking it would leave a row nothing can refer to. */
+export const DealUpdateSchema = v.pipe(
+	v.object({ ...dealFields, name: v.optional(dealFields.name) }),
+	v.check((b) => !('name' in b) || Boolean(b.name?.trim()), 'deal_needs_a_name'),
+	v.check(moneyIsPaired, 'deal_value_needs_currency'),
+);
+
+/** Query for `GET /api/crm/deals`. `q` is a bounded substring search over the deal name. */
+export const DealListQuerySchema = v.object({
+	stage: v.optional(DealStageSchema),
+	company_id: optionalText(64),
+	contact_id: optionalText(64),
+	q: v.optional(v.pipe(v.string(), v.maxLength(100))),
+	...pageBounds,
+});
+
 /**
  * Every action the CRM audit log records — one per route, and the closed set is the point.
  *
@@ -232,6 +296,12 @@ export const CRM_AUDIT_ACTIONS = [
 	'company.delete',
 	'company.contacts',
 	'company.analytics',
+	'deal.list',
+	'deal.create',
+	'deal.read',
+	'deal.update',
+	'deal.delete',
+	'deal.pipeline',
 	'audit.read',
 ] as const;
 
@@ -255,5 +325,9 @@ export type CompanyStatus = v.InferOutput<typeof CompanyStatusSchema>;
 export type CompanyCreateInput = v.InferOutput<typeof CompanyCreateSchema>;
 export type CompanyUpdateInput = v.InferOutput<typeof CompanyUpdateSchema>;
 export type CompanyListQueryInput = v.InferOutput<typeof CompanyListQuerySchema>;
+export type DealStage = v.InferOutput<typeof DealStageSchema>;
+export type DealCreateInput = v.InferOutput<typeof DealCreateSchema>;
+export type DealUpdateInput = v.InferOutput<typeof DealUpdateSchema>;
+export type DealListQueryInput = v.InferOutput<typeof DealListQuerySchema>;
 export type CrmAuditAction = v.InferOutput<typeof CrmAuditActionSchema>;
 export type CrmAuditListQueryInput = v.InferOutput<typeof CrmAuditListQuerySchema>;
