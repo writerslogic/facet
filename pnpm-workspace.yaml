@@ -8,9 +8,14 @@ packages:
 # Scoped to those two paths only — a blanket override also forces vite's esbuild to
 # 0.28.1, which fails transpiling a prebuilt vendor chunk vite's dep optimizer inlines
 # (destructuring-to-target regression); vite's 0.25.12 has no advisory against it anyway.
+# nanoid<3.3.17 (GHSA-mwcw-c2x4-8c55) pulled in transitively by postcss (a devDependency of
+# tsup and vite, never shipped); Dependabot can't bump it alone since postcss@8.5.25 pins
+# nanoid to ^3.3.16, and the fix landed in postcss@8.5.26. Only one nanoid copy in the tree,
+# so a blanket override is safe here (unlike the esbuild case below).
 overrides:
   "@esbuild-kit/core-utils>esbuild": ">=0.28.1"
   "tsup>esbuild": ">=0.28.1"
+  nanoid: ">=3.3.17 <4.0.0"
 
 allowBuilds:
   "@biomejs/biome": true
