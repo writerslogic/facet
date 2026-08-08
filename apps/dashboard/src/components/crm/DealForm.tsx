@@ -66,7 +66,6 @@ export function DealForm({
 	onCancel,
 	isPending,
 	error,
-	success,
 }: {
 	siteId: string;
 	/** The deal being edited, or null when creating. */
@@ -77,7 +76,6 @@ export function DealForm({
 	onCancel: () => void;
 	isPending: boolean;
 	error: unknown;
-	success?: string | null;
 }): ReactElement {
 	const [draft, setDraft] = useState<Draft>(() => draftFrom(deal));
 	const companyOptions = useCompanyOptions(siteId);
@@ -254,7 +252,7 @@ export function DealForm({
 			<MutationStatus
 				isPending={isPending}
 				error={error}
-				success={success ?? null}
+				success={null}
 				pendingLabel={pendingLabel}
 			/>
 		</form>

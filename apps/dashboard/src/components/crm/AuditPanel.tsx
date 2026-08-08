@@ -15,6 +15,7 @@
 // and after an erasure the id points at nothing — so the honest offer is "filter by this id", not a
 // label the log cannot stand behind.
 
+import type { CrmAuditAction } from '@facet/shared';
 import { ArrowLeft, ScrollText } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { CRM_PAGE_SIZE, useCrmAudit } from '../../hooks/crm.js';
@@ -24,24 +25,40 @@ import { formatDateTime } from '../../lib/datetime.js';
 import { CardSkeletons, EmptyState } from '../StatusStates.js';
 import { CrmAccessNotice, Pager } from './shared.js';
 
-/** Every action, for the filter. Ordered by subject then by how much the act discloses, so the two
- * an auditor scans for — the export and the erasures — are not buried mid-list. */
-const ACTIONS: string[] = [
-	'contact.export',
-	'contact.delete',
-	'company.delete',
-	'contact.list',
-	'contact.read',
-	'contact.create',
-	'contact.update',
-	'contact.analytics',
-	'company.list',
-	'company.read',
-	'company.create',
-	'company.update',
-	'company.contacts',
-	'company.analytics',
-	'audit.read',
+/** One key per member of `CrmAuditAction` — a type-only import from `@facet/shared` so this list
+ * can't silently miss a newly added action (TypeScript requires every key of the union here) without
+ * pulling `@facet/shared`'s valibot schemas into the dashboard bundle as a runtime import would. This
+ * is exactly the gap that let the six `deal.*` actions go missing from this filter once. */
+const ACTION_KEYS: Record<CrmAuditAction, true> = {
+	'contact.list': true,
+	'contact.create': true,
+	'contact.read': true,
+	'contact.update': true,
+	'contact.delete': true,
+	'contact.analytics': true,
+	'contact.export': true,
+	'company.list': true,
+	'company.create': true,
+	'company.read': true,
+	'company.update': true,
+	'company.delete': true,
+	'company.contacts': true,
+	'company.analytics': true,
+	'deal.list': true,
+	'deal.create': true,
+	'deal.read': true,
+	'deal.update': true,
+	'deal.delete': true,
+	'deal.pipeline': true,
+	'audit.read': true,
+};
+
+/** Every action, for the filter. Priority names go first — the export and the erasures are what an
+ * auditor scans for — then the rest verbatim. */
+const PRIORITY: CrmAuditAction[] = ['contact.export', 'contact.delete', 'company.delete'];
+const ACTIONS: CrmAuditAction[] = [
+	...PRIORITY,
+	...(Object.keys(ACTION_KEYS) as CrmAuditAction[]).filter((a) => !PRIORITY.includes(a)),
 ];
 
 const TONE_CLASS: Record<AuditTone, string> = {

@@ -1,7 +1,4 @@
-// One deal: its record, an edit form, and the admin-only delete. No export and no consent-gated
-// analytics link — a deal is a business record about an opportunity, not a person, so neither of the
-// two things that make a contact sensitive applies here.
-
+import { ScrollText } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useCompany, useContact, useDeleteDeal, useUpdateDeal } from '../../hooks/crm.js';
 import { type CrmDeal, formatMoney } from '../../lib/crm.js';
@@ -69,6 +66,7 @@ export function DealDetail({
 	onDeleted,
 	onOpenCompany,
 	onOpenContact,
+	onOpenAudit,
 }: {
 	siteId: string;
 	deal: CrmDeal;
@@ -78,6 +76,8 @@ export function DealDetail({
 	/** Jump to the linked company or contact. Omitted where there is nothing to jump to. */
 	onOpenCompany?: (companyId: string) => void;
 	onOpenContact?: (contactId: string) => void;
+	/** Open the access log filtered to this deal — mirrors ContactDetail/CompanyDetail. */
+	onOpenAudit?: (targetId: string) => void;
 }): ReactElement {
 	const [editing, setEditing] = useState(false);
 	const [saved, setSaved] = useState<string | null>(null);
@@ -125,6 +125,16 @@ export function DealDetail({
 				</div>
 				<div className="flex shrink-0 flex-wrap items-center gap-1.5">
 					<StatusChip status={deal.stage} />
+					{onOpenAudit ? (
+						<button
+							type="button"
+							onClick={() => onOpenAudit(deal.id)}
+							className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium text-xs transition"
+						>
+							<ScrollText className="h-3.5 w-3.5" aria-hidden="true" />
+							Access log
+						</button>
+					) : null}
 					<button
 						type="button"
 						onClick={() => {

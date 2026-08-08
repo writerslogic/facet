@@ -33,12 +33,19 @@ export interface CrmListParams {
 	offset: number;
 }
 
-function listPath(base: string, siteId: string, params: CrmListParams): string {
-	const qs = new URLSearchParams({
+/** The `site_id`/`limit`/`offset` scaffold every paged CRM query starts from, before its own filters
+ * are layered on — `limit` is always the shared page size, since none of these views ever page at a
+ * different rate. */
+function baseListQuery(siteId: string, offset: number): URLSearchParams {
+	return new URLSearchParams({
 		site_id: siteId,
 		limit: String(CRM_PAGE_SIZE),
-		offset: String(params.offset),
+		offset: String(offset),
 	});
+}
+
+function listPath(base: string, siteId: string, params: CrmListParams): string {
+	const qs = baseListQuery(siteId, params.offset);
 	if (params.status) qs.set('status', params.status);
 	const q = params.q.trim();
 	if (q) qs.set('q', q);
@@ -178,11 +185,7 @@ export function useDeals(siteId: string, params: DealListParams) {
 	return useQuery({
 		queryKey: ['crm', 'deals', siteId, params],
 		queryFn: () => {
-			const qs = new URLSearchParams({
-				site_id: siteId,
-				limit: String(CRM_PAGE_SIZE),
-				offset: String(params.offset),
-			});
+			const qs = baseListQuery(siteId, params.offset);
 			if (params.stage) qs.set('stage', params.stage);
 			if (params.companyId) qs.set('company_id', params.companyId);
 			if (params.contactId) qs.set('contact_id', params.contactId);
@@ -260,11 +263,7 @@ export function useCrmAudit(siteId: string, params: CrmAuditParams) {
 	return useQuery({
 		queryKey: ['crm', 'audit', siteId, params],
 		queryFn: () => {
-			const qs = new URLSearchParams({
-				site_id: siteId,
-				limit: String(CRM_PAGE_SIZE),
-				offset: String(params.offset),
-			});
+			const qs = baseListQuery(siteId, params.offset);
 			if (params.action) qs.set('action', params.action);
 			if (params.targetId) qs.set('target_id', params.targetId);
 			if (params.actorUserId) qs.set('actor_user_id', params.actorUserId);
@@ -342,14 +341,18 @@ export function useDeleteContact(siteId: string) {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (id: string) =>
-			sessionFetch<{ deleted: boolean; consent_records_erased: number }>(
-				`/api/crm/contacts/${id}?site_id=${siteId}`,
-				{ method: 'DELETE' },
-			),
+			sessionFetch<{
+				deleted: boolean;
+				consent_records_erased: number;
+				deals_unlinked: number;
+			}>(`/api/crm/contacts/${id}?site_id=${siteId}`, { method: 'DELETE' }),
 		onSuccess: () => {
 			void qc.invalidateQueries({ queryKey: ['crm', 'contacts', siteId] });
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-contacts', siteId] });
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-analytics', siteId] });
+			// Every deal naming this contact had contact_id nulled server-side.
+			void qc.invalidateQueries({ queryKey: ['crm', 'deals', siteId] });
+			void qc.invalidateQueries({ queryKey: ['crm', 'deal', siteId] });
 			void auditIsStale(qc, siteId);
 		},
 	});
@@ -392,12 +395,13 @@ export function useUpdateCompany(siteId: string, id: string) {
 	});
 }
 
-/** Delete a company. Its contacts survive — the API unlinks them and reports how many. */
+/** Delete a company. Its contacts and deals survive — the API unlinks them and reports how many of
+ * each. */
 export function useDeleteCompany(siteId: string) {
 	const qc = useQueryClient();
 	return useMutation({
 		mutationFn: (id: string) =>
-			sessionFetch<{ deleted: boolean; contacts_unlinked: number }>(
+			sessionFetch<{ deleted: boolean; contacts_unlinked: number; deals_unlinked: number }>(
 				`/api/crm/companies/${id}?site_id=${siteId}`,
 				{ method: 'DELETE' },
 			),
@@ -406,6 +410,9 @@ export function useDeleteCompany(siteId: string) {
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-options', siteId] });
 			// Every unlinked contact's `company` and `company_id` changed.
 			void qc.invalidateQueries({ queryKey: ['crm', 'contacts', siteId] });
+			// Every unlinked deal's `company_id` changed too.
+			void qc.invalidateQueries({ queryKey: ['crm', 'deals', siteId] });
+			void qc.invalidateQueries({ queryKey: ['crm', 'deal', siteId] });
 			void auditIsStale(qc, siteId);
 		},
 	});

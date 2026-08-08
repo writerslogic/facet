@@ -62,6 +62,10 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 	const [companyId, setCompanyId] = useState('');
 	const [dealId, setDealId] = useState('');
 	const [auditTarget, setAuditTarget] = useState('');
+	// A company's or a contact's deals, viewed from its detail pane — mutually exclusive, since a
+	// deal names at most one of each and showing both at once would silently intersect them.
+	const [dealCompanyFilter, setDealCompanyFilter] = useState('');
+	const [dealContactFilter, setDealContactFilter] = useState('');
 
 	const openCompany = (id: string): void => {
 		setCompanyId(id);
@@ -76,6 +80,16 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 	const openAudit = (id: string): void => {
 		setAuditTarget(id);
 		setSection('audit');
+	};
+	const viewCompanyDeals = (id: string): void => {
+		setDealCompanyFilter(id);
+		setDealContactFilter('');
+		setSection('deals');
+	};
+	const viewContactDeals = (id: string): void => {
+		setDealContactFilter(id);
+		setDealCompanyFilter('');
+		setSection('deals');
 	};
 
 	return (
@@ -133,6 +147,7 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 						onSelect={setContactId}
 						onOpenCompany={openCompany}
 						onOpenAudit={openAudit}
+						onViewDeals={viewContactDeals}
 					/>
 				) : section === 'companies' ? (
 					<CompaniesPanel
@@ -141,6 +156,7 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 						onSelect={setCompanyId}
 						onOpenContact={openContact}
 						onOpenAudit={openAudit}
+						onViewDeals={viewCompanyDeals}
 					/>
 				) : section === 'deals' ? (
 					<DealsPanel
@@ -149,6 +165,13 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 						onSelect={setDealId}
 						onOpenCompany={openCompany}
 						onOpenContact={openContact}
+						onOpenAudit={openAudit}
+						companyFilter={dealCompanyFilter}
+						contactFilter={dealContactFilter}
+						onClearFilter={() => {
+							setDealCompanyFilter('');
+							setDealContactFilter('');
+						}}
 					/>
 				) : (
 					<AuditPanel siteId={siteId} targetId={auditTarget} onTarget={setAuditTarget} />

@@ -367,7 +367,11 @@ crmRoutes.delete('/contacts/:id', crmGate('admin', 'contact.delete'), async (c) 
 		// Lost a race with a concurrent delete, which already erased the same consent rows.
 		throw new ApiError('not_found', 404);
 	}
-	return c.json({ deleted: true, consent_records_erased: consentErased });
+	return c.json({
+		deleted: true,
+		consent_records_erased: consentErased,
+		deals_unlinked: deleted.deals_unlinked,
+	});
 });
 
 /** A contact's analytics, if and only if an active signed consent record authorizes the link. When

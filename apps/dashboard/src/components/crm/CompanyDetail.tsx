@@ -6,7 +6,7 @@
 // contacts_total` is rendered above the figures on every response — linked or not — and a truncated
 // rollup says it is a lower bound rather than presenting a capped sum as a total.
 
-import { Link2Off, ScrollText, Users } from 'lucide-react';
+import { Handshake, Link2Off, ScrollText, Users } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import {
 	CRM_PAGE_SIZE,
@@ -190,17 +190,21 @@ export function CompanyDetail({
 	onDeleted,
 	onOpenContact,
 	onOpenAudit,
+	onViewDeals,
 }: {
 	siteId: string;
 	company: CrmCompany;
 	/** True only when this operator provably holds `admin`; see `canAdministerCrm`. */
 	canAdminister: boolean;
-	onDeleted: (contactsUnlinked: number) => void;
+	onDeleted: (result: { contactsUnlinked: number; dealsUnlinked: number }) => void;
 	onOpenContact: (contactId: string) => void;
 	/** Open the access log filtered to this company. */
 	onOpenAudit?: (targetId: string) => void;
+	/** Switch to the Deals tab, filtered to deals naming this company. */
+	onViewDeals?: (companyId: string) => void;
 }): ReactElement {
 	const [editing, setEditing] = useState(false);
+	const [saved, setSaved] = useState<string | null>(null);
 	const [rosterOffset, setRosterOffset] = useState(0);
 	const roster = useCompanyContacts(siteId, company.id, rosterOffset);
 	const contactCount = roster.data?.total ?? null;
@@ -219,7 +223,12 @@ export function CompanyDetail({
 					error={update.error}
 					onCancel={() => setEditing(false)}
 					onSubmit={(fields) =>
-						update.mutate(fields, { onSuccess: () => setEditing(false) })
+						update.mutate(fields, {
+							onSuccess: () => {
+								setSaved('Company updated.');
+								setEditing(false);
+							},
+						})
 					}
 				/>
 			</section>
@@ -249,6 +258,16 @@ export function CompanyDetail({
 				</div>
 				<div className="flex shrink-0 flex-wrap items-center gap-1.5">
 					<StatusChip status={company.status} />
+					{onViewDeals ? (
+						<button
+							type="button"
+							onClick={() => onViewDeals(company.id)}
+							className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium text-xs transition"
+						>
+							<Handshake className="h-3.5 w-3.5" aria-hidden="true" />
+							Deals
+						</button>
+					) : null}
 					{onOpenAudit ? (
 						<button
 							type="button"
@@ -261,7 +280,10 @@ export function CompanyDetail({
 					) : null}
 					<button
 						type="button"
-						onClick={() => setEditing(true)}
+						onClick={() => {
+							setSaved(null);
+							setEditing(true);
+						}}
 						className="btn-ghost rounded-md px-2.5 py-1 font-medium text-xs transition"
 					>
 						Edit
@@ -278,6 +300,8 @@ export function CompanyDetail({
 				</DetailRow>
 				<DetailRow label="Created">{formatDateTime(company.created_at)}</DetailRow>
 			</dl>
+
+			<MutationStatus isPending={false} error={null} success={saved} />
 
 			<div className="space-y-2">
 				<h4 className="flex items-center gap-1.5 font-semibold text-[color:var(--ink)] text-sm">
@@ -303,10 +327,14 @@ export function CompanyDetail({
 						label="Delete company"
 						confirmLabel="Delete company"
 						busy={remove.isPending}
-						consequence={`Deletes the company record only. ${survivors} — each one is unlinked and keeps “${company.name}” as free text. This cannot be undone.`}
+						consequence={`Deletes the company record only. ${survivors} — each one is unlinked and keeps “${company.name}” as free text. Any deal naming this company is unlinked the same way. This cannot be undone.`}
 						onConfirm={() =>
 							remove.mutate(company.id, {
-								onSuccess: (result) => onDeleted(result.contacts_unlinked),
+								onSuccess: (result) =>
+									onDeleted({
+										contactsUnlinked: result.contacts_unlinked,
+										dealsUnlinked: result.deals_unlinked,
+									}),
 							})
 						}
 					/>

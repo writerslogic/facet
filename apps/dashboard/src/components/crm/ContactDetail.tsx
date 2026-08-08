@@ -6,7 +6,7 @@
 // and "this person did nothing" are different claims, and zeroes assert the second one. The API is
 // careful to distinguish them; throwing that away in the render would undo it.
 
-import { Download, Link2Off, ScrollText } from 'lucide-react';
+import { Download, Handshake, Link2Off, ScrollText } from 'lucide-react';
 import { type ReactElement, useState } from 'react';
 import { useContactAnalytics, useDeleteContact, useUpdateContact } from '../../hooks/crm.js';
 import { type CrmContact, linkReasonText } from '../../lib/crm.js';
@@ -79,19 +79,22 @@ export function ContactDetail({
 	onDeleted,
 	onOpenCompany,
 	onOpenAudit,
+	onViewDeals,
 }: {
 	siteId: string;
 	contact: CrmContact;
 	/** True only when this operator provably holds `admin`; see `canAdministerCrm`. */
 	canAdminister: boolean;
-	/** Reports how many consent records the erasure destroyed, so the caller can say so. */
-	onDeleted: (consentRecordsErased: number) => void;
+	/** Reports what the erasure destroyed/unlinked, so the caller can say so. */
+	onDeleted: (result: { consentRecordsErased: number; dealsUnlinked: number }) => void;
 	/** Jump to the linked company. Omitted when there is nothing to jump to. */
 	onOpenCompany?: (companyId: string) => void;
 	/** Open the access log filtered to this person — "who has looked at this record", which is the
 	 * question a subject-access request or a suspected leak asks, and one a whole-site log answers
 	 * only by being read end to end. */
 	onOpenAudit?: (targetId: string) => void;
+	/** Switch to the Deals tab, filtered to deals naming this contact. */
+	onViewDeals?: (contactId: string) => void;
 }): ReactElement {
 	const [editing, setEditing] = useState(false);
 	const [saved, setSaved] = useState<string | null>(null);
@@ -153,6 +156,16 @@ export function ContactDetail({
 				</div>
 				<div className="flex shrink-0 flex-wrap items-center gap-1.5">
 					<StatusChip status={contact.status} />
+					{onViewDeals ? (
+						<button
+							type="button"
+							onClick={() => onViewDeals(contact.id)}
+							className="btn-ghost inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium text-xs transition"
+						>
+							<Handshake className="h-3.5 w-3.5" aria-hidden="true" />
+							Deals
+						</button>
+					) : null}
 					{onOpenAudit ? (
 						<button
 							type="button"
@@ -243,10 +256,14 @@ export function ContactDetail({
 							label="Delete contact"
 							confirmLabel="Delete permanently"
 							busy={remove.isPending}
-							consequence="Erases this contact and their consent records. Their analytics events stay, permanently unlinkable. This cannot be undone."
+							consequence="Erases this contact and their consent records, and unlinks any deal naming them. Their analytics events stay, permanently unlinkable. This cannot be undone."
 							onConfirm={() =>
 								remove.mutate(contact.id, {
-									onSuccess: (result) => onDeleted(result.consent_records_erased),
+									onSuccess: (result) =>
+										onDeleted({
+											consentRecordsErased: result.consent_records_erased,
+											dealsUnlinked: result.deals_unlinked,
+										}),
 								})
 							}
 						/>
