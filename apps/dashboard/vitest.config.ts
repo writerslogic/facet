@@ -10,5 +10,6 @@ export default defineConfig({
 		environment: 'jsdom',
 		environmentOptions: { jsdom: { url: 'http://localhost/' } },
 		setupFiles: ['./src/test/setup.ts'],
+		exclude: ['**/node_modules/**', 'e2e/**'],
 	},
 });
