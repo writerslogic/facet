@@ -442,6 +442,7 @@ export const DEMO_KEYS: ApiKeyRecord[] = [
 		label: 'reporting (read-only demo)',
 		created_at: Date.UTC(2025, 0, 6),
 		last_used: Date.now(),
+		scopes: ['read'],
 	},
 ];
 

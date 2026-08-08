@@ -48,6 +48,7 @@ export type FetchLike = (url: string, init: RequestInit) => Promise<Response>;
  */
 export function aeReadable(env: Env): boolean {
 	return (
+		env.AE_BEST_EFFORT_ENABLED === 'true' &&
 		env.AE !== undefined &&
 		ACCOUNT_ID.test(env.CF_ACCOUNT_ID ?? '') &&
 		(env.CF_API_TOKEN ?? '') !== '' &&

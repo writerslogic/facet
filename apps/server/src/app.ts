@@ -17,7 +17,24 @@ function withDashboardSecurityHeaders(res: Response): Response {
 	const headers = new Headers(res.headers);
 	headers.set('X-Content-Type-Options', 'nosniff');
 	headers.set('X-Frame-Options', 'DENY');
-	headers.set('Content-Security-Policy', "frame-ancestors 'none'");
+	headers.set(
+		'Content-Security-Policy',
+		[
+			"default-src 'self'",
+			"base-uri 'self'",
+			"frame-ancestors 'none'",
+			"form-action 'self'",
+			"object-src 'none'",
+			"script-src 'self'",
+			// The dashboard uses runtime chart positioning and CSS custom properties.
+			"style-src 'self' 'unsafe-inline'",
+			"img-src 'self' data:",
+			"font-src 'self'",
+			"connect-src 'self'",
+		].join('; '),
+	);
+	headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+	headers.set('Cross-Origin-Opener-Policy', 'same-origin');
 	headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 	return new Response(res.body, {
 		status: res.status,

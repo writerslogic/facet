@@ -61,6 +61,15 @@ validation failures. The full set of codes:
 
 ---
 
+## `GET /api/ready`
+
+Authenticated deployment-readiness check. Send `Authorization: Bearer <ADMIN_TOKEN>`. It verifies
+D1 connectivity and reports whether the required rate limiter, admin token, and retention setting
+are present; the optional ingest queue is reported separately. Returns `200` when required checks
+pass, `503` when the deployment is not ready, and `401` without valid admin authentication.
+
+---
+
 ## `POST /api/collect`
 
 Public ingest beacon. CORS allows any origin (`POST` / `OPTIONS`, `content-type` header,
@@ -68,6 +77,11 @@ preflight cached 24h). Rate-limited by client IP. Request bodies over **8192 byt
 rejected with `413 payload_too_large` before parsing. Bot user-agents are silently dropped
 (the request still returns `202` but no event is written). On success, returns **`202`**
 with an empty body.
+
+By default, collection also verifies that `site_id` exists, that `hostname` belongs to the site's
+configured domain, and that a browser `Origin` agrees with that hostname. Invalid targets are
+silently dropped with the same `202` response so the endpoint cannot enumerate site ids.
+`COLLECT_VALIDATE_SITE=false` is intended only for isolated tests or legacy compatibility.
 
 A request carrying the [Global Privacy Control](https://globalprivacycontrol.org/) header
 `Sec-GPC: 1` is **still counted**: the event is written and the anonymous, cookieless pageview
@@ -1182,6 +1196,9 @@ curl https://your-deployment.example.com/api/sites \
 
 ### `POST /api/keys`
 
+Keys can be limited with `scopes`: `read` (analytics and MCP), `write` (custom events), and
+`consent` (consent records). Omitting it preserves compatibility by granting all three.
+
 Issue an API key for a site. Body: `{ "site_id": UUID, "label"?: string (≤ 100) }`.
 Returns `201`. The plaintext `key` is shown **once** and is never retrievable again (only
 its hash is stored).
@@ -1315,10 +1332,11 @@ of it is gated on `SESSION_SECRET`: without that binding every route below retur
 
 ### `POST /api/auth/request` (public, rate-limited)
 
-Body `{ "email": string (≤ 254, valid address) }`. Mints a single-use magic-link token. Always
-returns `202` with an empty body, whether or not the address has an account — the response never
-reveals which. Delivering the link by email is a deployment concern (bind a Cloudflare Email
-sender); the token itself is created regardless.
+Body `{ "email": string (≤ 254, valid address) }`. Mints and emails a single-use magic-link token.
+Returns `202` with an empty body whether or not the address has an account, so the response never
+reveals which. Email sign-in requires the `SEND_EMAIL` binding and an `AUTH_EMAIL_FROM` verified
+sender; without both, it returns `503 auth_email_unavailable` and writes no token. The authenticated
+`/admin-link` bootstrap flow remains available without email.
 
 Rate-limited **per client IP**, and separately from `/verify` so that a burst of sign-in requests
 from one shared address cannot stop the people behind it redeeming links they already hold. Because

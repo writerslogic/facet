@@ -150,7 +150,7 @@ export function eventDoubles(row: NewEvent): number[] {
  * `created_at` beside it.
  */
 export function writeEvent(env: Env, row: NewEvent): void {
-	if (!env.AE) return;
+	if (!env.AE || env.AE_BEST_EFFORT_ENABLED !== 'true') return;
 	// A window shorter than AE's own un-purgeable one cannot be honored by a mirrored copy, so the
 	// deployment stays D1-only rather than outliving the retention it advertises.
 	if (retentionDays(env) < AE_RETENTION_DAYS) return;

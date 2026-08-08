@@ -198,9 +198,20 @@ export const apiKeys = sqliteTable(
 		label: text('label'),
 		createdAt: integer('created_at').notNull(),
 		lastUsed: integer('last_used'),
+		// Comma-separated fixed allowlist. Existing keys migrate to all scopes for compatibility.
+		scopes: text('scopes').notNull().default('read,write,consent'),
 	},
 	(t) => [index('idx_apikeys_site').on(t.siteId)],
 );
+
+/** Durable cron heartbeat. Readiness and operators can distinguish "the Worker answers" from
+ * "rollups/retention are actually succeeding" without scraping ephemeral logs. */
+export const scheduledJobRuns = sqliteTable('scheduled_job_runs', {
+	name: text('name').primaryKey(),
+	lastSuccessAt: integer('last_success_at'),
+	lastFailureAt: integer('last_failure_at'),
+	lastError: text('last_error'),
+});
 
 // goals/funnels use snake_case JS keys for the columns crudRouter and its POST body touch (`id`,
 // `site_id`, `created_at`, and `match_value`) so the validated body inserts verbatim; this satisfies

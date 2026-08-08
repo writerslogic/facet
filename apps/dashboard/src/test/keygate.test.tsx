@@ -65,7 +65,7 @@ describe('KeyGate', () => {
 		});
 		fireEvent.click(screen.getByRole('button', { name: 'View dashboard' }));
 
-		const profiles = JSON.parse(localStorage.getItem('facet.profiles') ?? '[]');
+		const profiles = JSON.parse(sessionStorage.getItem('facet.profiles') ?? '[]');
 		expect(profiles).toHaveLength(1);
 		expect(profiles[0].apiKey).toBe('clk_live_abc');
 		expect(profiles[0].siteId).toBe(VALID_SITE);
@@ -89,7 +89,7 @@ describe('KeyGate', () => {
 		expect(screen.getByText(/API key should start with/)).toBeInTheDocument();
 		expect(screen.getByText(/Site ID should be a UUID/)).toBeInTheDocument();
 		// Still on the gate; no profile created.
-		expect(localStorage.getItem('facet.profiles')).toBeNull();
+		expect(sessionStorage.getItem('facet.profiles')).toBeNull();
 		expect(screen.getByText('View dashboard')).toBeInTheDocument();
 	});
 
@@ -101,7 +101,7 @@ describe('KeyGate', () => {
 		await waitFor(() =>
 			expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument(),
 		);
-		const profiles = JSON.parse(localStorage.getItem('facet.profiles') ?? '[]');
+		const profiles = JSON.parse(sessionStorage.getItem('facet.profiles') ?? '[]');
 		expect(profiles).toHaveLength(1);
 		expect(profiles[0].apiKey).toBe('clk_legacy');
 		expect(localStorage.getItem('facet.key')).toBeNull();
@@ -112,7 +112,7 @@ describe('KeyGate', () => {
 			'facet.profiles',
 			JSON.stringify([{ id: 'p1', label: 'x', siteId: VALID_SITE, apiKey: 'clk_x' }]),
 		);
-		localStorage.setItem('facet.activeProfile', 'p1');
+		sessionStorage.setItem('facet.activeProfile', 'p1');
 		renderApp();
 
 		await waitFor(() =>

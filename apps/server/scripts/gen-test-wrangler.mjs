@@ -36,7 +36,11 @@ delete config.unsafe;
 delete config.queues;
 // Inject a test-only session secret so the account-auth routes are exercisable in tests (never a real
 // secret; prod supplies SESSION_SECRET as a Worker secret, absent here).
-config.vars = { ...config.vars, SESSION_SECRET: 'test-session-secret' };
+config.vars = {
+	...config.vars,
+	SESSION_SECRET: 'test-session-secret',
+	COLLECT_VALIDATE_SITE: 'false',
+};
 // Strip deployment identity. This file is git-tracked, but wrangler.jsonc is where an operator puts
 // THEIR custom domain and THEIR real D1 id — so without this, running `pretest` rewrites a committed
 // file with the local operator's hostname and database id, and the next `git add -A` publishes them.

@@ -43,7 +43,7 @@ function seedProfiles(): void {
 			{ id: 'p-b', label: 'Docs site', siteId: SITE_B, apiKey: 'clk_b' },
 		]),
 	);
-	localStorage.setItem('facet.activeProfile', 'p-a');
+	sessionStorage.setItem('facet.activeProfile', 'p-a');
 }
 
 function wrap(node: ReactElement) {

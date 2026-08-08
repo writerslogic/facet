@@ -222,9 +222,11 @@ describe('facet init — resumption', () => {
 	});
 
 	it('does not recreate an existing queue', async () => {
-		const h = await init(BASE, { cloud: cloudState({ queues: ['facet-ingest'] }) });
+		const h = await init(BASE, {
+			cloud: cloudState({ queues: ['facet-ingest', 'facet-ingest-dlq'] }),
+		});
 		expect(h.argvText).not.toContain('queues create');
-		expect(h.stdout).toContain('Queue already exists');
+		expect(h.stdout).toContain('dead-letter queue are ready');
 	});
 
 	it('keeps the deployed admin token when this machine still has a copy', async () => {
@@ -334,7 +336,7 @@ describe('facet init — resumption', () => {
 		const second = await init(BASE, { repo, cloud, admin });
 		expect(second.code).toBe(0);
 		expect(cloud.databases).toHaveLength(1);
-		expect(cloud.queues).toEqual(['facet-ingest']);
+		expect(cloud.queues).toEqual(['facet-ingest', 'facet-ingest-dlq']);
 		expect(admin.sites).toHaveLength(1);
 		expect(admin.keys).toHaveLength(1);
 		expect(second.argvText).not.toContain('d1 create');

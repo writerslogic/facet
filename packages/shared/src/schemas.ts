@@ -232,6 +232,14 @@ export const SetSiteTeamSchema = v.object({
 export const IssueKeySchema = v.object({
 	site_id: v.pipe(v.string(), v.uuid()),
 	label: v.optional(v.pipe(v.string(), v.maxLength(100))),
+	scopes: v.optional(
+		v.pipe(
+			v.array(v.picklist(['read', 'write', 'consent'])),
+			v.minLength(1),
+			v.maxLength(3),
+			v.check((scopes) => new Set(scopes).size === scopes.length, 'duplicate_scope'),
+		),
+	),
 });
 
 export const GoalSchema = v.object({

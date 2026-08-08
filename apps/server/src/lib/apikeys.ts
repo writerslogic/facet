@@ -9,6 +9,14 @@ import type { Env } from '../env.js';
 import { API_KEY_BYTES, API_KEY_PREFIX } from './constants.js';
 import { randomHex, sha256Hex } from './crypto.js';
 
+export const API_KEY_SCOPES = ['read', 'write', 'consent'] as const;
+export type ApiKeyScope = (typeof API_KEY_SCOPES)[number];
+
+export function parseScopes(value: string): ApiKeyScope[] {
+	const values = new Set(value.split(','));
+	return API_KEY_SCOPES.filter((scope) => values.has(scope));
+}
+
 /** Generate a fresh plaintext API key: prefix + random hex. */
 export function generateKey(): string {
 	return API_KEY_PREFIX + randomHex(API_KEY_BYTES);
@@ -25,6 +33,7 @@ export async function issueKey(
 	siteId: string,
 	label: string | null,
 	now: number,
+	scopes: ApiKeyScope[] = [...API_KEY_SCOPES],
 ): Promise<{ id: string; key: string }> {
 	const key = generateKey();
 	const id = crypto.randomUUID();
@@ -37,6 +46,7 @@ export async function issueKey(
 			label,
 			createdAt: now,
 			lastUsed: null,
+			scopes: scopes.join(','),
 		});
 	return { id, key };
 }
@@ -50,10 +60,12 @@ export async function listKeys(env: Env, siteId: string): Promise<ApiKeyRecord[]
 			label: schema.apiKeys.label,
 			created_at: schema.apiKeys.createdAt,
 			last_used: schema.apiKeys.lastUsed,
+			scopes: schema.apiKeys.scopes,
 		})
 		.from(schema.apiKeys)
 		.where(eq(schema.apiKeys.siteId, siteId))
-		.orderBy(desc(schema.apiKeys.createdAt));
+		.orderBy(desc(schema.apiKeys.createdAt))
+		.then((rows) => rows.map((row) => ({ ...row, scopes: parseScopes(row.scopes) })));
 }
 
 /** Revoke a key by id, scoped to its site. Returns whether a row was deleted. */

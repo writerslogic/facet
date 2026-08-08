@@ -129,7 +129,29 @@ function tooltipPlugin(getEl: () => HTMLDivElement | null): uPlot.Plugin {
 				const t = u.data[0]?.[idx];
 				const pv = u.data[1]?.[idx];
 				const vis = u.data[2]?.[idx];
-				el.innerHTML = `<div class="mb-1 font-medium text-[11px] text-[color:var(--faint)]">${t == null ? '' : fmtDate(t)}</div><div class="flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#f5f3ff"></span><span class="text-[color:var(--muted)]">Pageviews</span><span class="tabular ml-auto font-semibold text-[color:var(--ink)]">${pv == null ? '—' : formatNumber(pv)}</span></div><div class="mt-0.5 flex items-center gap-2 text-[12px]"><span class="inline-block size-2 rotate-45 rounded-[1px]" style="background:#818cf8"></span><span class="text-[color:var(--muted)]">Visitors</span><span class="tabular ml-auto font-semibold text-[color:var(--ink)]">${vis == null ? '—' : formatNumber(vis)}</span></div>`;
+				const title = document.createElement('div');
+				title.className = 'mb-1 font-medium text-[11px] text-[color:var(--faint)]';
+				title.textContent = t == null ? '' : fmtDate(t);
+				const metric = (label: string, value: string, color: string, extra = '') => {
+					const row = document.createElement('div');
+					row.className = `${extra} flex items-center gap-2 text-[12px]`;
+					const marker = document.createElement('span');
+					marker.className = 'inline-block size-2 rotate-45 rounded-[1px]';
+					marker.style.background = color;
+					const name = document.createElement('span');
+					name.className = 'text-[color:var(--muted)]';
+					name.textContent = label;
+					const amount = document.createElement('span');
+					amount.className = 'tabular ml-auto font-semibold text-[color:var(--ink)]';
+					amount.textContent = value;
+					row.append(marker, name, amount);
+					return row;
+				};
+				el.replaceChildren(
+					title,
+					metric('Pageviews', pv == null ? '—' : formatNumber(pv), '#f5f3ff'),
+					metric('Visitors', vis == null ? '—' : formatNumber(vis), '#818cf8', 'mt-0.5'),
+				);
 				const left = u.cursor.left;
 				const flip = left > u.width / 2;
 				el.style.opacity = '1';

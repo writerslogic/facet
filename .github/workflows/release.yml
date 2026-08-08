@@ -37,8 +37,20 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Lint and release-link checks
+        run: pnpm lint && pnpm check:links
+
+      - name: Typecheck
+        run: pnpm typecheck
+
       - name: Build
         run: pnpm build
+
+      - name: Package checks
+        run: pnpm --filter "@writerslogic/*" check:package
+
+      - name: Test
+        run: pnpm test
 
       # Pack the exact tarballs that will be published so the build-provenance attestation below
       # covers the same bytes npm receives (pnpm publish packs identically).

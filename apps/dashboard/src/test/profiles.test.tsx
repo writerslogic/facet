@@ -71,7 +71,7 @@ function seedTwoProfiles() {
 			{ id: 'b', label: 'Site B', siteId: SITE_B, apiKey: 'clk_b' },
 		]),
 	);
-	localStorage.setItem('facet.activeProfile', 'a');
+	sessionStorage.setItem('facet.activeProfile', 'a');
 }
 
 beforeEach(() => {
@@ -151,7 +151,7 @@ describe('multi-site profiles', () => {
 			'facet.profiles',
 			JSON.stringify([{ id: 'a', label: 'Site A', siteId: SITE_A, apiKey: 'clk_bad' }]),
 		);
-		localStorage.setItem('facet.activeProfile', 'a');
+		sessionStorage.setItem('facet.activeProfile', 'a');
 		vi.stubGlobal(
 			'fetch',
 			vi.fn().mockResolvedValue({

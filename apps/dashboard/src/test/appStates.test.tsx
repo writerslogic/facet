@@ -45,7 +45,7 @@ function seedProfile() {
 		'facet.profiles',
 		JSON.stringify([{ id: 'p1', label: 'Prod', siteId: VALID_SITE, apiKey: 'clk_x' }]),
 	);
-	localStorage.setItem('facet.activeProfile', 'p1');
+	sessionStorage.setItem('facet.activeProfile', 'p1');
 }
 
 const emptyStats = {

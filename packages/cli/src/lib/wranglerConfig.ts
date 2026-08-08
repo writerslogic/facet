@@ -13,6 +13,7 @@ const DB_ID_RE = /("database_id"\s*:\s*")([^"]*)(")/;
 const DB_NAME_RE = /"database_name"\s*:\s*"([^"]*)"/;
 const WORKER_NAME_RE = /"name"\s*:\s*"([^"]*)"/;
 const QUEUE_NAME_RE = /"queue"\s*:\s*"([^"]*)"/;
+const DLQ_RE = /"dead_letter_queue"\s*:\s*"([^"]*)"/;
 const ROUTE_PATTERN_RE = /"pattern"\s*:\s*"([^"]*)"/;
 
 export type EditResult = { ok: true; source: string } | { ok: false; reason: string };
@@ -63,6 +64,29 @@ export function getWorkerName(source: string): string | null {
 
 export function getQueueName(source: string): string | null {
 	return source.match(QUEUE_NAME_RE)?.[1] ?? null;
+}
+
+export function getDeadLetterQueueName(source: string): string | null {
+	return source.match(DLQ_RE)?.[1] ?? null;
+}
+
+/** Add or update the consumer dead-letter queue while preserving the commented JSONC config. */
+export function setDeadLetterQueue(source: string, name: string): EditResult {
+	if (DLQ_RE.test(source)) {
+		return { ok: true, source: source.replace(DLQ_RE, `"dead_letter_queue": "${name}"`) };
+	}
+	const lines = source.split('\n');
+	const consumer = lines.findIndex(
+		(line) => !line.trimStart().startsWith('//') && line.includes('"max_retries"'),
+	);
+	if (consumer < 0) return { ok: false, reason: 'No queue consumer with "max_retries" found.' };
+	const line = lines[consumer];
+	if (line === undefined) return { ok: false, reason: 'Queue consumer line disappeared.' };
+	lines[consumer] = line.replace(
+		/("max_retries"\s*:\s*\d+)/,
+		`$1, "dead_letter_queue": "${name}"`,
+	);
+	return { ok: true, source: lines.join('\n') };
 }
 
 /**

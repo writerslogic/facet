@@ -27,6 +27,7 @@ function makeLimiter(denyKeys: Set<string> = new Set()) {
 }
 
 function post(path: string, body: unknown, ip: string | null, limiter: Env['RATE_LIMITER']) {
+	const sender = { send: async () => ({ success: true }) } as unknown as SendEmail;
 	return createApp().request(
 		path,
 		{
@@ -37,7 +38,13 @@ function post(path: string, body: unknown, ip: string | null, limiter: Env['RATE
 			},
 			body: JSON.stringify(body),
 		},
-		{ ...env, RATE_LIMITER: limiter, SESSION_SECRET: 'test-secret' } as Env,
+		{
+			...env,
+			RATE_LIMITER: limiter,
+			SESSION_SECRET: 'test-secret',
+			SEND_EMAIL: sender,
+			AUTH_EMAIL_FROM: 'facet@example.com',
+		} as Env,
 	);
 }
 

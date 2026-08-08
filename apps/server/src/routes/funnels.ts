@@ -8,7 +8,7 @@ import { funnelReport } from '../db/funnels.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
-import { requireAdmin, requireApiKey } from '../lib/auth.js';
+import { requireAdmin, requireApiScope } from '../lib/auth.js';
 import { DAY_MS, MAX_RANGE_DAYS } from '../lib/constants.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
 
@@ -72,7 +72,7 @@ funnelsRoutes.delete('/:id', requireAdmin, async (c) => {
 	return c.json({ deleted: true });
 });
 
-funnelsRoutes.get('/:id/report', requireApiKey, async (c) => {
+funnelsRoutes.get('/:id/report', requireApiScope('read'), async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);

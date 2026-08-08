@@ -309,7 +309,7 @@ beforeEach(() => {
 		'facet.profiles',
 		JSON.stringify([{ id: 'p1', label: 'Site', siteId: SITE, apiKey: 'clk_x' }]),
 	);
-	localStorage.setItem('facet.activeProfile', 'p1');
+	sessionStorage.setItem('facet.activeProfile', 'p1');
 	window.history.replaceState(null, '', '/?range=7d');
 	vi.stubGlobal(
 		'fetch',

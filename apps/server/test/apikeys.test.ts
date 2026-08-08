@@ -24,13 +24,14 @@ describe('apikeys', () => {
 	});
 
 	it('listKeys returns records without any hash or plaintext field', async () => {
-		await issueKey(env, SITE, 'a', Date.now());
+		await issueKey(env, SITE, 'a', Date.now(), ['read']);
 		const keys = await listKeys(env, SITE);
 		expect(keys.length).toBeGreaterThan(0);
 		for (const k of keys) {
 			expect(k).not.toHaveProperty('key_hash');
 			expect(k).not.toHaveProperty('key');
 			expect(k.site_id).toBe(SITE);
+			expect(k.scopes).toContain('read');
 		}
 	});
 

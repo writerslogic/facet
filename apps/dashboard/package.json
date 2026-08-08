@@ -12,7 +12,8 @@
 		"lint": "biome check .",
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
-		"test": "vitest run --passWithNoTests"
+		"test": "vitest run --passWithNoTests",
+		"test:e2e": "playwright test"
 	},
 	"dependencies": {
 		"@facet/shared": "workspace:*",
@@ -27,6 +28,7 @@
 		"uplot": "1.6.32"
 	},
 	"devDependencies": {
+		"@playwright/test": "^1.62.1",
 		"@tailwindcss/vite": "4.3.3",
 		"@testing-library/jest-dom": "6.9.1",
 		"@testing-library/react": "16.3.2",

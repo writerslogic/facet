@@ -122,7 +122,7 @@ beforeEach(() => {
 		'facet.profiles',
 		JSON.stringify([{ id: 'p', label: 'Site', siteId: SITE, apiKey: 'clk_test' }]),
 	);
-	localStorage.setItem('facet.activeProfile', 'p');
+	sessionStorage.setItem('facet.activeProfile', 'p');
 });
 
 describe('in-tile drill-down', () => {

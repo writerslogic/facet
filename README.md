@@ -103,6 +103,12 @@ and [D1](https://developers.cloudflare.com/d1/platform/pricing/) pricing for the
 
 ## How privacy works
 
+The default `anonymous` profile provides the one-day, unlinkable behavior described below. Operators
+can deliberately enable longer pseudonymous windows or identified analytics, but those modes require
+deployment signing plus explicit, context-bound consent and are disclosed in the deployment's
+attestation. The optional CRM uses a separate D1 binding. See [Privacy model](./docs/privacy.md) before
+enabling either capability; they are not equivalent to the default anonymous profile.
+
 A visitor is identified for **one UTC day only** by `SHA-256(ip ⧊ user_agent ⧊ daily_salt ⧊ site_id)`,
 rendered as lowercase hex. The salt rotates at UTC midnight, so the same person produces a different
 hash the next day and cross-day re-identification is cryptographically prevented. The raw IP is used

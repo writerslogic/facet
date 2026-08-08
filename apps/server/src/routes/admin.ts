@@ -174,8 +174,9 @@ adminRoutes.post(
 	requireAdmin,
 	vValidator('json', IssueKeySchema, validationErrorHook),
 	async (c) => {
-		const { site_id, label } = c.req.valid('json');
-		const issued = await issueKey(c.env, site_id, label ?? null, Date.now());
+		const { site_id, label, scopes } = c.req.valid('json');
+		if (!(await siteExists(c.env, site_id))) throw new ApiError('not_found', 404);
+		const issued = await issueKey(c.env, site_id, label ?? null, Date.now(), scopes);
 		return c.json(issued, 201);
 	},
 );
