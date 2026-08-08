@@ -45,6 +45,22 @@ const COMPANY = {
 	updated_at: 1_700_000_000_000,
 };
 
+const DEAL = {
+	id: 'd1',
+	site_id: SITE,
+	name: 'Acme Inc — annual plan',
+	company_id: 'co1',
+	contact_id: 'c1',
+	stage: 'proposal',
+	value: 490000,
+	currency: 'USD',
+	expected_close_date: 1_700_100_000_000,
+	notes: null,
+	owner_user_id: null,
+	created_at: 1_700_000_000_000,
+	updated_at: 1_700_000_000_000,
+};
+
 interface Handlers {
 	/** The role the server reports on each list response — the only authoritative source, since no
 	 * session-reachable route maps a site to its owning team. Undefined means the field is absent,
@@ -52,6 +68,7 @@ interface Handlers {
 	role?: string;
 	contactAnalytics?: unknown;
 	companyAnalytics?: unknown;
+	pipeline?: unknown[];
 }
 
 /** Every /api/* response the CRM tab can ask for, unless `unavailable` short-circuits them all. */
@@ -80,6 +97,23 @@ function mockApi(handlers: Handlers & { unavailable?: boolean } = {}): void {
 					ok: true,
 					status: 200,
 					json: async () => ({ companies: [COMPANY], total: 1, role: handlers.role }),
+				};
+			}
+			if (url.startsWith('/api/crm/pipeline')) {
+				return {
+					ok: true,
+					status: 200,
+					json: async () => ({ pipeline: handlers.pipeline ?? [] }),
+				};
+			}
+			if (url.startsWith('/api/crm/deals/')) {
+				return { ok: true, status: 200, json: async () => ({ deal: DEAL }) };
+			}
+			if (url.startsWith('/api/crm/deals')) {
+				return {
+					ok: true,
+					status: 200,
+					json: async () => ({ deals: [DEAL], total: 1, role: handlers.role }),
 				};
 			}
 			if (url.startsWith('/api/crm/contacts/')) {
@@ -113,6 +147,14 @@ async function openCompany(): Promise<void> {
 	fireEvent.click(screen.getByRole('tab', { name: 'Companies' }));
 	fireEvent.click(await screen.findByRole('button', { name: 'Acme Inc' }));
 	await screen.findByRole('heading', { name: 'Analytics rollup' });
+}
+
+/** Open the deal detail pane, which is where the value, links and admin controls live. Waits on the
+ * detail heading rather than the "Value" label, which the roster's own column header also matches. */
+async function openDeal(): Promise<void> {
+	fireEvent.click(screen.getByRole('tab', { name: 'Deals' }));
+	fireEvent.click(await screen.findByRole('button', { name: /annual plan/ }));
+	await screen.findByRole('heading', { name: /annual plan/ });
 }
 
 afterEach(() => {
@@ -327,5 +369,71 @@ describe('role-gated actions', () => {
 		await openContact();
 
 		expect(screen.queryByRole('button', { name: 'Delete contact' })).not.toBeInTheDocument();
+	});
+});
+
+describe('deals', () => {
+	it('shows the per-currency pipeline summary above the roster', async () => {
+		mockApi({
+			role: 'analyst',
+			pipeline: [
+				{
+					currency: 'USD',
+					open_value: 250000,
+					open_count: 2,
+					won_value: 120000,
+					won_count: 1,
+				},
+			],
+		});
+		renderCrm();
+		fireEvent.click(screen.getByRole('tab', { name: 'Deals' }));
+
+		expect(await screen.findByText('USD')).toBeInTheDocument();
+		expect(screen.getByText('$2,500.00')).toBeInTheDocument();
+		expect(screen.getByText('$1,200.00')).toBeInTheDocument();
+		expect(screen.getByText(/open · 2/)).toBeInTheDocument();
+		expect(screen.getByText(/won · 1/)).toBeInTheDocument();
+	});
+
+	it('lists a deal with its formatted value and stage, and opens its detail', async () => {
+		mockApi({ role: 'analyst' });
+		renderCrm();
+		await openDeal();
+
+		// Appears twice by design: once in the roster row, once in the opened detail pane.
+		expect(screen.getAllByText('$4,900.00').length).toBe(2);
+		expect(screen.getAllByText('proposal').length).toBeGreaterThan(0);
+		// Linked company/contact resolve to their names, not the raw ids the deal stores.
+		expect(await screen.findByRole('button', { name: 'Acme Inc' })).toBeInTheDocument();
+		expect(screen.getByRole('button', { name: 'Ada Lovelace' })).toBeInTheDocument();
+	});
+
+	it('jumps to the linked company from a deal', async () => {
+		mockApi({
+			role: 'analyst',
+			companyAnalytics: { linked: false, reason: 'no_linked_contacts' },
+		});
+		renderCrm();
+		await openDeal();
+
+		fireEvent.click(await screen.findByRole('button', { name: 'Acme Inc' }));
+		await screen.findByRole('heading', { name: 'Analytics rollup' });
+		expect(screen.getByRole('tab', { name: 'Companies', selected: true })).toBeInTheDocument();
+	});
+
+	it('hides delete from an analyst and offers it to an admin', async () => {
+		mockApi({ role: 'analyst' });
+		const { unmount } = renderCrm();
+		await openDeal();
+		expect(screen.queryByRole('button', { name: 'Delete deal' })).not.toBeInTheDocument();
+		expect(screen.getByText(/needs the/i)).toHaveTextContent(/admin/i);
+		unmount();
+
+		mockApi({ role: 'admin' });
+		renderCrm();
+		await openDeal();
+		fireEvent.click(await screen.findByRole('button', { name: 'Delete deal' }));
+		expect(await screen.findByRole('alert')).toHaveTextContent(/cannot be undone/i);
 	});
 });
