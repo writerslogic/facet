@@ -1639,9 +1639,9 @@ describe('deleting a contact or company unlinks its deals rather than destroying
 			contact_id: contact.id,
 		});
 
-		expect(
-			(await crm(env, `/contacts/${contact.id}`, { method: 'DELETE' }, cookie)).status,
-		).toBe(200);
+		const res = await crm(env, `/contacts/${contact.id}`, { method: 'DELETE' }, cookie);
+		expect(res.status).toBe(200);
+		expect(await res.json()).toMatchObject({ deleted: true, deals_unlinked: 1 });
 
 		const after = await crm(env, `/deals/${deal.id}`, {}, cookie);
 		expect(after.status).toBe(200);

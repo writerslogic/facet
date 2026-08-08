@@ -1465,9 +1465,10 @@ alone. A contact belonging to another site is `404 not_found`, indistinguishable
 
 **Really deletes** — no tombstone, because a tombstone still holding an email is still that person's
 personal data. Also erases (not revokes) every `consent_records` row for their `external_user_id`,
-since those rows hold the raw identifier the erasure was about. Returns
-`{ "deleted": true, "consent_records_erased": <n> }`. The pseudonymous event rows remain; with the
-consent record gone, nothing can re-associate them with a person.
+since those rows hold the raw identifier the erasure was about, and unlinks (not deletes) every deal
+naming this contact, the same "unlink, don't destroy" precedent as a company delete. Returns
+`{ "deleted": true, "consent_records_erased": <n>, "deals_unlinked": <n> }`. The pseudonymous event
+rows remain; with the consent record gone, nothing can re-associate them with a person.
 
 ### `GET /api/crm/contacts/:id/analytics?site_id` (session, analyst)
 
@@ -1516,11 +1517,12 @@ the display value); omitting it leaves it alone.
 
 ### `DELETE /api/crm/companies/:id?site_id` (session, admin)
 
-**Deletes the company, not the people in it.** Deleting an organization is not an erasure request
-about anybody, so its contacts survive: each one's `company_id` is cleared and the company's name is
-written back into their free-text `company`, in a single D1 batch. "Where does this person work"
-therefore answers the same before and after — only the structured link is gone. Returns
-`{ "deleted": true, "contacts_unlinked": <n> }`.
+**Deletes the company, not the people or the deals attached to it.** Deleting an organization is not
+an erasure request about anybody, so its contacts survive: each one's `company_id` is cleared and the
+company's name is written back into their free-text `company`, in a single D1 batch. "Where does this
+person work" therefore answers the same before and after — only the structured link is gone. Any deal
+naming this company is unlinked the same way, its `company_id` cleared. Returns
+`{ "deleted": true, "contacts_unlinked": <n>, "deals_unlinked": <n> }`.
 
 ### `GET /api/crm/companies/:id/contacts?site_id&limit&offset` (session, analyst)
 

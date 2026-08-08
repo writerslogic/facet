@@ -69,6 +69,8 @@ interface Handlers {
 	contactAnalytics?: unknown;
 	companyAnalytics?: unknown;
 	pipeline?: unknown[];
+	contactDeleteResult?: { consent_records_erased: number; deals_unlinked: number };
+	companyDeleteResult?: { contacts_unlinked: number; deals_unlinked: number };
 }
 
 /** Every /api/* response the CRM tab can ask for, unless `unavailable` short-circuits them all.
@@ -88,6 +90,13 @@ function mockApi(handlers: Handlers & { unavailable?: boolean } = {}) {
 		}
 		if (url.startsWith('/api/crm/companies/') && url.includes('/contacts')) {
 			return { ok: true, status: 200, json: async () => ({ contacts: [], total: 0 }) };
+		}
+		if (url.startsWith('/api/crm/companies/') && init?.method === 'DELETE') {
+			const result = handlers.companyDeleteResult ?? {
+				contacts_unlinked: 0,
+				deals_unlinked: 0,
+			};
+			return { ok: true, status: 200, json: async () => ({ deleted: true, ...result }) };
 		}
 		if (url.startsWith('/api/crm/companies/')) {
 			return { ok: true, status: 200, json: async () => ({ company: COMPANY }) };
@@ -121,6 +130,13 @@ function mockApi(handlers: Handlers & { unavailable?: boolean } = {}) {
 				status: 200,
 				json: async () => ({ deals: [DEAL], total: 1, role: handlers.role }),
 			};
+		}
+		if (url.startsWith('/api/crm/contacts/') && init?.method === 'DELETE') {
+			const result = handlers.contactDeleteResult ?? {
+				consent_records_erased: 0,
+				deals_unlinked: 0,
+			};
+			return { ok: true, status: 200, json: async () => ({ deleted: true, ...result }) };
 		}
 		if (url.startsWith('/api/crm/contacts/')) {
 			return { ok: true, status: 200, json: async () => ({ contact: CONTACT }) };
@@ -370,12 +386,82 @@ describe('role-gated actions', () => {
 		expect(screen.getByRole('alert')).toHaveTextContent(/unlinked/i);
 	});
 
+	it('reports deals unlinked alongside contacts when a company delete is confirmed', async () => {
+		// Regression: useDeleteCompany's response type silently dropped deals_unlinked even though
+		// the server has always returned it, so a company with attached deals never told the operator
+		// those deals survived, unlinked, when it deleted the company.
+		const analytics = {
+			contacts_total: 0,
+			contacts_linked: 0,
+			contacts_considered: 0,
+			contacts_truncated: false,
+			contacts_limit: 100,
+			linked: false,
+			reason: 'no_linked_contacts',
+		};
+		mockApi({
+			role: 'owner',
+			companyAnalytics: analytics,
+			companyDeleteResult: { contacts_unlinked: 2, deals_unlinked: 3 },
+		});
+		renderCrm();
+		await openCompany();
+		fireEvent.click(await screen.findByRole('button', { name: 'Delete company' }));
+		fireEvent.click(await screen.findByRole('button', { name: 'Delete company' }));
+
+		expect(await screen.findByText(/2 contacts were unlinked and kept/i)).toBeInTheDocument();
+		expect(screen.getByText(/3 deals were unlinked/i)).toBeInTheDocument();
+	});
+
+	it('reports deals unlinked alongside consent records when a contact delete is confirmed', async () => {
+		mockApi({
+			role: 'admin',
+			contactAnalytics: { linked: false, reason: 'no_active_consent' },
+			contactDeleteResult: { consent_records_erased: 1, deals_unlinked: 2 },
+		});
+		renderCrm();
+		await openContact();
+		fireEvent.click(await screen.findByRole('button', { name: 'Delete contact' }));
+		fireEvent.click(await screen.findByRole('button', { name: 'Delete permanently' }));
+
+		expect(await screen.findByText(/1 consent record/i)).toBeInTheDocument();
+		expect(screen.getByText(/2 deals unlinked/i)).toBeInTheDocument();
+	});
+
 	it('treats a signed-out operator as having no admin capability', async () => {
 		mockApi({ contactAnalytics: { linked: false, reason: 'no_active_consent' } });
 		renderCrm();
 		await openContact();
 
 		expect(screen.queryByRole('button', { name: 'Delete contact' })).not.toBeInTheDocument();
+	});
+});
+
+describe('viewing a company or contact’s deals', () => {
+	it('jumps from a contact to its deals, filtered, with a banner naming it', async () => {
+		mockApi({ role: 'analyst' });
+		renderCrm();
+		await openContact();
+		fireEvent.click(await screen.findByRole('button', { name: 'Deals' }));
+
+		expect(screen.getByRole('tab', { name: 'Deals', selected: true })).toBeInTheDocument();
+		expect(await screen.findByText(/Showing deals for/i)).toHaveTextContent('Ada Lovelace');
+
+		fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
+		expect(screen.queryByText(/Showing deals for/i)).not.toBeInTheDocument();
+	});
+
+	it('jumps from a company to its deals, filtered, with a banner naming it', async () => {
+		mockApi({
+			role: 'analyst',
+			companyAnalytics: { linked: false, reason: 'no_linked_contacts' },
+		});
+		renderCrm();
+		await openCompany();
+		fireEvent.click(await screen.findByRole('button', { name: 'Deals' }));
+
+		expect(screen.getByRole('tab', { name: 'Deals', selected: true })).toBeInTheDocument();
+		expect(await screen.findByText(/Showing deals for/i)).toHaveTextContent('Acme Inc');
 	});
 });
 

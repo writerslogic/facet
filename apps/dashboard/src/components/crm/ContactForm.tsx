@@ -62,7 +62,6 @@ export function ContactForm({
 	onCancel,
 	isPending,
 	error,
-	success,
 }: {
 	siteId: string;
 	/** The contact being edited, or null when creating. */
@@ -73,7 +72,6 @@ export function ContactForm({
 	onCancel: () => void;
 	isPending: boolean;
 	error: unknown;
-	success?: string | null;
 }): ReactElement {
 	const [draft, setDraft] = useState<Draft>(() => draftFrom(contact));
 	const options = useCompanyOptions(siteId);
@@ -226,7 +224,7 @@ export function ContactForm({
 			<MutationStatus
 				isPending={isPending}
 				error={error}
-				success={success ?? null}
+				success={null}
 				pendingLabel={pendingLabel}
 			/>
 		</form>

@@ -480,22 +480,30 @@ export async function updateContact(
  *
  * Any deal naming this contact survives, unlinked — same "unlink, don't destroy" precedent as
  * `deleteCompany` on `contacts.company_id`, in the same D1 batch so a deal can never be left pointing
- * at a contact id that no longer exists. */
+ * at a contact id that no longer exists. `deals_unlinked` is counted via `.returning()` rather than a
+ * separate count query, matching `deleteCompany`'s deal count: a contact's deal count is small enough
+ * that pulling the ids costs nothing worth avoiding. */
 export async function deleteContact(
 	binding: D1Database,
 	siteId: string,
 	id: string,
-): Promise<Contact | undefined> {
+): Promise<{ contact: Contact; deals_unlinked: number } | undefined> {
 	const client = crmDb(binding);
 	const atContact = and(eq(crmSchema.deals.site_id, siteId), eq(crmSchema.deals.contact_id, id));
-	const [, deleted] = await client.batch([
-		client.update(crmSchema.deals).set({ contact_id: null }).where(atContact),
+	const [deals, deleted] = await client.batch([
+		client
+			.update(crmSchema.deals)
+			.set({ contact_id: null })
+			.where(atContact)
+			.returning({ id: crmSchema.deals.id }),
 		client
 			.delete(crmSchema.contacts)
 			.where(and(eq(crmSchema.contacts.site_id, siteId), eq(crmSchema.contacts.id, id)))
 			.returning(),
 	]);
-	return deleted[0];
+	const contact = deleted[0];
+	if (!contact) return undefined;
+	return { contact, deals_unlinked: deals.length };
 }
 
 export async function insertCompany(

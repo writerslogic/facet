@@ -4,6 +4,7 @@
 import { Plus } from 'lucide-react';
 import { type ReactElement, useEffect, useState } from 'react';
 import { CRM_PAGE_SIZE, useCompanies, useCompany, useCreateCompany } from '../../hooks/crm.js';
+import { useDebouncedValue } from '../../hooks/debounce.js';
 import { cn } from '../../lib/cn.js';
 import { COMPANY_STATUSES, canAdministerCrm } from '../../lib/crm.js';
 import { CardSkeletons, EmptyState } from '../StatusStates.js';
@@ -19,6 +20,7 @@ export function CompaniesPanel({
 	onSelect,
 	onOpenContact,
 	onOpenAudit,
+	onViewDeals,
 }: {
 	siteId: string;
 	/** Owned by the tab shell so a contact's company link can select one from the other panel. */
@@ -27,23 +29,22 @@ export function CompaniesPanel({
 	onOpenContact: (contactId: string) => void;
 	/** Open the access log filtered to one company. */
 	onOpenAudit: (targetId: string) => void;
+	/** Switch to the Deals tab, filtered to deals naming this company. */
+	onViewDeals: (companyId: string) => void;
 }): ReactElement {
 	// The role the server served this list under — the only authoritative answer available to
 	// the browser. See `canAdministerCrm`.
 	const [search, setSearch] = useState('');
-	const [query, setQuery] = useState('');
+	const query = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
 	const [status, setStatus] = useState('');
 	const [offset, setOffset] = useState(0);
 	const [creating, setCreating] = useState(false);
 	const [deleted, setDeleted] = useState<string | null>(null);
 
+	// biome-ignore lint/correctness/useExhaustiveDependencies: reset must fire once the debounced query settles; the body doesn't need to read its value
 	useEffect(() => {
-		const timer = setTimeout(() => {
-			setQuery(search);
-			setOffset(0);
-		}, SEARCH_DEBOUNCE_MS);
-		return () => clearTimeout(timer);
-	}, [search]);
+		setOffset(0);
+	}, [query]);
 
 	const list = useCompanies(siteId, { status, q: query, offset });
 	const canAdminister = canAdministerCrm(list.data?.role);
@@ -256,12 +257,21 @@ export function CompaniesPanel({
 						canAdminister={canAdminister}
 						onOpenContact={onOpenContact}
 						onOpenAudit={onOpenAudit}
-						onDeleted={(unlinked) => {
-							setDeleted(
-								unlinked === 1
-									? 'Company deleted. 1 contact was unlinked and kept.'
-									: `Company deleted. ${unlinked} contacts were unlinked and kept.`,
-							);
+						onViewDeals={onViewDeals}
+						onDeleted={({ contactsUnlinked, dealsUnlinked }) => {
+							const parts = [
+								contactsUnlinked === 1
+									? '1 contact was unlinked and kept'
+									: `${contactsUnlinked} contacts were unlinked and kept`,
+							];
+							if (dealsUnlinked > 0) {
+								parts.push(
+									dealsUnlinked === 1
+										? '1 deal was unlinked'
+										: `${dealsUnlinked} deals were unlinked`,
+								);
+							}
+							setDeleted(`Company deleted. ${parts.join('. ')}.`);
 							onSelect('');
 						}}
 					/>
