@@ -12,7 +12,8 @@
 //
 //   • WHETHER THE OPERATOR MAY DESTROY OR EXPORT. See `canAdministerCrm`.
 
-import type { CompanyStatus, ContactStatus } from '@facet/shared';
+import type { CompanyStatus, ContactStatus, DealStage } from '@facet/shared';
+import { formatNumber } from './format.js';
 
 /** A person in the CRM, exactly as `GET /api/crm/contacts` returns them. */
 export interface CrmContact {
@@ -47,6 +48,38 @@ export interface CrmCompany {
 	owner_user_id: string | null;
 	created_at: number;
 	updated_at: number;
+}
+
+/** A sales opportunity, as `GET /api/crm/deals` returns it. Unlike a contact, `company`/`contact` are
+ * NOT resolved to a name here — the API returns only the ids, so the detail view looks the name up
+ * through the same `useCompany`/`useContact` hooks a cross-tab link would use anyway. */
+export interface CrmDeal {
+	id: string;
+	site_id: string;
+	name: string;
+	company_id: string | null;
+	contact_id: string | null;
+	stage: string;
+	/** Cents, or null when nobody has priced this deal yet — distinct from a deal genuinely worth zero. */
+	value: number | null;
+	/** ISO 4217, uppercase. Set exactly when `value` is set. */
+	currency: string | null;
+	/** Unix ms, or null when there is no target date. */
+	expected_close_date: number | null;
+	notes: string | null;
+	owner_user_id: string | null;
+	created_at: number;
+	updated_at: number;
+}
+
+/** One currency's slice of the pipeline, as `GET /api/crm/pipeline` returns it. Per-currency because
+ * summing `open_value` across rows would add unlike units. */
+export interface PipelineCurrencySummary {
+	currency: string;
+	open_value: number;
+	open_count: number;
+	won_value: number;
+	won_count: number;
 }
 
 /** The activity summary shared by the contact and company analytics responses. */
@@ -156,6 +189,31 @@ export function canAdministerCrm(role: string | undefined): boolean {
 /** The closed status sets, for the form controls. Declared once so both forms stay in step. */
 export const CONTACT_STATUSES: ContactStatus[] = ['lead', 'active', 'archived'];
 export const COMPANY_STATUSES: CompanyStatus[] = ['lead', 'active', 'archived'];
+/** `won`/`lost` are terminal; the pipeline summary treats every other stage as open. */
+export const DEAL_STAGES: DealStage[] = [
+	'lead',
+	'qualified',
+	'proposal',
+	'negotiation',
+	'won',
+	'lost',
+];
+
+/** Format a deal amount in its currency, given as cents. Falls back to a plain number when there is
+ * no currency to format against — a deal with `value` unset never reaches this, since the API pairs
+ * the two, but `currency` alone is not something `Intl` can be trusted with unvalidated. */
+export function formatMoney(cents: number, currency: string | null): string {
+	if (currency) {
+		try {
+			return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(
+				cents / 100,
+			);
+		} catch {
+			// Unknown/invalid currency code — fall through to a plain number.
+		}
+	}
+	return formatNumber(cents / 100);
+}
 
 /**
  * What kind of act an audit action was, which is what a reader scanning a page of them is actually
@@ -208,6 +266,18 @@ export function auditActionText(action: string): string {
 			return 'Listed a company’s contacts';
 		case 'company.analytics':
 			return 'Viewed a company rollup';
+		case 'deal.list':
+			return 'Listed deals';
+		case 'deal.create':
+			return 'Created a deal';
+		case 'deal.read':
+			return 'Opened a deal';
+		case 'deal.update':
+			return 'Edited a deal';
+		case 'deal.delete':
+			return 'Deleted a deal';
+		case 'deal.pipeline':
+			return 'Viewed the pipeline summary';
 		case 'audit.read':
 			return 'Read the access log';
 		default:

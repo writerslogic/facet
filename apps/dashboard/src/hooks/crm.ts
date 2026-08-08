@@ -14,6 +14,8 @@ import {
 	type CrmAuditEntry,
 	type CrmCompany,
 	type CrmContact,
+	type CrmDeal,
+	type PipelineCurrencySummary,
 	crmBlockOf,
 } from '../lib/crm.js';
 
@@ -109,6 +111,24 @@ export function useCompanyOptions(siteId: string) {
 	});
 }
 
+/**
+ * The contacts a deal form can link to. A separate flat query for the same reason
+ * `useCompanyOptions` is: the picker needs every contact up to the API's ceiling, not whatever page
+ * the roster happens to be showing.
+ */
+export function useContactOptions(siteId: string) {
+	return useQuery({
+		queryKey: ['crm', 'contact-options', siteId],
+		queryFn: () =>
+			sessionFetch<{ contacts: CrmContact[]; total: number; role?: string }>(
+				`/api/crm/contacts?site_id=${siteId}&limit=${CRM_MAX_PAGE_SIZE}&offset=0`,
+			),
+		enabled: Boolean(siteId),
+		staleTime: 5 * 60 * 1000,
+		retry,
+	});
+}
+
 export function useCompany(siteId: string, id: string) {
 	return useQuery({
 		queryKey: ['crm', 'company', siteId, id],
@@ -137,6 +157,67 @@ export function useCompanyAnalytics(siteId: string, id: string) {
 		queryFn: () =>
 			sessionFetch<CompanyAnalytics>(`/api/crm/companies/${id}/analytics?site_id=${siteId}`),
 		enabled: Boolean(siteId && id),
+		retry,
+	});
+}
+
+/** The deal list filters. `stage`/`companyId`/`contactId` are each exact matches; `q` is the bounded
+ * substring search over the deal name. */
+export interface DealListParams {
+	/** `''` means every stage. */
+	stage: string;
+	/** `''` means unfiltered. */
+	companyId: string;
+	/** `''` means unfiltered. */
+	contactId: string;
+	q: string;
+	offset: number;
+}
+
+export function useDeals(siteId: string, params: DealListParams) {
+	return useQuery({
+		queryKey: ['crm', 'deals', siteId, params],
+		queryFn: () => {
+			const qs = new URLSearchParams({
+				site_id: siteId,
+				limit: String(CRM_PAGE_SIZE),
+				offset: String(params.offset),
+			});
+			if (params.stage) qs.set('stage', params.stage);
+			if (params.companyId) qs.set('company_id', params.companyId);
+			if (params.contactId) qs.set('contact_id', params.contactId);
+			const q = params.q.trim();
+			if (q) qs.set('q', q);
+			return sessionFetch<{ deals: CrmDeal[]; total: number; role?: string }>(
+				`/api/crm/deals?${qs.toString()}`,
+			);
+		},
+		enabled: Boolean(siteId),
+		retry,
+	});
+}
+
+export function useDeal(siteId: string, id: string) {
+	return useQuery({
+		queryKey: ['crm', 'deal', siteId, id],
+		queryFn: () => sessionFetch<{ deal: CrmDeal }>(`/api/crm/deals/${id}?site_id=${siteId}`),
+		enabled: Boolean(siteId && id),
+		retry,
+	});
+}
+
+/**
+ * The pipeline summary. Not filtered by anything the list is — it is a total across every deal on the
+ * site, regardless of what the roster's search or stage filter currently shows.
+ */
+export function useDealPipeline(siteId: string) {
+	return useQuery({
+		queryKey: ['crm', 'pipeline', siteId],
+		queryFn: () =>
+			sessionFetch<{ pipeline: PipelineCurrencySummary[] }>(
+				`/api/crm/pipeline?site_id=${siteId}`,
+			),
+		enabled: Boolean(siteId),
 		retry,
 	});
 }
@@ -311,6 +392,61 @@ export function useDeleteCompany(siteId: string) {
 			void qc.invalidateQueries({ queryKey: ['crm', 'company-options', siteId] });
 			// Every unlinked contact's `company` and `company_id` changed.
 			void qc.invalidateQueries({ queryKey: ['crm', 'contacts', siteId] });
+			void auditIsStale(qc, siteId);
+		},
+	});
+}
+
+/** The pipeline is a derived total over every deal's `stage`/`value`/`currency`, so any deal write
+ * invalidates it alongside the list — a create, an edit that changes stage or value, and a delete all
+ * move the numbers it reports. */
+function pipelineIsStale(qc: ReturnType<typeof useQueryClient>, siteId: string): Promise<void> {
+	return qc.invalidateQueries({ queryKey: ['crm', 'pipeline', siteId] });
+}
+
+export function useCreateDeal(siteId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (body: CrmFields) =>
+			sessionFetch<{ deal: CrmDeal }>(`/api/crm/deals?site_id=${siteId}`, {
+				method: 'POST',
+				body,
+			}),
+		onSuccess: () => {
+			void qc.invalidateQueries({ queryKey: ['crm', 'deals', siteId] });
+			void pipelineIsStale(qc, siteId);
+			void auditIsStale(qc, siteId);
+		},
+	});
+}
+
+export function useUpdateDeal(siteId: string, id: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (body: CrmFields) =>
+			sessionFetch<{ deal: CrmDeal }>(`/api/crm/deals/${id}?site_id=${siteId}`, {
+				method: 'PATCH',
+				body,
+			}),
+		onSuccess: () => {
+			void qc.invalidateQueries({ queryKey: ['crm', 'deals', siteId] });
+			void qc.invalidateQueries({ queryKey: ['crm', 'deal', siteId, id] });
+			void pipelineIsStale(qc, siteId);
+			void auditIsStale(qc, siteId);
+		},
+	});
+}
+
+export function useDeleteDeal(siteId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (id: string) =>
+			sessionFetch<{ deleted: boolean }>(`/api/crm/deals/${id}?site_id=${siteId}`, {
+				method: 'DELETE',
+			}),
+		onSuccess: () => {
+			void qc.invalidateQueries({ queryKey: ['crm', 'deals', siteId] });
+			void pipelineIsStale(qc, siteId);
 			void auditIsStale(qc, siteId);
 		},
 	});

@@ -21,12 +21,14 @@ import { SegmentNotice } from './CubeFilterBar.js';
 import { AuditPanel } from './crm/AuditPanel.js';
 import { CompaniesPanel } from './crm/CompaniesPanel.js';
 import { ContactsPanel } from './crm/ContactsPanel.js';
+import { DealsPanel } from './crm/DealsPanel.js';
 
-type Section = 'contacts' | 'companies' | 'audit';
+type Section = 'contacts' | 'companies' | 'deals' | 'audit';
 
 const SECTIONS: { id: Section; label: string }[] = [
 	{ id: 'contacts', label: 'Contacts' },
 	{ id: 'companies', label: 'Companies' },
+	{ id: 'deals', label: 'Deals' },
 	// Always offered, never hidden behind a role check. The browser cannot prove its own role until a
 	// list response reports one, and a tab that appears late is worse than a tab that explains itself:
 	// the panel answers a 403 by naming the role it needs, which is the thing the reader has to know.
@@ -54,9 +56,11 @@ function onSectionKey(key: string, current: Section, select: (id: Section) => vo
 export function Crm({ siteId }: { siteId: string }): ReactElement {
 	const [section, setSection] = useState<Section>('contacts');
 	// Every selection lives here so the panels can hand off to each other: a contact's employer opens
-	// the company, a company's roster opens the person, and either one opens its own access history.
+	// the company, a company's roster opens the person, either one opens a deal, and any of the three
+	// opens its own access history.
 	const [contactId, setContactId] = useState('');
 	const [companyId, setCompanyId] = useState('');
+	const [dealId, setDealId] = useState('');
 	const [auditTarget, setAuditTarget] = useState('');
 
 	const openCompany = (id: string): void => {
@@ -137,6 +141,14 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 						onSelect={setCompanyId}
 						onOpenContact={openContact}
 						onOpenAudit={openAudit}
+					/>
+				) : section === 'deals' ? (
+					<DealsPanel
+						siteId={siteId}
+						selectedId={dealId}
+						onSelect={setDealId}
+						onOpenCompany={openCompany}
+						onOpenContact={openContact}
 					/>
 				) : (
 					<AuditPanel siteId={siteId} targetId={auditTarget} onTarget={setAuditTarget} />
