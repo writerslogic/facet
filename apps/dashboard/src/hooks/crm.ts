@@ -288,6 +288,20 @@ function auditIsStale(qc: ReturnType<typeof useQueryClient>, siteId: string): Pr
  * NULL, which is how a form clears a field it previously set. */
 export type CrmFields = Record<string, string>;
 
+/** A deal create/update body. `value`/`expected_close_date` must be real numbers and `currency` a
+ * validated 3-letter code — the schema rejects a stringified number and an empty-string currency, so
+ * these three are omit-when-unset rather than the other CRM entities' empty-string-clears-it. */
+export interface DealFields {
+	name?: string;
+	stage?: string;
+	value?: number;
+	currency?: string;
+	expected_close_date?: number;
+	company_id?: string;
+	contact_id?: string;
+	notes?: string;
+}
+
 export function useCreateContact(siteId: string) {
 	const qc = useQueryClient();
 	return useMutation({
@@ -407,7 +421,7 @@ function pipelineIsStale(qc: ReturnType<typeof useQueryClient>, siteId: string):
 export function useCreateDeal(siteId: string) {
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: (body: CrmFields) =>
+		mutationFn: (body: DealFields) =>
 			sessionFetch<{ deal: CrmDeal }>(`/api/crm/deals?site_id=${siteId}`, {
 				method: 'POST',
 				body,
@@ -423,7 +437,7 @@ export function useCreateDeal(siteId: string) {
 export function useUpdateDeal(siteId: string, id: string) {
 	const qc = useQueryClient();
 	return useMutation({
-		mutationFn: (body: CrmFields) =>
+		mutationFn: (body: DealFields) =>
 			sessionFetch<{ deal: CrmDeal }>(`/api/crm/deals/${id}?site_id=${siteId}`, {
 				method: 'PATCH',
 				body,

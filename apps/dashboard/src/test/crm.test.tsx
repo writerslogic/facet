@@ -71,61 +71,68 @@ interface Handlers {
 	pipeline?: unknown[];
 }
 
-/** Every /api/* response the CRM tab can ask for, unless `unavailable` short-circuits them all. */
-function mockApi(handlers: Handlers & { unavailable?: boolean } = {}): void {
-	vi.stubGlobal(
-		'fetch',
-		vi.fn(async (input: RequestInfo | URL) => {
-			const url = typeof input === 'string' ? input : String(input);
-			if (handlers.unavailable && url.startsWith('/api/crm')) {
-				return { ok: false, status: 501, json: async () => ({ error: 'crm_unavailable' }) };
-			}
-			if (url.includes('/analytics')) {
-				const body = url.includes('/companies/')
-					? handlers.companyAnalytics
-					: handlers.contactAnalytics;
-				return { ok: true, status: 200, json: async () => body ?? {} };
-			}
-			if (url.startsWith('/api/crm/companies/') && url.includes('/contacts')) {
-				return { ok: true, status: 200, json: async () => ({ contacts: [], total: 0 }) };
-			}
-			if (url.startsWith('/api/crm/companies/')) {
-				return { ok: true, status: 200, json: async () => ({ company: COMPANY }) };
-			}
-			if (url.startsWith('/api/crm/companies')) {
-				return {
-					ok: true,
-					status: 200,
-					json: async () => ({ companies: [COMPANY], total: 1, role: handlers.role }),
-				};
-			}
-			if (url.startsWith('/api/crm/pipeline')) {
-				return {
-					ok: true,
-					status: 200,
-					json: async () => ({ pipeline: handlers.pipeline ?? [] }),
-				};
-			}
-			if (url.startsWith('/api/crm/deals/')) {
-				return { ok: true, status: 200, json: async () => ({ deal: DEAL }) };
-			}
-			if (url.startsWith('/api/crm/deals')) {
-				return {
-					ok: true,
-					status: 200,
-					json: async () => ({ deals: [DEAL], total: 1, role: handlers.role }),
-				};
-			}
-			if (url.startsWith('/api/crm/contacts/')) {
-				return { ok: true, status: 200, json: async () => ({ contact: CONTACT }) };
-			}
+/** Every /api/* response the CRM tab can ask for, unless `unavailable` short-circuits them all.
+ * Returns the underlying `vi.fn` so a test can inspect the body a write actually sent — the whole
+ * point of the `sends the value as a real number` test below. */
+function mockApi(handlers: Handlers & { unavailable?: boolean } = {}) {
+	const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+		const url = typeof input === 'string' ? input : String(input);
+		if (handlers.unavailable && url.startsWith('/api/crm')) {
+			return { ok: false, status: 501, json: async () => ({ error: 'crm_unavailable' }) };
+		}
+		if (url.includes('/analytics')) {
+			const body = url.includes('/companies/')
+				? handlers.companyAnalytics
+				: handlers.contactAnalytics;
+			return { ok: true, status: 200, json: async () => body ?? {} };
+		}
+		if (url.startsWith('/api/crm/companies/') && url.includes('/contacts')) {
+			return { ok: true, status: 200, json: async () => ({ contacts: [], total: 0 }) };
+		}
+		if (url.startsWith('/api/crm/companies/')) {
+			return { ok: true, status: 200, json: async () => ({ company: COMPANY }) };
+		}
+		if (url.startsWith('/api/crm/companies')) {
 			return {
 				ok: true,
 				status: 200,
-				json: async () => ({ contacts: [CONTACT], total: 1, role: handlers.role }),
+				json: async () => ({ companies: [COMPANY], total: 1, role: handlers.role }),
 			};
-		}),
-	);
+		}
+		if (url.startsWith('/api/crm/pipeline')) {
+			return {
+				ok: true,
+				status: 200,
+				json: async () => ({ pipeline: handlers.pipeline ?? [] }),
+			};
+		}
+		if (url.startsWith('/api/crm/deals') && init?.method === 'POST') {
+			// Echoes the submitted body back as the created deal, so a test can assert on what the
+			// form actually sent (a real number, not the stringified one the API would 400 on).
+			const sent = JSON.parse(String(init.body)) as Record<string, unknown>;
+			return { ok: true, status: 201, json: async () => ({ deal: { ...DEAL, ...sent } }) };
+		}
+		if (url.startsWith('/api/crm/deals/')) {
+			return { ok: true, status: 200, json: async () => ({ deal: DEAL }) };
+		}
+		if (url.startsWith('/api/crm/deals')) {
+			return {
+				ok: true,
+				status: 200,
+				json: async () => ({ deals: [DEAL], total: 1, role: handlers.role }),
+			};
+		}
+		if (url.startsWith('/api/crm/contacts/')) {
+			return { ok: true, status: 200, json: async () => ({ contact: CONTACT }) };
+		}
+		return {
+			ok: true,
+			status: 200,
+			json: async () => ({ contacts: [CONTACT], total: 1, role: handlers.role }),
+		};
+	});
+	vi.stubGlobal('fetch', fetchMock);
+	return fetchMock;
 }
 
 function renderCrm() {
@@ -373,6 +380,34 @@ describe('role-gated actions', () => {
 });
 
 describe('deals', () => {
+	it('submits value and expected close date as real numbers, not strings', async () => {
+		// Regression: the create schema requires JSON numbers for these two fields and rejects an
+		// empty-string currency outright, unlike the other CRM entities' clear-via-'' convention —
+		// sending stringified values here 400s every create.
+		const fetchMock = mockApi({ role: 'analyst' });
+		renderCrm();
+		fireEvent.click(screen.getByRole('tab', { name: 'Deals' }));
+		fireEvent.click(await screen.findByRole('button', { name: 'New deal' }));
+
+		fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'New opportunity' } });
+		fireEvent.change(screen.getByLabelText('Value'), { target: { value: '99' } });
+		fireEvent.change(screen.getByLabelText('Currency'), { target: { value: 'usd' } });
+		fireEvent.change(screen.getByLabelText('Expected close date'), {
+			target: { value: '2024-01-15' },
+		});
+		fireEvent.click(screen.getByRole('button', { name: 'Create deal' }));
+
+		await waitFor(() =>
+			expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true),
+		);
+		const [, init] = fetchMock.mock.calls.find(([, i]) => i?.method === 'POST') ?? [];
+		const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+		expect(body.value).toBe(9900);
+		expect(typeof body.value).toBe('number');
+		expect(body.currency).toBe('USD');
+		expect(typeof body.expected_close_date).toBe('number');
+	});
+
 	it('shows the per-currency pipeline summary above the roster', async () => {
 		mockApi({
 			role: 'analyst',
