@@ -15,13 +15,13 @@
 
 import type { ReactElement } from 'react';
 import { useDealPipeline } from '../../hooks/crm.js';
-import { crmBlockOf, formatMoney } from '../../lib/crm.js';
+import { type CrmBlock, crmBlockOf, formatMoney } from '../../lib/crm.js';
 import { formatNumber } from '../../lib/format.js';
 import { useDashboard } from '../../state.js';
 import { ErrorState, Skeleton } from '../StatusStates.js';
 import type { TileDef } from './types.js';
 
-const BLOCK_TEXT: Record<string, string> = {
+const BLOCK_TEXT: Record<CrmBlock, string> = {
 	unavailable: 'The CRM extension is not enabled on this deployment.',
 	'accounts-off': 'Account sign-in is not configured on this deployment.',
 	'signed-out': 'Sign in with your operator account to see the pipeline.',

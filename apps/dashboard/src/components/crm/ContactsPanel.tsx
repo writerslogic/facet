@@ -3,7 +3,7 @@
 // its context on screen at once.
 
 import { Plus } from 'lucide-react';
-import { type ReactElement, useEffect, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import { CRM_PAGE_SIZE, useContact, useContacts, useCreateContact } from '../../hooks/crm.js';
 import { useDebouncedValue } from '../../hooks/debounce.js';
 import { cn } from '../../lib/cn.js';
@@ -38,16 +38,13 @@ export function ContactsPanel({
 	// The role the server served this list under — the only authoritative answer available to
 	// the browser. See `canAdministerCrm`.
 	const [search, setSearch] = useState('');
-	const query = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
 	const [status, setStatus] = useState('');
 	const [offset, setOffset] = useState(0);
 	const [creating, setCreating] = useState(false);
 	const [deleted, setDeleted] = useState<string | null>(null);
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: reset must fire once the debounced query settles; the body doesn't need to read its value
-	useEffect(() => {
-		setOffset(0);
-	}, [query]);
+	// Settling and resetting the offset in the same tick, not a separate effect watching `query` —
+	// see useDebouncedValue's doc comment for why that gap matters here.
+	const query = useDebouncedValue(search, SEARCH_DEBOUNCE_MS, () => setOffset(0));
 
 	const list = useContacts(siteId, { status, q: query, offset });
 	const canAdminister = canAdministerCrm(list.data?.role);
@@ -270,6 +267,9 @@ export function ContactsPanel({
 					/>
 				) : selected.data ? (
 					<ContactDetail
+						// Remounts on selection change so local state (the edit form, the save
+						// confirmation) never survives from the previously selected contact.
+						key={selected.data.contact.id}
 						siteId={siteId}
 						contact={selected.data.contact}
 						canAdminister={canAdminister}

@@ -2,7 +2,7 @@
 // selected deal. Master/detail, matching ContactsPanel/CompaniesPanel.
 
 import { ArrowLeft, Plus } from 'lucide-react';
-import { type ReactElement, useEffect, useState } from 'react';
+import { type ReactElement, useState } from 'react';
 import {
 	CRM_PAGE_SIZE,
 	useCompany,
@@ -147,19 +147,26 @@ export function DealsPanel({
 	onClearFilter?: () => void;
 }): ReactElement {
 	const [search, setSearch] = useState('');
-	const query = useDebouncedValue(search, SEARCH_DEBOUNCE_MS);
 	const [stage, setStage] = useState('');
 	const [offset, setOffset] = useState(0);
 	const [creating, setCreating] = useState(false);
 	const [deleted, setDeleted] = useState<string | null>(null);
+	// Settling and resetting the offset in the same tick, not a separate effect watching `query` —
+	// see useDebouncedValue's doc comment for why that gap matters here.
+	const query = useDebouncedValue(search, SEARCH_DEBOUNCE_MS, () => setOffset(0));
 
-	// The debounced query settling, or a filter arriving from a different company/contact (or being
-	// cleared), each start the roster over — the previous offset almost certainly overruns the new
-	// result set.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: reset must fire on any of these changing; the body doesn't need to read their values
-	useEffect(() => {
+	// A filter arriving from a different company/contact (or being cleared) also starts the roster
+	// over. Adjusted during render rather than a `useEffect` watching the props, for the same reason
+	// as above: an effect fires one render after `companyFilter`/`contactFilter` change, so the
+	// `useDeals` call just below would go out once with the new filter and the stale offset first.
+	const [prevFilters, setPrevFilters] = useState({ companyFilter, contactFilter });
+	if (
+		prevFilters.companyFilter !== companyFilter ||
+		prevFilters.contactFilter !== contactFilter
+	) {
+		setPrevFilters({ companyFilter, contactFilter });
 		setOffset(0);
-	}, [query, companyFilter, contactFilter]);
+	}
 
 	const list = useDeals(siteId, {
 		stage,
@@ -390,6 +397,9 @@ export function DealsPanel({
 						/>
 					) : selected.data ? (
 						<DealDetail
+							// Remounts on selection change so local state (the edit form, the save
+							// confirmation) never survives from the previously selected deal.
+							key={selected.data.deal.id}
 							siteId={siteId}
 							deal={selected.data.deal}
 							canAdminister={canAdminister}
