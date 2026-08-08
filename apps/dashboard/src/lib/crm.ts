@@ -13,6 +13,7 @@
 //   • WHETHER THE OPERATOR MAY DESTROY OR EXPORT. See `canAdministerCrm`.
 
 import type { CompanyStatus, ContactStatus, DealStage } from '@facet/shared';
+import { uiLocale } from './datetime.js';
 import { formatNumber } from './format.js';
 
 /** A person in the CRM, exactly as `GET /api/crm/contacts` returns them. */
@@ -205,7 +206,7 @@ export const DEAL_STAGES: DealStage[] = [
 export function formatMoney(cents: number, currency: string | null): string {
 	if (currency) {
 		try {
-			return new Intl.NumberFormat(undefined, { style: 'currency', currency }).format(
+			return new Intl.NumberFormat(uiLocale(), { style: 'currency', currency }).format(
 				cents / 100,
 			);
 		} catch {

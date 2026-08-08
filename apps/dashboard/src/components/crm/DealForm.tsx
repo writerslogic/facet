@@ -6,7 +6,7 @@
 // once `value` is cleared rather than surface `deal_value_needs_currency` after a round trip.
 
 import { type ReactElement, useState } from 'react';
-import type { CrmFields } from '../../hooks/crm.js';
+import type { DealFields } from '../../hooks/crm.js';
 import { useCompanyOptions, useContactOptions } from '../../hooks/crm.js';
 import type { CrmDeal } from '../../lib/crm.js';
 import { DEAL_STAGES } from '../../lib/crm.js';
@@ -51,6 +51,9 @@ function blockedReason(draft: Draft): string | null {
 	if (draft.value.trim() && !Number.isFinite(Number(draft.value))) {
 		return 'Value must be a number.';
 	}
+	if (draft.value.trim() && Number(draft.value) < 0) {
+		return 'Value cannot be negative.';
+	}
 	return null;
 }
 
@@ -70,7 +73,7 @@ export function DealForm({
 	deal: CrmDeal | null;
 	submitLabel: string;
 	pendingLabel: string;
-	onSubmit: (fields: CrmFields) => void;
+	onSubmit: (fields: DealFields) => void;
 	onCancel: () => void;
 	isPending: boolean;
 	error: unknown;
@@ -96,20 +99,26 @@ export function DealForm({
 				if (blocked || isPending) return;
 				const value = draft.value.trim();
 				const date = draft.expected_close_date.trim();
-				onSubmit({
+				const fields: DealFields = {
 					name: draft.name,
 					stage: draft.stage,
-					value: value ? String(Math.round(Number(value) * 100)) : '',
-					// Uppercased here too, not just server-side — so a saved draft round-trips
-					// unchanged instead of showing lowercase until the next fetch.
-					currency: value ? draft.currency.trim().toUpperCase() : '',
-					expected_close_date: date
-						? String(new Date(`${date}T00:00:00Z`).getTime())
-						: '',
 					company_id: draft.company_id,
 					contact_id: draft.contact_id,
 					notes: draft.notes,
-				});
+				};
+				// Omitted rather than sent as '' when blank: the schema wants a real number/3-letter
+				// code or no key at all, unlike the other CRM fields' empty-string-clears-it convention
+				// (see `DealFields`) — so clearing a previously-set value here leaves it unchanged.
+				if (value) {
+					fields.value = Math.round(Number(value) * 100);
+					// Uppercased here too, not just server-side — so a saved draft round-trips
+					// unchanged instead of showing lowercase until the next fetch.
+					fields.currency = draft.currency.trim().toUpperCase();
+				}
+				if (date) {
+					fields.expected_close_date = new Date(`${date}T00:00:00Z`).getTime();
+				}
+				onSubmit(fields);
 			}}
 		>
 			<FormControls busy={isPending} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -139,7 +148,11 @@ export function DealForm({
 					value={draft.value}
 					onChange={set('value')}
 					placeholder="4900"
-					hint="Whole units, e.g. 49 for $49.00."
+					hint={
+						deal?.value != null && !draft.value.trim()
+							? "Can't be cleared once set — pick a new value instead."
+							: 'Whole units, e.g. 49 for $49.00.'
+					}
 				/>
 				<Field
 					id={idFor('currency')}
@@ -160,6 +173,11 @@ export function DealForm({
 					type="date"
 					value={draft.expected_close_date}
 					onChange={set('expected_close_date')}
+					hint={
+						deal?.expected_close_date != null && !draft.expected_close_date.trim()
+							? "Can't be cleared once set — pick a new date instead."
+							: undefined
+					}
 				/>
 				<Select
 					id={idFor('company_id')}
