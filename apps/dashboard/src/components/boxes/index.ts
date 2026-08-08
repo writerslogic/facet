@@ -21,6 +21,7 @@ import { osBox } from './OsBox.js';
 import { pagesBox } from './PagesBox.js';
 import { pageviewsBox } from './PageviewsBox.js';
 import { pathTreeBox } from './PathTreeBox.js';
+import { pipelineBox } from './PipelineBox.js';
 import { referrersBox } from './ReferrersBox.js';
 import { regionsBox } from './RegionsBox.js';
 import { revenueBox } from './RevenueBox.js';
@@ -58,4 +59,5 @@ export const BOXES: TileDef[] = [
 	connectionBox,
 	revenueBox,
 	attributionBox,
+	pipelineBox,
 ];
