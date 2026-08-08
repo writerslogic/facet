@@ -61,6 +61,8 @@ if (!('ResizeObserver' in globalThis)) {
 // React Testing Library needs explicit cleanup because vitest globals are off.
 afterEach(() => {
 	cleanup();
+	localStorage.clear();
+	sessionStorage.clear();
 	// `restoreAllMocks` does not undo `stubGlobal`, so a test that stubs `fetch` and only restores
 	// mocks leaves the stub installed. An unmounted tree's react-query request can still be in
 	// flight, and it then resolves against the NEXT test's DOM — a failure that moves between files

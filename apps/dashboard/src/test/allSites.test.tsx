@@ -90,8 +90,8 @@ function mockServer(behaviour: Record<string, Behaviour>): void {
 }
 
 function seed(profiles: typeof PROFILES): void {
-	localStorage.setItem('facet.profiles', JSON.stringify(profiles));
-	localStorage.setItem('facet.activeProfile', profiles[0]?.id ?? '');
+	sessionStorage.setItem('facet.profiles', JSON.stringify(profiles));
+	sessionStorage.setItem('facet.activeProfile', profiles[0]?.id ?? '');
 }
 
 function renderRollup() {

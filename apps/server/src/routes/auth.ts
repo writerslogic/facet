@@ -17,6 +17,7 @@ import {
 	SESSION_COOKIE,
 	consumeMagicToken,
 	createMagicToken,
+	discardMagicToken,
 	revokeSessions,
 	sessionUser,
 	signSession,
@@ -24,6 +25,7 @@ import {
 	userMemberships,
 } from '../lib/accounts.js';
 import { requireAdmin } from '../lib/auth.js';
+import { requireSameOrigin } from '../lib/csrf.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp } from '../lib/request-meta.js';
@@ -76,7 +78,33 @@ authRoutes.post(
 	vValidator('json', RequestSchema, validationErrorHook),
 	async (c) => {
 		requireSecret(c.env);
-		await createMagicToken(c.env, c.req.valid('json').email, Date.now());
+		const sender = c.env.SEND_EMAIL;
+		const from = c.env.AUTH_EMAIL_FROM;
+		if (!sender || !from) {
+			throw new ApiError(
+				'auth_email_unavailable',
+				503,
+				'email sign-in is not configured; use the admin-link bootstrap flow',
+			);
+		}
+		const email = c.req.valid('json').email;
+		const token = await createMagicToken(c.env, email, Date.now());
+		const link = `${new URL(c.req.url).origin}/login?token=${encodeURIComponent(token)}`;
+		try {
+			await sender.send({
+				from,
+				to: email,
+				subject: 'Sign in to Facet',
+				text: `Use this single-use link within 15 minutes to sign in to Facet:\n\n${link}\n`,
+			});
+		} catch {
+			await discardMagicToken(c.env, token);
+			throw new ApiError(
+				'auth_email_failed',
+				502,
+				'the sign-in email could not be delivered',
+			);
+		}
 		return c.body(null, 202);
 	},
 );
@@ -135,7 +163,7 @@ authRoutes.get('/me', async (c) => {
 	return c.json({ user, memberships: await userMemberships(c.env, user.id) });
 });
 
-authRoutes.post('/logout', (c) => {
+authRoutes.post('/logout', requireSameOrigin, (c) => {
 	deleteCookie(c, SESSION_COOKIE, { path: '/' });
 	return c.body(null, 204);
 });
@@ -154,7 +182,7 @@ authRoutes.post('/logout', (c) => {
  * from and no per-device granularity to offer; the honest control is the one that ends everything,
  * which is also the one someone reaching for it actually wants.
  */
-authRoutes.post('/logout-everywhere', async (c) => {
+authRoutes.post('/logout-everywhere', requireSameOrigin, async (c) => {
 	const secret = requireSecret(c.env);
 	const user = await sessionUser(c.env, getCookie(c, SESSION_COOKIE), secret, Date.now());
 	if (!user) {

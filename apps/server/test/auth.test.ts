@@ -6,7 +6,7 @@ import type { MiddlewareHandler } from 'hono';
 import { describe, expect, it } from 'vitest';
 import type { AppEnv } from '../src/env.js';
 import { issueKey } from '../src/lib/apikeys.js';
-import { authenticateKey, requireAdmin, requireApiKey } from '../src/lib/auth.js';
+import { authenticateKey, requireAdmin, requireApiKey, requireApiScope } from '../src/lib/auth.js';
 import { ApiError, toErrorBody } from '../src/lib/http.js';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
@@ -58,6 +58,25 @@ describe('requireApiKey', () => {
 		);
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ ok: true, siteId: SITE });
+	});
+});
+
+describe('requireApiScope', () => {
+	it('allows only a key carrying the requested capability', async () => {
+		const { key } = await issueKey(env, SITE, null, Date.now(), ['read']);
+		const allowed = await appWith(requireApiScope('read')).request(
+			'/p',
+			{ headers: { Authorization: `Bearer ${key}` } },
+			env,
+		);
+		const denied = await appWith(requireApiScope('write')).request(
+			'/p',
+			{ headers: { Authorization: `Bearer ${key}` } },
+			env,
+		);
+		expect(allowed.status).toBe(200);
+		expect(denied.status).toBe(403);
+		expect(await denied.json()).toEqual({ error: 'insufficient_scope' });
 	});
 });
 

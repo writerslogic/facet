@@ -16,8 +16,13 @@ export interface Env {
 	/** Analytics Engine dataset — the columnar analytical store every accepted event is mirrored into
 	 * (see lib/ae.ts). Optional: with the binding removed, the AE writes no-op and D1 is the only store. */
 	AE?: AnalyticsEngineDataset;
+	/** Explicit opt-in for the best-effort Analytics Engine mirror. D1 remains authoritative. */
+	AE_BEST_EFFORT_ENABLED?: string;
 	/** Rolling retention window for raw events, in days (string var). */
 	RAW_RETENTION_DAYS: string;
+	/** Set to "false" only in isolated tests or a deliberate legacy deployment. Production defaults
+	 * to validating every public beacon against an existing site's configured domain. */
+	COLLECT_VALIDATE_SITE?: string;
 	/** Rolling retention window for the CRM audit log, in days (string var). Optional: unset means the
 	 * default in `constants.ts`, which is deliberately longer than the raw-event window because the log
 	 * records what OPERATORS did rather than what visitors did. Only read when `CRM_DB` is bound. */
@@ -31,6 +36,12 @@ export interface Env {
 	/** HMAC secret (Worker secret) for signing dashboard session tokens. When unset, account auth is
 	 * disabled (the /api/auth routes return 503) — the per-site API-key path is unaffected. */
 	SESSION_SECRET?: string;
+	/** Optional Cloudflare Email Routing sender used for operator magic links and alert email. */
+	SEND_EMAIL?: SendEmail;
+	/** Verified sender address for dashboard magic links. */
+	AUTH_EMAIL_FROM?: string;
+	/** Verified sender address for anomaly alerts. */
+	ALERT_EMAIL_FROM?: string;
 	/** Workers AI binding, used to translate natural-language analytics questions. */
 	AI: Ai;
 	/** Optional anomaly-alert webhook URL (var). When unset, anomaly webhooks are disabled. */

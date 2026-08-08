@@ -15,4 +15,5 @@ export interface ApiKeyRecord {
 	label: string | null;
 	created_at: number;
 	last_used: number | null;
+	scopes: ('read' | 'write' | 'consent')[];
 }

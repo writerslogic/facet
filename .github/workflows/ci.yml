@@ -39,8 +39,17 @@ jobs:
       - name: Build
         run: pnpm build
 
+      - name: Migration upgrade test
+        run: pnpm check:migrations
+
       - name: Package check (publint + attw)
         run: pnpm --filter "@writerslogic/*" check:package
 
       - name: Test
         run: pnpm test
+
+      - name: Install browser
+        run: pnpm --filter @facet/dashboard exec playwright install --with-deps chromium
+
+      - name: Browser end-to-end test
+        run: pnpm test:e2e

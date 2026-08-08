@@ -10,7 +10,7 @@ import { ConsentGrantSchema, ConsentRevokeSchema } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
-import { requireApiKey } from '../lib/auth.js';
+import { requireApiScope } from '../lib/auth.js';
 import {
 	type ConsentClaims,
 	revokeConsent,
@@ -35,7 +35,7 @@ export const consentRoutes = new Hono<AppEnv>();
 
 consentRoutes.post(
 	'/',
-	requireApiKey,
+	requireApiScope('consent'),
 	rateLimit((c) => `consent:${c.get('siteId')}`),
 	vValidator('json', ConsentGrantSchema, validationErrorHook),
 	async (c) => {
@@ -109,7 +109,7 @@ consentRoutes.post(
 
 consentRoutes.delete(
 	'/',
-	requireApiKey,
+	requireApiScope('consent'),
 	rateLimit((c) => `consent:${c.get('siteId')}`),
 	vValidator('json', ConsentRevokeSchema, validationErrorHook),
 	async (c) => {

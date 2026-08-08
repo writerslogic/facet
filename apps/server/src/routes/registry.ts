@@ -3,6 +3,7 @@
 
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
+import { requireAdmin } from '../lib/auth.js';
 import { adminRoutes } from './admin.js';
 import { alertsRoutes } from './alerts.js';
 import { attestationRoutes } from './attestation.js';
@@ -25,6 +26,49 @@ import { wellKnownRoutes } from './wellknown.js';
 const healthRoute = new Hono<AppEnv>();
 healthRoute.get('/', (c) => c.json({ ok: true }));
 
+// Authenticated readiness is intentionally deeper than public liveness: it proves D1 is reachable
+// and reports missing production controls without exposing deployment configuration anonymously.
+const readinessRoute = new Hono<AppEnv>();
+readinessRoute.get('/', requireAdmin, async (c) => {
+	const checks: Record<string, boolean> = {
+		database: false,
+		rateLimiter: Boolean(c.env.RATE_LIMITER),
+		queue: Boolean(c.env.INGEST_QUEUE),
+		adminToken: Boolean(c.env.ADMIN_TOKEN),
+		retention: /^\d+$/.test(c.env.RAW_RETENTION_DAYS ?? ''),
+	};
+	try {
+		await c.env.DB.prepare('SELECT 1').first();
+		checks.database = true;
+	} catch {
+		checks.database = false;
+	}
+	const required = ['database', 'rateLimiter', 'adminToken', 'retention'];
+	const ok = required.every((name) => checks[name]);
+	let jobResults: unknown[] = [];
+	if (checks.database) {
+		try {
+			const jobs = await c.env.DB.prepare(
+				'SELECT name, last_success_at, last_failure_at, last_error FROM scheduled_job_runs ORDER BY name',
+			).all();
+			jobResults = jobs.results;
+			const integrity = await c.env.DB.prepare(`
+				SELECT
+					(SELECT COUNT(*) FROM events e LEFT JOIN sites s ON s.site_id = e.site_id WHERE s.site_id IS NULL) +
+					(SELECT COUNT(*) FROM api_keys k LEFT JOIN sites s ON s.site_id = k.site_id WHERE s.site_id IS NULL) +
+					(SELECT COUNT(*) FROM event_rollups r LEFT JOIN sites s ON s.site_id = r.site_id WHERE s.site_id IS NULL)
+					AS violations
+			`).first<{ violations: number }>();
+			checks.referentialIntegrity = integrity?.violations === 0;
+		} catch {
+			checks.migrations = false;
+		}
+	}
+	if (checks.migrations === undefined) checks.migrations = true;
+	const ready = ok && checks.migrations && checks.referentialIntegrity !== false;
+	return c.json({ ok: ready, checks, scheduled_jobs: jobResults }, ready ? 200 : 503);
+});
+
 /** A sub-router and the base path it mounts under. */
 export interface RouteEntry {
 	path: string;
@@ -35,6 +79,7 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/.well-known', router: wellKnownRoutes },
 	{ path: '/llms.txt', router: llmsRoutes },
 	{ path: '/api/health', router: healthRoute },
+	{ path: '/api/ready', router: readinessRoute },
 	{ path: '/api/mcp', router: mcpRoutes },
 	{ path: '/api/collect', router: collectRoute },
 	{ path: '/api/auth', router: authRoutes },

@@ -89,6 +89,7 @@ import {
 	findLinkedVisitorHashesForMany,
 } from '../lib/consent.js';
 import { CRM_MAX_BODY_BYTES, DAY_MS } from '../lib/constants.js';
+import { requireSameOrigin } from '../lib/csrf.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { crmAuditRetentionDays } from '../lib/retention.js';
@@ -182,7 +183,7 @@ function auditCrm(action: CrmAuditAction): MiddlewareHandler<AppEnv> {
  * session the ability to fill the audit table with entries for requests it was never allowed to make.
  */
 function crmGate(need: Role, action: CrmAuditAction): MiddlewareHandler<AppEnv> {
-	return every(requireTeamRole(need), crmRateLimit, auditCrm(action));
+	return every(requireSameOrigin, requireTeamRole(need), crmRateLimit, auditCrm(action));
 }
 
 /** Resolve a contact or raise the canonical 404. Scoped by the authorized site, so a contact id from

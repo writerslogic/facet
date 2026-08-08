@@ -1,5 +1,6 @@
 // App shell: canonical error envelope, JSON 404, scoped CORS on the beacon, oversized-body rejection.
 
+import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 
@@ -8,6 +9,11 @@ describe('app shell', () => {
 		const res = await createApp().request('/api/health');
 		expect(res.status).toBe(200);
 		expect(await res.json()).toEqual({ ok: true });
+	});
+
+	it('GET /api/ready is protected rather than exposing configuration', async () => {
+		const res = await createApp().request('/api/ready', {}, env);
+		expect(res.status).toBe(401);
 	});
 
 	it('unknown route → 404 { error: not_found }', async () => {

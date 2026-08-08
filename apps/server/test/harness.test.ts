@@ -26,6 +26,7 @@ const EXPECTED_TABLES = [
 	'mmr_leaves',
 	'mmr_nodes',
 	'salts',
+	'scheduled_job_runs',
 	'scitt_log',
 	'sessions',
 	'site_config',

@@ -29,7 +29,7 @@ function withDashboard(ui: ReactElement): ReactElement {
 		'facet.profiles',
 		JSON.stringify([{ id: 'a', label: 'A', siteId: 'site-1', apiKey: 'clk_test' }]),
 	);
-	localStorage.setItem('facet.activeProfile', 'a');
+	sessionStorage.setItem('facet.activeProfile', 'a');
 	const client = new QueryClient({
 		defaultOptions: { queries: { retry: false } },
 	});

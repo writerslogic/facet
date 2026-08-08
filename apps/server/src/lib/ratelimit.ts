@@ -9,15 +9,18 @@ import { ApiError } from './http.js';
 /** Build rate-limit middleware keyed by `keyFn` (client IP for the beacon, site id for events). */
 export function rateLimit(keyFn: (c: Context<AppEnv>) => string): MiddlewareHandler<AppEnv> {
 	return async (c, next) => {
-		const rl = c.env.RATE_LIMITER;
-		if (!rl) {
-			return next();
-		}
-		const { success } = await rl.limit({ key: keyFn(c) });
-		if (!success) {
-			c.header('Retry-After', '60');
-			throw new ApiError('rate_limited', 429);
-		}
+		await enforceRateLimit(c, keyFn(c));
 		return next();
 	};
+}
+
+/** Charge an additional bucket from inside a validated handler (for example a body-derived site id). */
+export async function enforceRateLimit(c: Context<AppEnv>, key: string): Promise<void> {
+	const rl = c.env.RATE_LIMITER;
+	if (!rl) return;
+	const { success } = await rl.limit({ key });
+	if (!success) {
+		c.header('Retry-After', '60');
+		throw new ApiError('rate_limited', 429);
+	}
 }

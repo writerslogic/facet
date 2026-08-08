@@ -24,6 +24,7 @@ const HOUR = 3_600_000;
 function readableEnv(over: Partial<Env> = {}): Env {
 	return {
 		AE: { writeDataPoint: () => {} },
+		AE_BEST_EFFORT_ENABLED: 'true',
 		CF_ACCOUNT_ID: ACCOUNT,
 		CF_API_TOKEN: 'test-cf-token',
 		RAW_RETENTION_DAYS: String(AE_RETENTION_DAYS),

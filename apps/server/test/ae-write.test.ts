@@ -83,7 +83,11 @@ function fakeAeEnv(retention = String(AE_RETENTION_DAYS)): {
 } {
 	const writeDataPoint = vi.fn();
 	return {
-		env: { AE: { writeDataPoint }, RAW_RETENTION_DAYS: retention } as unknown as Env,
+		env: {
+			AE: { writeDataPoint },
+			AE_BEST_EFFORT_ENABLED: 'true',
+			RAW_RETENTION_DAYS: retention,
+		} as unknown as Env,
 		writeDataPoint,
 	};
 }
@@ -256,7 +260,7 @@ describe('writeEvent', () => {
 		const writeDataPoint = vi.fn(() => {
 			throw new Error('limit exceeded');
 		});
-		const fake = { AE: { writeDataPoint } } as unknown as Env;
+		const fake = { AE: { writeDataPoint }, AE_BEST_EFFORT_ENABLED: 'true' } as unknown as Env;
 		expect(() => writeEvent(fake, minimalEvent())).not.toThrow();
 	});
 });
@@ -265,7 +269,7 @@ describe('ingest → AE', () => {
 	it('mirrors exactly one data point per accepted event', async () => {
 		const writeDataPoint = vi.fn();
 		const derived = await deriveEvent(
-			{ ...env, AE: { writeDataPoint } } as unknown as Env,
+			{ ...env, AE: { writeDataPoint }, AE_BEST_EFFORT_ENABLED: 'true' } as unknown as Env,
 			baseIngestInput,
 		);
 		expect(derived).not.toBeNull();
@@ -279,10 +283,13 @@ describe('ingest → AE', () => {
 
 	it('writes nothing for a dropped bot', async () => {
 		const writeDataPoint = vi.fn();
-		const derived = await deriveEvent({ ...env, AE: { writeDataPoint } } as unknown as Env, {
-			...baseIngestInput,
-			ua: 'Googlebot/2.1 (+http://www.google.com/bot.html)',
-		});
+		const derived = await deriveEvent(
+			{ ...env, AE: { writeDataPoint }, AE_BEST_EFFORT_ENABLED: 'true' } as unknown as Env,
+			{
+				...baseIngestInput,
+				ua: 'Googlebot/2.1 (+http://www.google.com/bot.html)',
+			},
+		);
 		expect(derived).toBeNull();
 		expect(writeDataPoint).not.toHaveBeenCalled();
 	});

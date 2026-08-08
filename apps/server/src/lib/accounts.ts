@@ -2,7 +2,7 @@
 // tokens, and team roles. This is entirely separate from the cookieless VISITOR model — these are the
 // humans who log in to view analytics. No password is ever stored; only a SHA-256 of a one-time token.
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -151,6 +151,12 @@ export async function createMagicToken(env: Env, email: string, now: number): Pr
 	return `${id}.${secret}`;
 }
 
+/** Delete a freshly minted token when its delivery failed, so an unreachable link leaves no PII row. */
+export async function discardMagicToken(env: Env, token: string): Promise<void> {
+	const id = token.slice(0, token.indexOf('.'));
+	if (id) await db(env).delete(schema.authTokens).where(eq(schema.authTokens.id, id));
+}
+
 /** Consume a magic-link token: validate hash + expiry + single-use, mark it used, return the email. */
 export async function consumeMagicToken(
 	env: Env,
@@ -161,18 +167,28 @@ export async function consumeMagicToken(
 	if (dot < 1) return null;
 	const id = token.slice(0, dot);
 	const secret = token.slice(dot + 1);
+	const tokenHash = await sha256Hex(secret);
 	const row = await db(env)
-		.select()
+		.select({ tokenHash: schema.authTokens.tokenHash })
 		.from(schema.authTokens)
 		.where(eq(schema.authTokens.id, id))
 		.get();
-	if (!row || row.usedAt != null || row.expiresAt < now) return null;
-	if (!constantTimeEqualHex(await sha256Hex(secret), row.tokenHash)) return null;
-	await db(env)
+	if (!row || !constantTimeEqualHex(tokenHash, row.tokenHash)) return null;
+	// Claim the token in one conditional statement. A second verifier racing this one observes no
+	// returned row, so a nominally single-use link can never mint two sessions.
+	const claimed = await db(env)
 		.update(schema.authTokens)
 		.set({ usedAt: now })
-		.where(eq(schema.authTokens.id, id));
-	return row.email;
+		.where(
+			and(
+				eq(schema.authTokens.id, id),
+				eq(schema.authTokens.tokenHash, tokenHash),
+				isNull(schema.authTokens.usedAt),
+				gte(schema.authTokens.expiresAt, now),
+			),
+		)
+		.returning({ email: schema.authTokens.email });
+	return claimed[0]?.email ?? null;
 }
 
 /** An authenticated operator, as every session-resolving path receives them. Carries the columns

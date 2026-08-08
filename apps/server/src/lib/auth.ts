@@ -9,7 +9,7 @@ import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv, Env } from '../env.js';
 import { type Role, SESSION_COOKIE, roleAtLeast, sessionUser, siteRole } from './accounts.js';
-import { hashKey } from './apikeys.js';
+import { type ApiKeyScope, hashKey, parseScopes } from './apikeys.js';
 import { constantTimeEqualHex, sha256Hex } from './crypto.js';
 import { ApiError } from './http.js';
 
@@ -27,13 +27,20 @@ export async function authenticateKey(
 	env: Env,
 	authorization: string | null,
 ): Promise<string | null> {
+	return (await authenticateKeyDetails(env, authorization))?.siteId ?? null;
+}
+
+export async function authenticateKeyDetails(
+	env: Env,
+	authorization: string | null,
+): Promise<{ siteId: string; scopes: ApiKeyScope[] } | null> {
 	const key = parseBearer(authorization);
 	if (!key) {
 		return null;
 	}
 	const keyHash = await hashKey(key);
 	const row = await db(env)
-		.select({ siteId: schema.apiKeys.siteId })
+		.select({ siteId: schema.apiKeys.siteId, scopes: schema.apiKeys.scopes })
 		.from(schema.apiKeys)
 		.where(eq(schema.apiKeys.keyHash, keyHash))
 		.get();
@@ -48,7 +55,17 @@ export async function authenticateKey(
 	} catch {
 		// last_used is best-effort telemetry; never fail auth because the bump failed.
 	}
-	return row.siteId;
+	return { siteId: row.siteId, scopes: parseScopes(row.scopes) };
+}
+
+export function requireApiScope(scope: ApiKeyScope): MiddlewareHandler<AppEnv> {
+	return async (c, next) => {
+		const key = await authenticateKeyDetails(c.env, c.req.header('Authorization') ?? null);
+		if (!key) throw new ApiError('invalid_api_key', 401);
+		if (!key.scopes.includes(scope)) throw new ApiError('insufficient_scope', 403);
+		c.set('siteId', key.siteId);
+		return next();
+	};
 }
 
 /** Middleware: require a valid API key and expose its site_id as `c.get('siteId')`. */
@@ -68,9 +85,9 @@ export const requireApiKey: MiddlewareHandler<AppEnv> = async (c, next) => {
  * while the API-key path stays byte-for-byte as before.
  */
 export const requireSiteAccess: MiddlewareHandler<AppEnv> = async (c, next) => {
-	const keySite = await authenticateKey(c.env, c.req.header('Authorization') ?? null);
-	if (keySite) {
-		c.set('siteId', keySite);
+	const key = await authenticateKeyDetails(c.env, c.req.header('Authorization') ?? null);
+	if (key?.scopes.includes('read')) {
+		c.set('siteId', key.siteId);
 		return next();
 	}
 	const secret = c.env.SESSION_SECRET;

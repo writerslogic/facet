@@ -5,11 +5,13 @@ import { describe, expect, it } from 'vitest';
 import {
 	commentOutQueues,
 	getDatabaseId,
+	getDeadLetterQueueName,
 	getQueueName,
 	getRoutePattern,
 	getWorkerName,
 	hasQueues,
 	setDatabaseId,
+	setDeadLetterQueue,
 	setRoutePattern,
 } from '../src/lib/wranglerConfig.js';
 import { freshConfig } from './support.js';
@@ -36,6 +38,14 @@ describe('wranglerConfig', () => {
 		expect(edit.source).toContain('// POST-v1 SCALE PATH');
 		// Byte-identical apart from the id itself.
 		expect(edit.source.replace(ID, 'PLACEHOLDER_D1_DATABASE_ID')).toBe(source);
+	});
+
+	it('adds a dead-letter queue to the consumer without reformatting the config', () => {
+		const edit = setDeadLetterQueue(freshConfig(), 'facet-ingest-dlq');
+		expect(edit.ok).toBe(true);
+		if (!edit.ok) return;
+		expect(getDeadLetterQueueName(edit.source)).toBe('facet-ingest-dlq');
+		expect(edit.source).toContain('// POST-v1 SCALE PATH');
 	});
 
 	it('refuses to clobber a real database id unless forced', () => {

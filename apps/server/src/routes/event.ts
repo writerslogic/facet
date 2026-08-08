@@ -7,7 +7,7 @@ import { ServerEventSchema } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
-import { requireApiKey } from '../lib/auth.js';
+import { requireApiScope } from '../lib/auth.js';
 import { isGpcOptOut } from '../lib/gpc.js';
 import { validationErrorHook } from '../lib/http.js';
 import { ingestEvent } from '../lib/ingest.js';
@@ -21,7 +21,7 @@ export const eventRoute = new Hono<AppEnv>();
 // capped per customer and cannot drain another customer's quota.
 eventRoute.post(
 	'/',
-	requireApiKey,
+	requireApiScope('write'),
 	rateLimit((c) => `event:${c.get('siteId')}`),
 	vValidator('json', ServerEventSchema, validationErrorHook),
 	async (c) => {

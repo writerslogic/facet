@@ -60,6 +60,18 @@ describe('magic-link lifecycle', () => {
 		expect(memberships).toHaveLength(1);
 		expect(memberships[0]?.role).toBe('owner');
 	});
+
+	it('allows only one winner when the same token is consumed concurrently', async () => {
+		const email = 'race@example.com';
+		const now = Date.now();
+		const token = await createMagicToken(env, email, now);
+		const results = await Promise.all([
+			consumeMagicToken(env, token, now + 1),
+			consumeMagicToken(env, token, now + 1),
+		]);
+		expect(results.filter((result) => result === email)).toHaveLength(1);
+		expect(results.filter((result) => result === null)).toHaveLength(1);
+	});
 });
 
 describe('POST /api/auth/verify → GET /api/auth/me', () => {

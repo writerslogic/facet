@@ -5,7 +5,7 @@
 
 import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
-import { requireApiKey } from '../lib/auth.js';
+import { requireApiScope } from '../lib/auth.js';
 import { ApiError } from '../lib/http.js';
 import {
 	consistencyBetween,
@@ -24,7 +24,7 @@ transparencyRoutes.get('/checkpoint', async (c) => {
 });
 
 // Inclusion proof for one of the caller's rollups. Requires site_id/hostname/bucket_start/interval.
-transparencyRoutes.get('/inclusion', requireApiKey, async (c) => {
+transparencyRoutes.get('/inclusion', requireApiScope('read'), async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) throw new ApiError('site_mismatch', 403);
 	const hostname = c.req.query('hostname');

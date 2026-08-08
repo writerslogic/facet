@@ -1,5 +1,5 @@
-// Dashboard state: multiple site profiles { id, label, siteId, apiKey } persisted in localStorage
-// with an active-profile pointer, plus the selected date range (in the URL). Ranges are either a
+// Dashboard state: site credentials live in sessionStorage so closing the tab clears bearer keys.
+// Non-secret presentation preferences may still use localStorage. Ranges are either a
 // preset (24h/7d/30d/90d) or an explicit custom start/end. All timestamps are unix-ms treated as UTC.
 
 import { subDays } from 'date-fns';
@@ -24,6 +24,30 @@ const PROFILES_STORAGE = 'facet.profiles';
 const ACTIVE_STORAGE = 'facet.activeProfile';
 const LEGACY_KEY_STORAGE = 'facet.key';
 const LEGACY_SITE_STORAGE = 'facet.site';
+
+function storageGet(kind: 'local' | 'session', key: string): string | null {
+	try {
+		return (kind === 'local' ? localStorage : sessionStorage).getItem(key);
+	} catch {
+		return null;
+	}
+}
+
+function storageSet(kind: 'local' | 'session', key: string, value: string): void {
+	try {
+		(kind === 'local' ? localStorage : sessionStorage).setItem(key, value);
+	} catch {
+		// Privacy modes and storage quotas may disable browser storage; keep the in-memory state usable.
+	}
+}
+
+function storageRemove(kind: 'local' | 'session', key: string): void {
+	try {
+		(kind === 'local' ? localStorage : sessionStorage).removeItem(key);
+	} catch {
+		// Best effort: an inaccessible store cannot expose credentials to this page either.
+	}
+}
 
 const PRESET_DAYS: Record<RangePreset, number> = {
 	'24h': 1,
@@ -142,7 +166,7 @@ function initialProfileState(): { profiles: Profile[]; activeId: string } {
 
 function readProfiles(): Profile[] {
 	try {
-		const raw = localStorage.getItem(PROFILES_STORAGE);
+		const raw = storageGet('session', PROFILES_STORAGE);
 		if (raw) {
 			const parsed = JSON.parse(raw) as unknown;
 			if (Array.isArray(parsed)) {
@@ -160,8 +184,19 @@ function readProfiles(): Profile[] {
 		// ignore malformed storage and fall through to migration.
 	}
 
-	const legacyKey = localStorage.getItem(LEGACY_KEY_STORAGE);
-	const legacySite = localStorage.getItem(LEGACY_SITE_STORAGE);
+	// One-time migration removes credentials written by older releases from persistent storage.
+	const legacyProfiles = storageGet('local', PROFILES_STORAGE);
+	if (legacyProfiles) {
+		try {
+			storageSet('session', PROFILES_STORAGE, legacyProfiles);
+			storageRemove('local', PROFILES_STORAGE);
+			return readProfiles();
+		} catch {
+			return [];
+		}
+	}
+	const legacyKey = storageGet('local', LEGACY_KEY_STORAGE);
+	const legacySite = storageGet('local', LEGACY_SITE_STORAGE);
 	if (legacyKey && legacySite) {
 		const migrated: Profile = {
 			id: newId(),
@@ -169,21 +204,21 @@ function readProfiles(): Profile[] {
 			siteId: legacySite,
 			apiKey: legacyKey,
 		};
-		localStorage.setItem(PROFILES_STORAGE, JSON.stringify([migrated]));
-		localStorage.setItem(ACTIVE_STORAGE, migrated.id);
-		localStorage.removeItem(LEGACY_KEY_STORAGE);
-		localStorage.removeItem(LEGACY_SITE_STORAGE);
+		storageSet('session', PROFILES_STORAGE, JSON.stringify([migrated]));
+		storageSet('session', ACTIVE_STORAGE, migrated.id);
+		storageRemove('local', LEGACY_KEY_STORAGE);
+		storageRemove('local', LEGACY_SITE_STORAGE);
 		return [migrated];
 	}
 	return [];
 }
 
 function persistProfiles(profiles: Profile[]): void {
-	localStorage.setItem(PROFILES_STORAGE, JSON.stringify(profiles));
+	storageSet('session', PROFILES_STORAGE, JSON.stringify(profiles));
 }
 
 function readActiveId(profiles: Profile[]): string {
-	const stored = localStorage.getItem(ACTIVE_STORAGE);
+	const stored = storageGet('session', ACTIVE_STORAGE);
 	if (stored && profiles.some((p) => p.id === stored)) return stored;
 	return profiles[0]?.id ?? '';
 }
@@ -277,7 +312,7 @@ export function DashboardProvider({
 			persistProfiles(next);
 			return next;
 		});
-		localStorage.setItem(ACTIVE_STORAGE, profile.id);
+		storageSet('session', ACTIVE_STORAGE, profile.id);
 		setActiveProfileId(profile.id);
 		return profile;
 	}, []);
@@ -297,8 +332,8 @@ export function DashboardProvider({
 			setActiveProfileId((current) => {
 				if (current !== id) return current;
 				const fallback = next[0]?.id ?? '';
-				if (fallback) localStorage.setItem(ACTIVE_STORAGE, fallback);
-				else localStorage.removeItem(ACTIVE_STORAGE);
+				if (fallback) storageSet('session', ACTIVE_STORAGE, fallback);
+				else storageRemove('session', ACTIVE_STORAGE);
 				return fallback;
 			});
 			return next;
@@ -306,7 +341,7 @@ export function DashboardProvider({
 	}, []);
 
 	const setActiveProfile = useCallback((id: string) => {
-		localStorage.setItem(ACTIVE_STORAGE, id);
+		storageSet('session', ACTIVE_STORAGE, id);
 		setActiveProfileId(id);
 	}, []);
 

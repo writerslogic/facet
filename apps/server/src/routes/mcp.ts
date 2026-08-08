@@ -33,7 +33,7 @@ import {
 } from '../db/stats.js';
 import { sessionFreshness } from '../db/stats.js';
 import type { AppEnv, Env } from '../env.js';
-import { authenticateKey } from '../lib/auth.js';
+import { authenticateKeyDetails } from '../lib/auth.js';
 import { DAY_MS, MAX_RANGE_DAYS, REALTIME_WINDOW_MS } from '../lib/constants.js';
 import { renderDigest, sanitizeKey } from '../lib/digest.js';
 import { ApiError } from '../lib/http.js';
@@ -299,13 +299,13 @@ async function callTool(
 const requireKeyOnly: MiddlewareHandler<AppEnv> = async (c, next) => {
 	// Auth before parsing: an unauthenticated caller learns nothing about the protocol surface, and
 	// never gets a request body parsed on its behalf.
-	const siteId = await authenticateKey(c.env, c.req.header('Authorization') ?? null);
-	if (!siteId) {
+	const key = await authenticateKeyDetails(c.env, c.req.header('Authorization') ?? null);
+	if (!key?.scopes.includes('read')) {
 		// JSON-RPC has no transport-level auth concept, so answer at the HTTP layer, matching the
 		// canonical error envelope the rest of the API uses.
 		return c.json({ error: 'unauthorized' }, 401);
 	}
-	c.set('siteId', siteId);
+	c.set('siteId', key.siteId);
 	return next();
 };
 

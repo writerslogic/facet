@@ -4,12 +4,15 @@
 
 import { CollectPayloadSchema } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
-import { Hono } from 'hono';
+import { eq } from 'drizzle-orm';
+import { type Context, Hono } from 'hono';
+import { db } from '../db/queries.js';
+import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import { isGpcOptOut } from '../lib/gpc.js';
 import { validationErrorHook } from '../lib/http.js';
 import { deriveEvent, ingestEvent } from '../lib/ingest.js';
-import { rateLimit } from '../lib/ratelimit.js';
+import { enforceRateLimit, rateLimit } from '../lib/ratelimit.js';
 import {
 	clientIp,
 	country,
@@ -22,6 +25,38 @@ import {
 
 export const collectRoute = new Hono<AppEnv>();
 
+function normalizedHostname(value: string): string {
+	return value.trim().toLowerCase().replace(/\.$/, '');
+}
+
+function domainAllows(configured: string, candidate: string): boolean {
+	const domain = normalizedHostname(configured.replace(/^https?:\/\//, '').split('/')[0] ?? '');
+	const hostname = normalizedHostname(candidate);
+	return domain.length > 0 && (hostname === domain || hostname.endsWith(`.${domain}`));
+}
+
+/** Reject unknown sites and cross-domain beacons without revealing which site ids exist. */
+async function validCollectionTarget(
+	c: Context<AppEnv>,
+	siteId: string,
+	hostname: string,
+): Promise<boolean> {
+	if (c.env.COLLECT_VALIDATE_SITE === 'false') return true;
+	const site = await db(c.env)
+		.select({ domain: schema.sites.domain })
+		.from(schema.sites)
+		.where(eq(schema.sites.id, siteId))
+		.get();
+	if (!site || !domainAllows(site.domain, hostname)) return false;
+	const origin = c.req.header('origin');
+	if (!origin) return true;
+	try {
+		return normalizedHostname(new URL(origin).hostname) === normalizedHostname(hostname);
+	} catch {
+		return false;
+	}
+}
+
 collectRoute.post(
 	'/',
 	rateLimit((c) => `collect:${clientIp(c.req.raw)}`),
@@ -33,6 +68,13 @@ collectRoute.post(
 		// sends no beacon at all, so it never reaches here.
 		const gpc = isGpcOptOut(c.req.raw);
 		const body = c.req.valid('json');
+		// A second, site-scoped bucket stops distributed sources from bypassing the IP bucket and
+		// exhausting one site's storage/quota. It runs after validation so the key is canonical.
+		await enforceRateLimit(c, `collect-site:${body.site_id}`);
+		if (!(await validCollectionTarget(c, body.site_id, body.hostname))) {
+			// A uniform accepted response prevents the public endpoint from becoming a site-id oracle.
+			return c.body(null, 202);
+		}
 		const ua = c.req.header('user-agent') ?? '';
 		// Segmentation dimensions: geo/network/browser/os/language from the edge + low-entropy UA client
 		// hints; screen tier / orientation / DPR arrive already bucketed on-device in the beacon body.

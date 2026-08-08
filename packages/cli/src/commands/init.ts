@@ -42,6 +42,7 @@ import {
 	commentOutQueues,
 	setDatabaseId,
 	setDatabaseName,
+	setDeadLetterQueue,
 	setRoutePattern,
 } from '../lib/wranglerConfig.js';
 import { fetchJson } from '../util.js';
@@ -280,22 +281,40 @@ async function stepDatabase(ctx: Ctx): Promise<CfResult<string>> {
 async function stepQueue(ctx: Ctx): Promise<CfResult<true>> {
 	const { ui, local, wrangler, prompter, opts } = ctx;
 	const name = local.queueName ?? 'facet-ingest';
+	const dlq = `${name}-dlq`;
 	ui.step(ctx.stepIndex, TOTAL_STEPS, `Ingest queue "${name}"`);
 	if (!local.queuesEnabled) {
 		ui.skip('The queues binding is disabled in wrangler.jsonc — ingest writes synchronously.');
 		return { ok: true, value: true };
 	}
-	if (await queueExists(wrangler, name)) {
-		ui.skip('Queue already exists.');
-		return { ok: true, value: true };
-	}
 	if (opts.dryRun) {
 		ui.info(`would run: wrangler queues create ${name}`);
+		ui.info(`would run: wrangler queues create ${dlq}`);
 		return { ok: true, value: true };
 	}
-	const created = await queueCreate(wrangler, name);
+	const created = (await queueExists(wrangler, name))
+		? ({ ok: true, value: 'exists' } as const)
+		: await queueCreate(wrangler, name);
 	if (created.ok) {
-		ui.ok(created.value === 'created' ? 'Queue created.' : 'Queue already existed.');
+		const dlqCreated = (await queueExists(wrangler, dlq))
+			? ({ ok: true, value: 'exists' } as const)
+			: await queueCreate(wrangler, dlq);
+		if (!dlqCreated.ok) return dlqCreated;
+		const edit = setDeadLetterQueue(local.source, dlq);
+		if (!edit.ok) {
+			return {
+				ok: false,
+				error: {
+					code: 'queue_config_failed',
+					message: edit.reason,
+					remedy: `Add "dead_letter_queue": "${dlq}" to the queue consumer config.`,
+					resume: 'facet init',
+				},
+			};
+		}
+		writeConfig(ctx, edit.source);
+		local.source = edit.source;
+		ui.ok('Ingest queue and dead-letter queue are ready.');
 		return { ok: true, value: true };
 	}
 	if (created.error.code !== 'queue_plan_required') return created;

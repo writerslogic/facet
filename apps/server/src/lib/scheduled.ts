@@ -1,6 +1,8 @@
 // Scheduled-job registry. The cron handler iterates `JOBS`, running each inside its own try/catch
 // so one job's failure never skips another.
 
+import { db } from '../db/queries.js';
+import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
 import { HOUR_MS } from './constants.js';
 import { createLogger } from './log.js';
@@ -63,10 +65,46 @@ export async function runScheduled(
 	const now = event.scheduledTime;
 	const log = createLogger({ handler: 'scheduled' });
 	for (const job of jobs) {
+		let failure: unknown;
 		try {
 			await job.run(env, now);
 		} catch (err) {
+			failure = err;
 			log.error(`job_failed:${job.name}`, err instanceof Error ? err : String(err));
+		}
+		try {
+			if (failure !== undefined) {
+				await db(env)
+					.insert(schema.scheduledJobRuns)
+					.values({
+						name: job.name,
+						lastSuccessAt: null,
+						lastFailureAt: now,
+						lastError: failure instanceof Error ? failure.name : 'UnknownError',
+					})
+					.onConflictDoUpdate({
+						target: schema.scheduledJobRuns.name,
+						set: {
+							lastFailureAt: now,
+							lastError: failure instanceof Error ? failure.name : 'UnknownError',
+						},
+					});
+				continue;
+			}
+			await db(env)
+				.insert(schema.scheduledJobRuns)
+				.values({
+					name: job.name,
+					lastSuccessAt: now,
+					lastFailureAt: null,
+					lastError: null,
+				})
+				.onConflictDoUpdate({
+					target: schema.scheduledJobRuns.name,
+					set: { lastSuccessAt: now, lastError: null },
+				});
+		} catch (heartbeatError) {
+			log.error('job_heartbeat_failed', heartbeatError, { job: job.name });
 		}
 	}
 }

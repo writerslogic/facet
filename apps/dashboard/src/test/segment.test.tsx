@@ -309,7 +309,7 @@ function seedProfile(): void {
 		'facet.profiles',
 		JSON.stringify([{ id: 'p1', label: 'Prod', siteId: VALID_SITE, apiKey: 'clk_x' }]),
 	);
-	localStorage.setItem('facet.activeProfile', 'p1');
+	sessionStorage.setItem('facet.activeProfile', 'p1');
 }
 
 /** Every URL the app requests, so a test can assert what the segment did (or did not) reach. */
