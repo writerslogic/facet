@@ -79,6 +79,7 @@ describe('CRM-enabled deployment', () => {
 			'pd:EmailAddress',
 			'pd:TelephoneNumber',
 			'pd:CurrentEmployment',
+			'pd:Transactional',
 		]);
 		expect(claims['dpv:hasDataSubject']).toBe('dpv:Customer');
 		// Naming pd: terms requires the extension's namespace to be in the context, or the document

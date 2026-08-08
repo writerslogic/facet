@@ -133,6 +133,46 @@ export const contacts = sqliteTable(
  * `actor_role` is stored rather than resolved at read time because it is the role the request was
  * AUTHORIZED under. Roles change; "an admin exported this" has to stay true after they are demoted.
  */
+/** Deal lifecycle. `won`/`lost` are terminal — a pipeline aggregate excludes them from "open" by this
+ * set, not by a separate flag, so the two can never disagree about which stages are still moving. */
+export const DEAL_STAGES = ['lead', 'qualified', 'proposal', 'negotiation', 'won', 'lost'] as const;
+
+/**
+ * A sales opportunity. A deal linked to `contact_id` makes that person's data include
+ * `pd:Transactional` (see `lib/dpv.ts`), same as `company_id` on a contact adding `pd:CurrentEmployment`.
+ * `ON DELETE` is handled in the Worker: `deleteCompany`/`deleteContact` null the reference here rather
+ * than cascade, the same "unlink, don't destroy" precedent as `contacts.company_id`. `value`/`currency`
+ * are both-or-neither (wire schema) so a pipeline total is never summed across an unnamed currency.
+ */
+export const deals = sqliteTable(
+	'deals',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		name: text('name').notNull(),
+		company_id: text('company_id').references(() => companies.id),
+		contact_id: text('contact_id').references(() => contacts.id),
+		stage: text('stage').notNull().default('lead'),
+		/** Cents. Null means no estimate yet, distinct from a deal genuinely worth zero. */
+		value: integer('value'),
+		/** ISO 4217, uppercase. Required exactly when `value` is set. */
+		currency: text('currency'),
+		expected_close_date: integer('expected_close_date'),
+		notes: text('notes'),
+		owner_user_id: text('owner_user_id'),
+		created_at: integer('created_at').notNull(),
+		updated_at: integer('updated_at').notNull(),
+	},
+	(t) => [
+		index('idx_deals_site_created').on(t.site_id, t.created_at),
+		index('idx_deals_site_stage').on(t.site_id, t.stage),
+		// Covers both directions, same reason as `idx_contacts_site_company`: listing one company's or
+		// contact's deals, and finding every deal to unlink when that row is deleted.
+		index('idx_deals_site_company').on(t.site_id, t.company_id),
+		index('idx_deals_site_contact').on(t.site_id, t.contact_id),
+	],
+);
+
 export const crmAuditLog = sqliteTable(
 	'crm_audit_log',
 	{
