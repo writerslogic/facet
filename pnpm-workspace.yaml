@@ -2,6 +2,16 @@ packages:
   - "apps/*"
   - "packages/*"
 
+# esbuild<0.28.1 (GHSA-67mh-4wv8-2f99, GHSA-g7r4-m6w7-qqqr) pulled in transitively by
+# drizzle-kit's @esbuild-kit/esm-loader and tsup's bundle-require; 0.28.1 is already
+# resolved elsewhere in the tree (wrangler, tsx) for the same build-time transform use.
+# Scoped to those two paths only — a blanket override also forces vite's esbuild to
+# 0.28.1, which fails transpiling a prebuilt vendor chunk vite's dep optimizer inlines
+# (destructuring-to-target regression); vite's 0.25.12 has no advisory against it anyway.
+overrides:
+  "@esbuild-kit/core-utils>esbuild": ">=0.28.1"
+  "tsup>esbuild": ">=0.28.1"
+
 allowBuilds:
   "@biomejs/biome": true
   esbuild: true
