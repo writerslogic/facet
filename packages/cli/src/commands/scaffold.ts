@@ -3,10 +3,11 @@
 // people wiring the Worker into their own repository layout.
 
 import { randomBytes } from 'node:crypto';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { writeDevVar } from '../lib/store.js';
+import { printError } from '../util.js';
 
 function wranglerJsonc(name: string, db: string): string {
 	return `{
@@ -48,6 +49,7 @@ export async function runScaffold(args: string[]): Promise<number> {
 			name: { type: 'string' },
 			db: { type: 'string' },
 			dir: { type: 'string' },
+			force: { type: 'boolean' },
 		},
 		allowPositionals: false,
 	});
@@ -56,8 +58,14 @@ export async function runScaffold(args: string[]): Promise<number> {
 	const db = values.db ?? 'facet';
 	const name = values.name ?? 'facet';
 
+	const wranglerPath = join(dir, 'wrangler.jsonc');
+	if (existsSync(wranglerPath) && !values.force) {
+		printError(`Refusing to overwrite existing ${wranglerPath}. Pass --force to override.`);
+		return 1;
+	}
+
 	mkdirSync(dir, { recursive: true });
-	writeFileSync(join(dir, 'wrangler.jsonc'), wranglerJsonc(name, db));
+	writeFileSync(wranglerPath, wranglerJsonc(name, db));
 	// The dev admin token is a secret even locally: 0600, and never echoed to the terminal. Go
 	// through `writeDevVar` for the 0600 guarantee rather than repeating it — and so scaffolding
 	// into a directory that already has a .dev.vars upserts the token instead of destroying
