@@ -1,9 +1,9 @@
 // Funnel report: per-session in-order step matching over materialized sessions.
 
 import type { Funnel, FunnelReportResult, StatsFilter } from '@facet/shared';
-import { and, asc, eq, gte, lt } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lt } from 'drizzle-orm';
 import type { Env } from '../env.js';
-import { DAY_MS } from '../lib/constants.js';
+import { DAY_MS, chunked } from '../lib/constants.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
 
@@ -43,30 +43,38 @@ export async function funnelReport(
 			),
 		)) as SessionRow[];
 
-	const events = (await db(env)
-		.select({
-			visitorHash: schema.events.visitorHash,
-			path: schema.events.path,
-			name: schema.events.name,
-			createdAt: schema.events.createdAt,
-		})
-		.from(schema.events)
-		.where(
-			and(
-				eq(schema.events.siteId, f.siteId),
-				gte(schema.events.createdAt, f.start),
-				lt(schema.events.createdAt, f.end + DAY_MS),
-			),
-		)
-		.orderBy(asc(schema.events.createdAt))) as EventRow[];
-
+	// Only visitors with a session in range can match a step (matching below is scoped to their
+	// session window), so the events read is chunked over that visitor set instead of scanning
+	// every event the site recorded across the whole range — the same IN-list chunking
+	// contact-analytics.ts uses for D1's 100-bound-parameter cap.
+	const visitorHashes = [...new Set(sessions.map((s) => s.visitorHash))];
 	const byVisitor = new Map<string, EventRow[]>();
-	for (const e of events) {
-		const list = byVisitor.get(e.visitorHash);
-		if (list) {
-			list.push(e);
-		} else {
-			byVisitor.set(e.visitorHash, [e]);
+	const client = db(env);
+	for (const batch of chunked(visitorHashes)) {
+		const rows = (await client
+			.select({
+				visitorHash: schema.events.visitorHash,
+				path: schema.events.path,
+				name: schema.events.name,
+				createdAt: schema.events.createdAt,
+			})
+			.from(schema.events)
+			.where(
+				and(
+					eq(schema.events.siteId, f.siteId),
+					inArray(schema.events.visitorHash, batch),
+					gte(schema.events.createdAt, f.start),
+					lt(schema.events.createdAt, f.end + DAY_MS),
+				),
+			)
+			.orderBy(asc(schema.events.createdAt))) as EventRow[];
+		for (const e of rows) {
+			const list = byVisitor.get(e.visitorHash);
+			if (list) {
+				list.push(e);
+			} else {
+				byVisitor.set(e.visitorHash, [e]);
+			}
 		}
 	}
 
