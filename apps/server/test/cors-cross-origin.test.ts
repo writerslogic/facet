@@ -69,4 +69,25 @@ describe('cross-origin CORS for the browser tracker', () => {
 		);
 		expect(res.headers.get('access-control-allow-origin')).toBe('*');
 	});
+
+	it('sends CORS headers on the flags config the tracker reads', async () => {
+		const res = await app.request(
+			'/api/flags/active?site_id=00000000-0000-0000-0000-000000000000',
+			{ headers: { Origin: ORIGIN } },
+			env,
+		);
+		expect(res.headers.get('access-control-allow-origin')).toBe('*');
+	});
+
+	it('answers the flags eval preflight', async () => {
+		const res = await app.request(
+			'/api/flags/eval',
+			{
+				method: 'OPTIONS',
+				headers: { Origin: ORIGIN, 'Access-Control-Request-Method': 'POST' },
+			},
+			env,
+		);
+		expect(res.headers.get('access-control-allow-origin')).toBe('*');
+	});
 });
