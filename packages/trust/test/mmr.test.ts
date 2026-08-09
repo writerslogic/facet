@@ -44,6 +44,33 @@ describe('index math (draft reference values)', () => {
 		// 11 nodes = 7 leaves: a 4-leaf subtree (peak 6), a 2-leaf subtree (peak 9), a 1-leaf peak (10)
 		expect(peakIndices(11)).toEqual([6, 9, 10]);
 	});
+
+	// indexHeight's internal mostSigBit used to shift with `1 << k`, a 32-bit op that silently goes
+	// negative past ~2^31 — verifyInclusion's leaf-height gate (index_height(proof.index) === 0) is
+	// the only thing standing between an interior-node hash and it verifying as a committed leaf, so
+	// this pins indexHeight against a BigInt reference implementation of the same draft algorithm at
+	// the indices the overflow used to corrupt.
+	function allOnesBig(n: bigint): boolean {
+		return (n & (n + 1n)) === 0n && n !== 0n;
+	}
+	function mostSigBitBig(n: bigint): bigint {
+		let bit = 1n;
+		while (bit * 2n <= n) bit *= 2n;
+		return bit;
+	}
+	function indexHeightBig(i: number): number {
+		let pos = BigInt(i) + 1n;
+		while (!allOnesBig(pos)) pos = pos - mostSigBitBig(pos) + 1n;
+		let height = 0;
+		for (let p = pos; p > 1n; p >>= 1n) height += 1;
+		return height;
+	}
+
+	it('index_height agrees with a BigInt reference past the 32-bit shift boundary', () => {
+		for (const i of [2 ** 31 - 1, 2 ** 31, 2 ** 32 - 2, 2 ** 32 - 1, 2 ** 32, 2 ** 32 + 5]) {
+			expect(indexHeight(i)).toBe(indexHeightBig(i));
+		}
+	});
 });
 
 describe('MMR inclusion', () => {

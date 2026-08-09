@@ -131,6 +131,11 @@ export const events = sqliteTable(
 		index('idx_events_site_created_os').on(t.siteId, t.createdAt, t.os),
 		index('idx_events_site_created_region').on(t.siteId, t.createdAt, t.region),
 		index('idx_events_site_created_network').on(t.siteId, t.createdAt, t.network),
+		// Every other index leads with created_at, so a visitor_hash filter (conversions.ts's
+		// per-session EXISTS, experiments.ts's per-exposure EXISTS, contact-analytics.ts's
+		// unranged IN-list) fell back to a full table scan. visitor_hash leads here since
+		// contact-analytics.ts's lookup carries no time bound at all.
+		index('idx_events_site_visitor_created').on(t.siteId, t.visitorHash, t.createdAt),
 	],
 );
 

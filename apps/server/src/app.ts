@@ -78,6 +78,31 @@ export function createApp(): Hono<AppEnv> {
 			maxAge: CORS_MAX_AGE,
 		}),
 	);
+
+	// Same class of bug as /api/experiments/active: the tracker calls both flag endpoints
+	// cross-origin (packages/client/src/flags.ts), and neither carried CORS headers, so a
+	// preflight against /eval or a GET against /active was blocked and flags silently
+	// resolved to their defaults on every real (cross-origin) install. Both are read-only
+	// and uncredentialed (the caller supplies a body/query id, not a cookie), so a wildcard
+	// is correct here too.
+	app.use(
+		'/api/flags/active',
+		cors({
+			origin: '*',
+			allowMethods: ['GET', 'OPTIONS'],
+			allowHeaders: ['content-type'],
+			maxAge: CORS_MAX_AGE,
+		}),
+	);
+	app.use(
+		'/api/flags/eval',
+		cors({
+			origin: '*',
+			allowMethods: ['POST', 'OPTIONS'],
+			allowHeaders: ['content-type'],
+			maxAge: CORS_MAX_AGE,
+		}),
+	);
 	app.use(
 		'/api/collect',
 		bodyLimit({

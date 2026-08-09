@@ -85,6 +85,17 @@ describe('whenReady + assignment', () => {
 		expect(['control', 'blue']).toContain(a.variant);
 	});
 
+	it('whenReady() resolves (does not hang) when called before init()', async () => {
+		const { whenReady } = await import('../src/experiments.js');
+		const before = whenReady();
+		const timedOut = Symbol('timed-out');
+		const result = await Promise.race([
+			before,
+			new Promise((resolve) => setTimeout(() => resolve(timedOut), 50)),
+		]);
+		expect(result).not.toBe(timedOut);
+	});
+
 	it('whenReady() returns a stable promise across calls', async () => {
 		stubEnv();
 		stubFetchOk();

@@ -412,7 +412,9 @@ function Dashboard(): ReactElement {
 	const [shortcutsOpen, setShortcutsOpen] = useState(false);
 	// The segment is shared state (see hooks/segment.ts), so it survives tab switches and can be set
 	// from any tab — e.g. "Investigate" on an anomaly focuses the Overview on the culprit segment.
-	const { setSegment, clear: clearSegment } = useSegment();
+	// Also read here (not just set) so the header's ExportButton can forward it to /stats/export —
+	// otherwise a CSV taken while the board is cross-filtered would silently export the whole site.
+	const { segment, setSegment, clear: clearSegment } = useSegment();
 	// Unchanged contract: replace the segment wholesale (dropping any path/referrer drill-down that
 	// was in force) and land on the Overview, which is the tab that can actually honour it.
 	const investigate = (f: CubeFilter): void => {
@@ -527,6 +529,7 @@ function Dashboard(): ReactElement {
 							siteId={siteId}
 							range={range}
 							interval={preset === '24h' ? 'hour' : 'day'}
+							segment={segment}
 							dark={fill}
 						/>
 					</>

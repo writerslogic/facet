@@ -1,0 +1,1 @@
+CREATE INDEX `idx_events_site_visitor_created` ON `events` (`site_id`,`visitor_hash`,`created_at`);

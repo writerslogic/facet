@@ -113,15 +113,25 @@ function expectMarkdownToSay(claim: DocClaim, file: 'apiMd', phrase: string): vo
 	throw driftError(claim, `${pathOf(file)} to contain "${normalize(phrase)}"`, 'no such phrase');
 }
 
+/** Strip ALL whitespace, not collapse it: the formatter can wrap a call right after its opening
+ * paren, introducing a space there that collapsing alone would still leave behind. Safe because
+ * `requires`/`forbids` needles are code shapes (a call, an SQL fragment), never prose where a word
+ * boundary carries meaning. */
+function normalizeWhitespace(text: string): string {
+	return text.replace(/\s+/g, '');
+}
+
 /** Assert an extracted implementation fragment does/doesn't contain the parts the claim rests on.
- * The fragment is quoted verbatim in the failure so the reader sees the current implementation. */
+ * The fragment is quoted verbatim (not whitespace-collapsed) in the failure so the reader sees the
+ * current implementation as it actually appears in the file. */
 function expectSourceToSatisfy(
 	claim: DocClaim,
 	fragment: string,
 	rules: { requires?: string[]; forbids?: string[] },
 ): void {
+	const normalizedFragment = normalizeWhitespace(fragment);
 	for (const needle of rules.requires ?? []) {
-		if (fragment.includes(needle)) continue;
+		if (normalizedFragment.includes(normalizeWhitespace(needle))) continue;
 		throw driftError(
 			claim,
 			`the implementation to contain \`${needle}\``,
@@ -129,7 +139,7 @@ function expectSourceToSatisfy(
 		);
 	}
 	for (const needle of rules.forbids ?? []) {
-		if (!fragment.includes(needle)) continue;
+		if (!normalizedFragment.includes(normalizeWhitespace(needle))) continue;
 		throw driftError(
 			claim,
 			`the implementation NOT to contain \`${needle}\``,

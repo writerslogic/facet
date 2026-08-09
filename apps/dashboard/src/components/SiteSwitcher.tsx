@@ -101,7 +101,9 @@ export function SiteSwitcher(): ReactElement {
 	useEffect(() => {
 		if (!open) return;
 		function onPointerDown(event: MouseEvent): void {
-			if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+			// Not close(true): the reader just clicked somewhere else, and forcing focus back onto
+			// the trigger would steal it from wherever they clicked.
+			if (!rootRef.current?.contains(event.target as Node)) close(false);
 		}
 		function onKeyDown(event: globalThis.KeyboardEvent): void {
 			if (event.key === 'Escape') {
@@ -171,7 +173,9 @@ export function SiteSwitcher(): ReactElement {
 		else if (event.key === 'Home') next = 0;
 		else if (event.key === 'End') next = count - 1;
 		else if (event.key === 'Tab') {
-			setOpen(false);
+			// Not close(true): Tab's own default browser handling moves focus forward past the menu,
+			// and forcing focus back onto the trigger here would fight that natural movement.
+			close(false);
 			return;
 		}
 		if (next == null) return;
@@ -339,7 +343,8 @@ export function SiteSwitcher(): ReactElement {
 										setEditing(profile);
 										setConfirmRemove(false);
 										setMode('edit');
-										setOpen(false);
+										// Not close(true): the dialog manages its own focus.
+										close(false);
 									}}
 									aria-label={`Edit ${profile.label}`}
 									className="rounded-lg px-2 text-[color:var(--muted)] transition hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
@@ -363,7 +368,7 @@ export function SiteSwitcher(): ReactElement {
 							setEditing(null);
 							setConfirmRemove(false);
 							setMode('add');
-							setOpen(false);
+							close(false);
 						}}
 						className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left font-medium text-[color:var(--chip-ink)] text-sm transition hover:bg-[color:var(--chip-bg)]"
 					>

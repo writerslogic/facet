@@ -385,13 +385,15 @@ statsRoutes.get('/stats/realtime', requireSiteAccess, async (c) => {
 	return c.json(await realtime(c.env, siteId, Date.now(), REALTIME_WINDOW_MS));
 });
 
-// Authenticated read-only export of a series or a breakdown as CSV or JSON. Same site-scoping and
-// range validation as the other stats reads; output is bounded (series by range, breakdown by limit)
-// and CSV cells are formula-injection-safe.
-type ExportFilter = { siteId: string; start: number; end: number };
+// Authenticated read-only export of a series or a breakdown as CSV or JSON. Same site-scoping,
+// range validation, AND dimension filters (hostname/path/referrer/country/device/channel) as the
+// other stats reads — via the same StatsQuerySchema + toStatsFilter every other /stats/* route
+// uses — so an export taken while the dashboard is cross-filtered matches what's on screen instead
+// of silently exporting the unfiltered site. Output is bounded (series by range, breakdown by
+// limit) and CSV cells are formula-injection-safe.
 const EXPORT_DIMENSIONS: Record<
 	string,
-	(env: AppEnv['Bindings'], f: ExportFilter) => Promise<CountRow[]>
+	(env: AppEnv['Bindings'], f: StatsFilter) => Promise<CountRow[]>
 > = {
 	path: (env, f) => topPaths(env, f, EXPORT_MAX_ROWS),
 	referrer: (env, f) => topReferrers(env, f, EXPORT_MAX_ROWS),
@@ -401,101 +403,102 @@ const EXPORT_DIMENSIONS: Record<
 	channel: (env, f) => channels(env, f),
 };
 
-statsRoutes.get('/stats/export', requireSiteAccess, async (c) => {
-	const siteId = c.req.query('site_id');
-	if (siteId !== c.get('siteId')) {
-		throw new ApiError('site_mismatch', 403);
-	}
-	const start = Number(c.req.query('start'));
-	const end = Number(c.req.query('end'));
-	if (!Number.isInteger(start) || !Number.isInteger(end)) {
-		throw new ApiError('bad_range', 400);
-	}
-	assertRange(start, end);
-	const format = c.req.query('format') ?? 'csv';
-	if (format !== 'csv' && format !== 'json') {
-		throw new ApiError('bad_request', 400, 'format must be csv or json');
-	}
-	const kind = c.req.query('kind') ?? 'series';
-	const f = { siteId, start, end };
-
-	let columns: string[];
-	let rows: (string | number)[][];
-	let name: string;
-
-	if (kind === 'series') {
-		const q = c.req.query('interval');
-		const interval =
-			q === 'hour' || q === 'day' ? q : end - start <= 48 * HOUR_MS ? 'hour' : 'day';
-		const points = await series(c.env, f, interval);
-		columns = ['bucket_start_iso', 'bucket_start_ms', 'pageviews', 'visitors'];
-		rows = points.map((p) => [new Date(p.t).toISOString(), p.t, p.pageviews, p.visitors]);
-		name = `facet-series-${start}-${end}`;
-	} else if (kind === 'breakdown') {
-		const dimension = c.req.query('dimension') ?? '';
-		const load = EXPORT_DIMENSIONS[dimension];
-		if (!load) {
-			throw new ApiError('bad_request', 400, 'unknown or missing dimension');
+statsRoutes.get(
+	'/stats/export',
+	requireSiteAccess,
+	vValidator('query', StatsQuerySchema, validationErrorHook),
+	async (c) => {
+		const query = c.req.valid('query');
+		const f = toStatsFilter(query, c.get('siteId'));
+		const { start, end } = f;
+		const format = c.req.query('format') ?? 'csv';
+		if (format !== 'csv' && format !== 'json') {
+			throw new ApiError('bad_request', 400, 'format must be csv or json');
 		}
-		const limitRaw = c.req.query('limit');
-		if (limitRaw !== undefined) {
-			const limit = Number(limitRaw);
-			if (!Number.isInteger(limit) || limit < 1 || limit > EXPORT_MAX_ROWS) {
-				throw new ApiError('bad_request', 400, `limit must be 1..${EXPORT_MAX_ROWS}`);
+		const kind = c.req.query('kind') ?? 'series';
+
+		let columns: string[];
+		let rows: (string | number)[][];
+		let name: string;
+
+		if (kind === 'series') {
+			const q = c.req.query('interval');
+			const interval =
+				q === 'hour' || q === 'day' ? q : end - start <= 48 * HOUR_MS ? 'hour' : 'day';
+			const points = await series(c.env, f, interval);
+			columns = ['bucket_start_iso', 'bucket_start_ms', 'pageviews', 'visitors'];
+			rows = points.map((p) => [new Date(p.t).toISOString(), p.t, p.pageviews, p.visitors]);
+			name = `facet-series-${start}-${end}`;
+		} else if (kind === 'breakdown') {
+			const dimension = c.req.query('dimension') ?? '';
+			const load = EXPORT_DIMENSIONS[dimension];
+			if (!load) {
+				throw new ApiError('bad_request', 400, 'unknown or missing dimension');
 			}
+			const limitRaw = c.req.query('limit');
+			if (limitRaw !== undefined) {
+				const limit = Number(limitRaw);
+				if (!Number.isInteger(limit) || limit < 1 || limit > EXPORT_MAX_ROWS) {
+					throw new ApiError('bad_request', 400, `limit must be 1..${EXPORT_MAX_ROWS}`);
+				}
+			}
+			const limit = limitRaw !== undefined ? Number(limitRaw) : 100;
+			const data = (await load(c.env, f)).slice(0, limit);
+			columns = ['key', 'count'];
+			rows = data.map((r) => [r.key, r.count]);
+			name = `facet-${dimension}-${start}-${end}`;
+		} else {
+			throw new ApiError('bad_request', 400, 'kind must be series or breakdown');
 		}
-		const limit = limitRaw !== undefined ? Number(limitRaw) : 100;
-		const data = (await load(c.env, f)).slice(0, limit);
-		columns = ['key', 'count'];
-		rows = data.map((r) => [r.key, r.count]);
-		name = `facet-${dimension}-${start}-${end}`;
-	} else {
-		throw new ApiError('bad_request', 400, 'kind must be series or breakdown');
-	}
 
-	const origin = new URL(c.req.url).origin;
-	const isJson = format === 'json';
-	const bodyText = isJson ? JSON.stringify({ columns, rows }) : toCsv(columns, rows);
-	const contentType = isJson ? 'application/json; charset=utf-8' : 'text/csv; charset=utf-8';
-	const loadingKey = getSigningKey(c.env);
-	const key = loadingKey ? await loadingKey : null;
+		const origin = new URL(c.req.url).origin;
+		const isJson = format === 'json';
+		const bodyText = isJson ? JSON.stringify({ columns, rows }) : toCsv(columns, rows);
+		const contentType = isJson ? 'application/json; charset=utf-8' : 'text/csv; charset=utf-8';
+		const loadingKey = getSigningKey(c.env);
+		const key = loadingKey ? await loadingKey : null;
 
-	// Signed-envelope mode: a self-contained, offline-verifiable JSON export (detached JWS over the
-	// canonical payload + embedded public JWK). Requires a configured signing key.
-	if (c.req.query('sign') === '1') {
-		if (!key) {
-			throw new ApiError('signing_unavailable', 501, 'deployment signing key not configured');
+		// Signed-envelope mode: a self-contained, offline-verifiable JSON export (detached JWS over the
+		// canonical payload + embedded public JWK). Requires a configured signing key.
+		if (c.req.query('sign') === '1') {
+			if (!key) {
+				throw new ApiError(
+					'signing_unavailable',
+					501,
+					'deployment signing key not configured',
+				);
+			}
+			return c.json(
+				await signExport({ columns, rows }, key, {
+					jwksUrl: jwksUrl(origin),
+					now: Date.now(),
+				}),
+			);
 		}
-		return c.json(
-			await signExport({ columns, rows }, key, {
-				jwksUrl: jwksUrl(origin),
-				now: Date.now(),
-			}),
-		);
-	}
 
-	const headers: Record<string, string> = { 'content-type': contentType };
-	if (!isJson) {
-		headers['content-disposition'] = `attachment; filename="${name}.csv"`;
-	}
-	// When signing is configured, offer BOTH integrity options over the exact response bytes: a
-	// detached JWS (Facet-Signature-Jws) and an RFC 9421 Signature/Signature-Input pair.
-	if (key) {
-		const bodyBytes = new TextEncoder().encode(bodyText);
-		const sig = await signResponse({
-			body: bodyBytes,
-			contentType,
-			created: Math.floor(Date.now() / 1000),
-			key,
-		});
-		headers['content-digest'] = sig['content-digest'];
-		headers['signature-input'] = sig['signature-input'];
-		headers.signature = sig.signature;
-		headers['facet-signature-jws'] = await signDetachedJws(bodyBytes, key);
-		headers['facet-signing-key'] = jwksUrl(origin);
-	}
-	return new Response(bodyText, { headers });
-});
+		const headers: Record<string, string> = { 'content-type': contentType };
+		if (!isJson) {
+			headers['content-disposition'] = `attachment; filename="${name}.csv"`;
+		}
+		// When signing is configured, offer BOTH integrity options over the exact response bytes: a
+		// detached JWS (Facet-Signature-Jws) and an RFC 9421 Signature/Signature-Input pair.
+		if (key) {
+			const bodyBytes = new TextEncoder().encode(bodyText);
+			const sig = await signResponse({
+				body: bodyBytes,
+				contentType,
+				created: Math.floor(Date.now() / 1000),
+				key,
+			});
+			headers['content-digest'] = sig['content-digest'];
+			headers['signature-input'] = sig['signature-input'];
+			headers.signature = sig.signature;
+			headers['facet-signature-jws'] = await signDetachedJws(bodyBytes, key);
+			headers['facet-signing-key'] = jwksUrl(origin);
+		}
+		return new Response(bodyText, { headers });
+	},
+);
 
 // Signed AnalyticsReportCredential (VC 2.0, eddsa-jcs-2022) over an aggregate stats snapshot for a
 // site+range. The credential subject is the DATASET (`<origin>/sites/<id>`), never a person. Requires

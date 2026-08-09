@@ -144,6 +144,27 @@ const cases: TestCase[] = [
 		siteHostname: 'example.com',
 		expected: 'organic',
 	},
+	{
+		description: 'referrer=www.facebook.com → social (www must not fall through to referral)',
+		referrer: 'https://www.facebook.com/some/path',
+		search: '',
+		siteHostname: 'example.com',
+		expected: 'social',
+	},
+	{
+		description: 'referrer=www.linkedin.com → social',
+		referrer: 'https://www.linkedin.com/feed',
+		search: '',
+		siteHostname: 'example.com',
+		expected: 'social',
+	},
+	{
+		description: 'same-host referrer with a www prefix → internal',
+		referrer: 'https://www.example.com/other-page',
+		search: '',
+		siteHostname: 'example.com',
+		expected: 'internal',
+	},
 ];
 
 describe('classifyChannel', () => {
