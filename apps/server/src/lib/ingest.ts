@@ -63,6 +63,14 @@ export interface IngestInput {
 	consent?: boolean;
 }
 
+/** The anonymous Tier-0 day hash — the fallback for a GPC visitor, a zero-config site, and any
+ * elevated event that cannot or does not qualify for elevation. Never dropped. */
+function anonymousFallback(env: Env, input: IngestInput, dk: string): Promise<string> {
+	return getDailySalt(env, dk, input.now).then((salt) =>
+		visitorHash(input.ip, input.ua, salt, input.siteId),
+	);
+}
+
 /** Derive the visitor hash under the site's identity policy. Tier 0 is the legacy day-salt path,
  * byte-for-byte unchanged. Above Tier 0, elevation happens ONLY when an active, deployment-key-signed,
  * context-bound consent record exists for the derived per-window hash; otherwise the event silently
@@ -76,8 +84,14 @@ async function deriveForIngest(
 	dk: string,
 ): Promise<string> {
 	if (policy.tier === 'anonymous' || input.gpc) {
-		const salt = await getDailySalt(env, dk, input.now);
-		return visitorHash(input.ip, input.ua, salt, input.siteId);
+		return anonymousFallback(env, input, dk);
+	}
+	const uid = policy.tier === 'identified' && input.consent === true ? (input.uid ?? null) : null;
+	// An identified event with no uid can never match a consent record (those are always uid-derived,
+	// per `buildPreimage`'s invariant), so it skips straight to Tier-0 without minting a scoped salt
+	// it would never use.
+	if (policy.tier === 'identified' && !uid) {
+		return anonymousFallback(env, input, dk);
 	}
 	const wk = windowKey(policy.window, input.now);
 	const scope = `${input.siteId}:${policy.window}:${wk}`;
@@ -88,7 +102,6 @@ async function deriveForIngest(
 		windowEndMs(policy.window, input.now),
 		input.now,
 	);
-	const uid = policy.tier === 'identified' && input.consent === true ? (input.uid ?? null) : null;
 	const vh = await deriveVisitorHash(
 		policy.tier,
 		{ ip: input.ip, ua: input.ua, uid },
@@ -103,9 +116,7 @@ async function deriveForIngest(
 		now: input.now,
 	});
 	if (consent) return vh;
-	// Downgrade this event to the anonymous Tier-0 day hash. Never dropped.
-	const daySalt = await getDailySalt(env, dk, input.now);
-	return visitorHash(input.ip, input.ua, daySalt, input.siteId);
+	return anonymousFallback(env, input, dk);
 }
 
 /** A fully-derived, IP-free event ready to persist — the queue message shape. The raw IP is consumed

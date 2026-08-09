@@ -92,9 +92,9 @@ describe('deriveVisitorHash', () => {
 		expect(s1).not.toBe(s2);
 	});
 
-	it('falls back to the anonymous pre-image when identified has no uid', async () => {
-		const noUid = await deriveVisitorHash('identified', { ip: '9.9.9.9', ua: 'Y' }, SALT, SITE);
-		const anon = await deriveVisitorHash('anonymous', { ip: '9.9.9.9', ua: 'Y' }, SALT, SITE);
-		expect(noUid).toBe(anon);
+	it('throws for identified with no uid instead of silently downgrading', async () => {
+		await expect(
+			deriveVisitorHash('identified', { ip: '9.9.9.9', ua: 'Y' }, SALT, SITE),
+		).rejects.toThrow();
 	});
 });
