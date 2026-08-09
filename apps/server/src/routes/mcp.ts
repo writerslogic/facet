@@ -38,7 +38,7 @@ import { DAY_MS, MAX_RANGE_DAYS, REALTIME_WINDOW_MS } from '../lib/constants.js'
 import { renderDigest, sanitizeKey } from '../lib/digest.js';
 import { ApiError } from '../lib/http.js';
 import { createLogger } from '../lib/log.js';
-import { rateLimit } from '../lib/ratelimit.js';
+import { enforceRateLimit, rateLimit } from '../lib/ratelimit.js';
 
 export const mcpRoutes = new Hono<AppEnv>();
 
@@ -417,6 +417,15 @@ mcpRoutes.post(
 						? (params.arguments as Record<string, unknown>)
 						: {};
 				try {
+					// get_digest fans out to eleven queries against one rate-limit hit — charge it like
+					// four ordinary tool calls so it cannot buy an agent 11x the query volume of every
+					// other tool for the same per-site budget. Reuses the same bucket `rateLimit` above
+					// already charged once; a no-op when RATE_LIMITER is unbound, same as that middleware.
+					if (name === 'get_digest') {
+						await enforceRateLimit(c, `mcp:${siteId}`);
+						await enforceRateLimit(c, `mcp:${siteId}`);
+						await enforceRateLimit(c, `mcp:${siteId}`);
+					}
 					return c.json(ok(id, await callTool(c.env, siteId, name, args)), 200);
 				} catch (error) {
 					// A tool failure is a RESULT with isError, not a JSON-RPC error: the distinction
