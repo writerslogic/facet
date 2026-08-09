@@ -28,14 +28,25 @@ export function leafHash(x: Uint8Array | string): Promise<Uint8Array> {
 	return sha256(typeof x === 'string' ? utf8(x) : x);
 }
 
+// allOnes/mostSigBit/indexHeight avoid `&` and `Math.log2`/`Math.clz32` on values that can exceed
+// ~2^31: `&` converts its operands with ToInt32 and silently wraps, and `Math.log2` is not exact
+// for a non-power-of-two argument, which corrupted `Math.floor(Math.log2(n))`'s bit choice for an n
+// merely CLOSE to a power of two, not only one past 2^31. Plain doubling/halving is exact for every
+// integer this module's tree sizes reach, through JS's 2^53 safe-integer ceiling.
+
 /** True when every bit of `n` up to its top set bit is 1 (i.e. n = 2^k - 1). */
 function allOnes(n: number): boolean {
-	return (n & (n + 1)) === 0 && n !== 0;
+	if (n === 0) return false;
+	let p = 1;
+	while (p <= n) p *= 2;
+	return p - 1 === n;
 }
 
 /** The value of the most significant set bit of `n`. */
 function mostSigBit(n: number): number {
-	return 1 << (31 - Math.clz32(n));
+	let bit = 1;
+	while (bit * 2 <= n) bit *= 2;
+	return bit;
 }
 
 /** Zero-based height `g` of the node at index `i` (draft `index_height`). */
@@ -44,7 +55,11 @@ export function indexHeight(i: number): number {
 	while (!allOnes(pos)) {
 		pos = pos - mostSigBit(pos) + 1;
 	}
-	return (31 - Math.clz32(pos)) as number;
+	// pos = 2^(height+1) - 1 here; count halvings of the exact power of two pos+1 rather than take
+	// its log, so the result stays exact instead of drifting on a near-but-not-exact double.
+	let height = -1;
+	for (let p = pos + 1; p > 1; p /= 2) height += 1;
+	return height;
 }
 
 /** Peak indices (the accumulator) for MMR with `count` nodes (draft `peaks`). */
