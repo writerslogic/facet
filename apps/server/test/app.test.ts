@@ -16,6 +16,11 @@ describe('app shell', () => {
 		expect(res.status).toBe(401);
 	});
 
+	it('sets X-Content-Type-Options: nosniff on an API response, not just the dashboard shell', async () => {
+		const res = await createApp().request('/api/health');
+		expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+	});
+
 	it('unknown route → 404 { error: not_found }', async () => {
 		const res = await createApp().request('/api/nope');
 		expect(res.status).toBe(404);
