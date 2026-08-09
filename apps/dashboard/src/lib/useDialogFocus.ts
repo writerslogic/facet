@@ -3,7 +3,7 @@
 // implemented all four privately; the site-profile dialog implemented none of them, so it announced
 // itself as modal while Tab walked straight out into the page behind it and Escape did nothing.
 
-import { type RefObject, useEffect } from 'react';
+import { type RefObject, useEffect, useRef } from 'react';
 
 const FOCUSABLE =
 	'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -14,6 +14,12 @@ export function useDialogFocus(
 	/** Where focus should land on open. Defaults to the first focusable control in the panel. */
 	initialRef?: RefObject<HTMLElement | null>,
 ): void {
+	// Most callers pass an inline `() => setOpen(false)`, a fresh closure every render. Depending
+	// on it directly would tear down and rebuild this effect (stealing focus back to `first`, then
+	// forward again) on every unrelated re-render of the caller while the dialog stays open.
+	const onCloseRef = useRef(onClose);
+	onCloseRef.current = onClose;
+
 	useEffect(() => {
 		const previous = document.activeElement as HTMLElement | null;
 		const first =
@@ -22,7 +28,7 @@ export function useDialogFocus(
 
 		const onKey = (e: KeyboardEvent): void => {
 			if (e.key === 'Escape') {
-				onClose();
+				onCloseRef.current();
 				return;
 			}
 			if (e.key !== 'Tab') return;
@@ -43,5 +49,5 @@ export function useDialogFocus(
 			window.removeEventListener('keydown', onKey);
 			previous?.focus?.();
 		};
-	}, [panelRef, onClose, initialRef]);
+	}, [panelRef, initialRef]);
 }
