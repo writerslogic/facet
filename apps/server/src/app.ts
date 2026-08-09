@@ -49,10 +49,15 @@ export function createApp(): Hono<AppEnv> {
 	// MIME-sniffing is a browser behavior that applies to any response content type, not just the
 	// dashboard's HTML/JS — `withDashboardSecurityHeaders` below only wrapped the SPA/asset catch-all,
 	// leaving every /api/* JSON response with no protection at all. Applied first so it wraps every
-	// route, including errors.
+	// route. `try/finally`, not a bare `await next()`: a downstream `throw new ApiError(...)` unwinds
+	// past a bare post-`next()` line before `onError` ever builds the error Response, so most of the
+	// API's real traffic (every 401/403/404/429/500) would ship without the header.
 	app.use('*', async (c, next) => {
-		await next();
-		c.header('X-Content-Type-Options', 'nosniff');
+		try {
+			await next();
+		} finally {
+			c.header('X-Content-Type-Options', 'nosniff');
+		}
 	});
 
 	// Public beacon: any origin may POST. The origin is reflected rather than sent as `*`
