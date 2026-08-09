@@ -95,6 +95,17 @@ describe('flags client', () => {
 		expect(facet.flagAssignment('does-not-exist').reason).toBe('unknown');
 	});
 
+	it('whenFlagsReady() resolves (does not hang) when called before init()', async () => {
+		const facet = await import('../src/index.js');
+		const before = facet.whenFlagsReady();
+		const timedOut = Symbol('timed-out');
+		const result = await Promise.race([
+			before,
+			new Promise((resolve) => setTimeout(() => resolve(timedOut), 50)),
+		]);
+		expect(result).not.toBe(timedOut);
+	});
+
 	it('never evaluates when opted out; every flag reads as its safe default', async () => {
 		stubEnv({ 'facet.exp': 'aaaabbbbccccdddd', 'facet.optout': '1' });
 		const fetchMock = vi.fn(() => Promise.resolve(new Response('{}')));

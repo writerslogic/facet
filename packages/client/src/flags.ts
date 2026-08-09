@@ -75,7 +75,14 @@ function loadFlags(): void {
 		return;
 	}
 	const config = getConfig();
-	if (!config || typeof fetch === 'undefined') return;
+	if (!config || typeof fetch === 'undefined') {
+		// `assignments` stays null (not `{}`): a later call — once init() has run — must still
+		// fall through to the real fetch below rather than being short-circuited by the
+		// `assignments !== null` guard above. Settling here only unblocks a whenFlagsReady()
+		// awaited before init(), matching its documented "safe to call before init()" contract.
+		settleReady();
+		return;
+	}
 	fetching = true;
 	fetch(`${config.host}/api/flags/eval`, {
 		method: 'POST',
