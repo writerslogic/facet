@@ -32,6 +32,35 @@ describe('utm tracking', () => {
 		expect(body.utm).toEqual({ source: 'nl', medium: 'email' });
 	});
 
+	it('clamps utm values to 200 chars so an oversized param never rejects the whole payload', async () => {
+		const sent: string[] = [];
+		const longSource = 'a'.repeat(250);
+
+		vi.stubGlobal('location', {
+			href: `https://example.com/page?utm_source=${longSource}`,
+			search: `?utm_source=${longSource}`,
+		});
+		vi.stubGlobal('document', { referrer: '' });
+		vi.stubGlobal('navigator', {
+			sendBeacon: (_url: string, blob: Blob) => {
+				void blob.text().then((t) => sent.push(t));
+				return true;
+			},
+		});
+
+		const { init, track } = await import('../src/index.js');
+		init({ host: 'https://analytics.example.com', siteId: 'site-1' });
+		track();
+
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(sent).toHaveLength(1);
+		const body = JSON.parse(sent[0] as string) as Record<string, unknown>;
+		const utm = body.utm as Record<string, string>;
+		expect(utm.source).toHaveLength(200);
+		expect(utm.source).toBe(longSource.slice(0, 200));
+	});
+
 	it('omits utm key when no utm params present', async () => {
 		const sent: string[] = [];
 

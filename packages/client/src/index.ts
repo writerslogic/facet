@@ -13,6 +13,12 @@ export interface FacetConfig {
 
 let Config: FacetConfig | undefined;
 
+// Must match CollectPayloadSchema's utm.source/medium/campaign v.maxLength(200) in
+// packages/shared/src/schemas.ts. The server validates the WHOLE payload and rejects it outright
+// on any field over this bound (no per-field stripping), so an untruncated value from a
+// programmatic ad-platform link doesn't reject a single field — it silently drops the pageview.
+const UTM_MAX_LENGTH = 200;
+
 function parseUtmFromSearch(search: string): Record<string, string> | undefined {
 	const params = new URLSearchParams(search);
 	const source = params.get('utm_source') ?? undefined;
@@ -20,9 +26,9 @@ function parseUtmFromSearch(search: string): Record<string, string> | undefined 
 	const campaign = params.get('utm_campaign') ?? undefined;
 	if (source === undefined && medium === undefined && campaign === undefined) return undefined;
 	const utm: Record<string, string> = {};
-	if (source !== undefined) utm.source = source;
-	if (medium !== undefined) utm.medium = medium;
-	if (campaign !== undefined) utm.campaign = campaign;
+	if (source !== undefined) utm.source = source.slice(0, UTM_MAX_LENGTH);
+	if (medium !== undefined) utm.medium = medium.slice(0, UTM_MAX_LENGTH);
+	if (campaign !== undefined) utm.campaign = campaign.slice(0, UTM_MAX_LENGTH);
 	return utm;
 }
 
