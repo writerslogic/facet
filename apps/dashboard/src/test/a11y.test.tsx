@@ -209,6 +209,36 @@ describe('site switcher menu', () => {
 		const items = screen.getByRole('menu').querySelectorAll('button');
 		expect(Array.from(items).filter((b) => b.tabIndex === 0)).toHaveLength(1);
 	});
+
+	it('clears a leftover search filter on dismiss, so the next open shows every site', () => {
+		// Past SEARCH_THRESHOLD (8) the menu grows a filter box.
+		localStorage.setItem(
+			'facet.profiles',
+			JSON.stringify(
+				Array.from({ length: 9 }, (_, i) => ({
+					id: `p-${i}`,
+					label: `Site ${i}`,
+					siteId: `${i}1111111-1111-4111-8111-111111111111`,
+					apiKey: `clk_${i}`,
+				})),
+			),
+		);
+		sessionStorage.setItem('facet.activeProfile', 'p-0');
+		wrap(<SiteSwitcher />);
+
+		fireEvent.click(screen.getByRole('button', { name: /Change site/ }));
+		fireEvent.change(screen.getByPlaceholderText('Filter sites…'), {
+			target: { value: 'Site 3' },
+		});
+		expect(screen.getAllByRole('menuitemradio')).toHaveLength(1);
+
+		// Dismiss via outside click rather than Escape/selecting a row — the path the fix covers.
+		fireEvent.mouseDown(document.body);
+		expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+
+		fireEvent.click(screen.getByRole('button', { name: /Change site/ }));
+		expect(screen.getAllByRole('menuitemradio')).toHaveLength(9);
+	});
 });
 
 describe('site profile dialog', () => {
