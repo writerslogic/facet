@@ -7,6 +7,11 @@ import { isExplicitlyOptedOut, isOptedOut, optIn, optOut, setOptOutScript } from
 
 declare global {
 	interface Window {
+		/** Set by the first boot() to run on this page. A second, independently loaded script
+		 * instance (theme + plugin both embedding the tag) doesn't share module scope with the
+		 * first, so this has to live on window, not a module-local variable, to be visible across
+		 * the two instances and stop the page from double-counting every real event. */
+		__facetBooted?: boolean;
 		/** umami-compatible global: window.umami.track(name, props). */
 		umami?: { track: typeof track };
 		facet?: {
@@ -42,6 +47,10 @@ function trackPageview(): void {
 }
 
 function boot(): void {
+	if (typeof window !== 'undefined') {
+		if (window.__facetBooted) return;
+		window.__facetBooted = true;
+	}
 	if (typeof document === 'undefined') return;
 	const el = document.currentScript as HTMLScriptElement | null;
 	setOptOutScript(el);

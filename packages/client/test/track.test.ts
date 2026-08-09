@@ -75,4 +75,27 @@ describe('track', () => {
 		await new Promise((r) => setTimeout(r, 0));
 		expect(beacon).not.toHaveBeenCalled();
 	});
+
+	it('queues track() calls made before init() and flushes them in order once init() runs', async () => {
+		stubPage();
+		const sent: string[] = [];
+		vi.stubGlobal('navigator', {
+			sendBeacon: (_url: string, blob: Blob) => {
+				void blob
+					.text()
+					.then((t) => sent.push((JSON.parse(t) as { name?: string }).name ?? 'pageview'));
+				return true;
+			},
+		});
+
+		const { init, track } = await import('../src/index.js');
+		// A programmatic caller can reasonably do `track()` before `init()` — these used to be
+		// silently dropped instead of queued.
+		track('first');
+		track('second');
+		init({ host: 'https://analytics.example.com', siteId: SITE });
+		await new Promise((r) => setTimeout(r, 0));
+
+		expect(sent).toEqual(['first', 'second']);
+	});
 });
