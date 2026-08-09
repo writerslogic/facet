@@ -2,6 +2,7 @@
 // download from the response blob (the fetch carries auth, so a plain link would not).
 
 import type { Range } from '../state.js';
+import type { Segment } from './segment.js';
 
 export type ExportKind = 'series' | 'breakdown';
 export type ExportFormat = 'csv' | 'json';
@@ -15,6 +16,9 @@ export interface ExportParams {
 	dimension?: string;
 	/** Optional hostname filter to preserve the active view. */
 	hostname?: string;
+	/** The active cross-filter (device/country/channel/path/referrer), so an export taken while
+	 * the dashboard is filtered matches what's on screen instead of exporting the whole site. */
+	segment?: Segment;
 	interval?: 'hour' | 'day';
 	limit?: number;
 }
@@ -30,6 +34,9 @@ export function exportPath(params: ExportParams): string {
 	});
 	if (params.dimension) qs.set('dimension', params.dimension);
 	if (params.hostname) qs.set('hostname', params.hostname);
+	for (const [key, value] of Object.entries(params.segment ?? {})) {
+		if (value !== undefined) qs.set(key, value);
+	}
 	if (params.interval) qs.set('interval', params.interval);
 	if (params.limit != null) qs.set('limit', String(params.limit));
 	return `/api/stats/export?${qs.toString()}`;

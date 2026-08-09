@@ -1,11 +1,13 @@
 // Export control: downloads a CSV from /api/stats/export preserving the active site + range +
-// hostname filter. Offers a time-series export or a breakdown by a chosen dimension.
+// hostname + cross-filter segment. Offers a time-series export or a breakdown by a chosen
+// dimension.
 
 import type { Interval } from '@facet/shared';
 import { Download } from 'lucide-react';
 import { type ReactElement, useCallback, useId, useRef, useState } from 'react';
 import { cn } from '../lib/cn.js';
 import { type ExportKind, downloadExport } from '../lib/download.js';
+import type { Segment } from '../lib/segment.js';
 import { usePopoverDismiss } from '../lib/usePopoverDismiss.js';
 import type { Range } from '../state.js';
 
@@ -22,6 +24,7 @@ export function ExportButton({
 	range,
 	interval,
 	hostname,
+	segment,
 	dark = false,
 }: {
 	apiKey: string;
@@ -29,6 +32,8 @@ export function ExportButton({
 	range: Range;
 	interval?: Interval;
 	hostname?: string;
+	/** The active cross-filter, forwarded to /api/stats/export so the export matches the board. */
+	segment?: Segment;
 	dark?: boolean;
 }): ReactElement {
 	const [open, setOpen] = useState(false);
@@ -53,6 +58,7 @@ export function ExportButton({
 				format: 'csv',
 				dimension,
 				hostname,
+				segment,
 				interval: kind === 'series' ? interval : undefined,
 			});
 			setOpen(false);
