@@ -54,6 +54,10 @@ const PROTOCOL_VERSION = '2025-06-18';
  * reason (see `app.ts`); this route is mounted after that middleware and needs its own. */
 const MCP_MAX_BODY_BYTES = 16_384;
 
+/** Extra rate-limit hits `get_digest` charges beyond the one every tool call already pays, so it costs
+ * roughly what its eleven-query fan-out is worth rather than one flat per-request charge. */
+const GET_DIGEST_EXTRA_CHARGES = 3;
+
 /** JSON-RPC 2.0 error codes used here. -32000 is the reserved implementation-defined range. */
 const PARSE_ERROR = -32700;
 const INVALID_REQUEST = -32600;
@@ -417,14 +421,14 @@ mcpRoutes.post(
 						? (params.arguments as Record<string, unknown>)
 						: {};
 				try {
-					// get_digest fans out to eleven queries against one rate-limit hit — charge it like
-					// four ordinary tool calls so it cannot buy an agent 11x the query volume of every
-					// other tool for the same per-site budget. Reuses the same bucket `rateLimit` above
-					// already charged once; a no-op when RATE_LIMITER is unbound, same as that middleware.
+					// get_digest fans out to eleven queries per rate-limit hit; charge the extra so it
+					// can't buy 11x the query volume of every other tool for the same per-site budget.
 					if (name === 'get_digest') {
-						await enforceRateLimit(c, `mcp:${siteId}`);
-						await enforceRateLimit(c, `mcp:${siteId}`);
-						await enforceRateLimit(c, `mcp:${siteId}`);
+						await Promise.all(
+							Array.from({ length: GET_DIGEST_EXTRA_CHARGES }, () =>
+								enforceRateLimit(c, `mcp:${siteId}`),
+							),
+						);
 					}
 					return c.json(ok(id, await callTool(c.env, siteId, name, args)), 200);
 				} catch (error) {
