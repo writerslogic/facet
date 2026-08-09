@@ -64,5 +64,9 @@ export async function answerQuestion(
 	f: StatsFilter,
 ): Promise<NlQueryResult> {
 	const intent = await translateQuery(runner, question);
-	return runQueryIntent(env, siteId, intent, f);
+	const result = await runQueryIntent(env, siteId, intent, f);
+	// `translateQuery` returns this exact object (never a structurally-equal copy) whenever it fell
+	// back, so identity is a precise fallback signal — the client used to guess this from an
+	// English-only word list (AskPanel's now-removed looksLikeFallbackIntent).
+	return { ...result, fallback: intent === DEFAULT_INTENT };
 }

@@ -6,14 +6,15 @@
 // its own error and its own refetch, which is exactly the isolation this view needs: a revoked key
 // on one site must cost that row and nothing else.
 //
-// The query keys deliberately match `useStats`/`useCompareStats` (`['stats', query]` /
-// `['stats-compare', query]`), so the site the user is already looking at renders from cache with no
-// extra round-trip, and a refetch here warms the Overview too.
+// The query keys deliberately match `useStats`/`useCompareStats` (both go through `siteQueryKey`
+// with the same scope and site id), so the site the user is already looking at renders from cache
+// with no extra round-trip, and a refetch here warms the Overview too.
 
 import type { SeriesPoint, StatsQuery, StatsResponse, StatsSummary } from '@facet/shared';
 import { useQueries } from '@tanstack/react-query';
 import { apiFetch, qs } from '../api.js';
 import { type Delta, computeDelta } from '../lib/format.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import { isAuthError } from '../lib/status.js';
 import type { Profile, Range } from '../state.js';
 
@@ -108,7 +109,7 @@ export function useAllSitesRollup(
 		queries: profiles.map((profile) => {
 			const query = statsQuery(profile, range, interval);
 			return {
-				queryKey: ['stats', query] as const,
+				queryKey: siteQueryKey('stats', profile.siteId, query),
 				queryFn: () => apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, profile.apiKey),
 				enabled: Boolean(profile.apiKey && profile.siteId) && enabled,
 				retry: retryPolicy,
@@ -119,7 +120,7 @@ export function useAllSitesRollup(
 		queries: profiles.map((profile) => {
 			const query = statsQuery(profile, previousWindow(range), interval);
 			return {
-				queryKey: ['stats-compare', query] as const,
+				queryKey: siteQueryKey('stats-compare', profile.siteId, query),
 				queryFn: () => apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, profile.apiKey),
 				enabled: Boolean(profile.apiKey && profile.siteId) && enabled,
 				retry: retryPolicy,

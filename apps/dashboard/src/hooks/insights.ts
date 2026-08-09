@@ -12,6 +12,7 @@
 import type { ClockResponse, SessionDistributionResponse } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import type { Range } from '../state.js';
 
 /** The dimension filters `GET /api/stats/clock` honours. Every one is an `events` column. */
@@ -35,7 +36,7 @@ function rangeParams(siteId: string, range: Range): URLSearchParams {
  */
 export function useClock(apiKey: string, siteId: string, range: Range, filter: ClockFilter = {}) {
 	return useQuery({
-		queryKey: ['clock', siteId, range, filter],
+		queryKey: siteQueryKey('clock', siteId, range, filter),
 		queryFn: () => {
 			const params = rangeParams(siteId, range);
 			if (filter.country) params.set('country', filter.country);
@@ -67,7 +68,7 @@ export function useSessionDistribution(
 	channel?: string,
 ) {
 	return useQuery({
-		queryKey: ['distribution', siteId, range, channel ?? null],
+		queryKey: siteQueryKey('distribution', siteId, range, channel ?? null),
 		queryFn: () => {
 			const params = rangeParams(siteId, range);
 			if (channel) params.set('channel', channel);

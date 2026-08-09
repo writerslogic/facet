@@ -35,15 +35,22 @@ const DOT_VARS = ['--c1', '--c2', '--c3', '--c4', '--c5', '--c6'] as const;
 /**
  * A stable colour per site, derived from its id — two sites are then distinguishable at a glance in
  * the trigger, not just by reading the label. Deterministic so the colour never moves between loads.
+ *
+ * 12 slots, not 6: each hue gets a base and a `color-mix`-toward-`--ink` variant, rather than 6 more
+ * hand-picked colours per theme file. Mixing toward `--ink` (the theme's own foreground, light or
+ * dark) rather than a literal black keeps the variant legible in every theme, not just some of them.
+ * Six collided by ~7 sites; past `SEARCH_THRESHOLD` the label does the identifying work anyway.
  */
-export function siteColorVar(siteId: string): string {
+export function siteColor(siteId: string): string {
 	let hash = 0;
 	for (let i = 0; i < siteId.length; i++) hash = (hash * 31 + siteId.charCodeAt(i)) >>> 0;
-	return DOT_VARS[hash % DOT_VARS.length] as string;
+	const hue = `var(${DOT_VARS[hash % DOT_VARS.length]})`;
+	const shaded = Math.floor(hash / DOT_VARS.length) % 2 === 1;
+	return shaded ? `color-mix(in srgb, ${hue} 65%, var(--ink))` : hue;
 }
 
 function SiteDot({ siteId }: { siteId: string }): ReactElement {
-	const color = `var(${siteColorVar(siteId)})`;
+	const color = siteColor(siteId);
 	return (
 		<span
 			aria-hidden="true"

@@ -141,6 +141,17 @@ describe('answerQuestion pipeline', () => {
 			]);
 		}
 	});
+
+	it('marks a real resolution as not a fallback', async () => {
+		const r = await answerQuestion(env, stub('{"metric":"visitors"}'), S, 'how many visitors', f);
+		expect(r.fallback).toBe(false);
+	});
+
+	it('marks the server default intent as a fallback, so the client never has to guess from the question text', async () => {
+		const r = await answerQuestion(env, stub('not json at all'), S, 'how much revenue', f);
+		expect(r.intent).toEqual({ metric: 'pageviews' });
+		expect(r.fallback).toBe(true);
+	});
 });
 
 describe('translateQuery', () => {

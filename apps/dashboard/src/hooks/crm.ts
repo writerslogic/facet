@@ -8,6 +8,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { sessionFetch } from '../api.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import {
 	type CompanyAnalytics,
 	type ContactAnalytics,
@@ -54,7 +55,7 @@ function listPath(base: string, siteId: string, params: CrmListParams): string {
 
 export function useContacts(siteId: string, params: CrmListParams) {
 	return useQuery({
-		queryKey: ['crm', 'contacts', siteId, params],
+		queryKey: siteQueryKey(['crm', 'contacts'], siteId, params),
 		queryFn: () =>
 			sessionFetch<{ contacts: CrmContact[]; total: number; role?: string }>(
 				listPath('/api/crm/contacts', siteId, params),
@@ -66,7 +67,7 @@ export function useContacts(siteId: string, params: CrmListParams) {
 
 export function useContact(siteId: string, id: string) {
 	return useQuery({
-		queryKey: ['crm', 'contact', siteId, id],
+		queryKey: siteQueryKey(['crm', 'contact'], siteId, id),
 		queryFn: () =>
 			sessionFetch<{ contact: CrmContact }>(`/api/crm/contacts/${id}?site_id=${siteId}`),
 		enabled: Boolean(siteId && id),
@@ -76,7 +77,7 @@ export function useContact(siteId: string, id: string) {
 
 export function useContactAnalytics(siteId: string, id: string) {
 	return useQuery({
-		queryKey: ['crm', 'contact-analytics', siteId, id],
+		queryKey: siteQueryKey(['crm', 'contact-analytics'], siteId, id),
 		queryFn: () =>
 			sessionFetch<ContactAnalytics>(`/api/crm/contacts/${id}/analytics?site_id=${siteId}`),
 		enabled: Boolean(siteId && id),
@@ -86,7 +87,7 @@ export function useContactAnalytics(siteId: string, id: string) {
 
 export function useCompanies(siteId: string, params: CrmListParams) {
 	return useQuery({
-		queryKey: ['crm', 'companies', siteId, params],
+		queryKey: siteQueryKey(['crm', 'companies'], siteId, params),
 		queryFn: () =>
 			sessionFetch<{ companies: CrmCompany[]; total: number; role?: string }>(
 				listPath('/api/crm/companies', siteId, params),
@@ -107,7 +108,7 @@ export const CRM_MAX_PAGE_SIZE = 100;
  */
 export function useCompanyOptions(siteId: string) {
 	return useQuery({
-		queryKey: ['crm', 'company-options', siteId],
+		queryKey: siteQueryKey(['crm', 'company-options'], siteId),
 		queryFn: () =>
 			sessionFetch<{ companies: CrmCompany[]; total: number; role?: string }>(
 				`/api/crm/companies?site_id=${siteId}&limit=${CRM_MAX_PAGE_SIZE}&offset=0`,
@@ -125,7 +126,7 @@ export function useCompanyOptions(siteId: string) {
  */
 export function useContactOptions(siteId: string) {
 	return useQuery({
-		queryKey: ['crm', 'contact-options', siteId],
+		queryKey: siteQueryKey(['crm', 'contact-options'], siteId),
 		queryFn: () =>
 			sessionFetch<{ contacts: CrmContact[]; total: number; role?: string }>(
 				`/api/crm/contacts?site_id=${siteId}&limit=${CRM_MAX_PAGE_SIZE}&offset=0`,
@@ -138,7 +139,7 @@ export function useContactOptions(siteId: string) {
 
 export function useCompany(siteId: string, id: string) {
 	return useQuery({
-		queryKey: ['crm', 'company', siteId, id],
+		queryKey: siteQueryKey(['crm', 'company'], siteId, id),
 		queryFn: () =>
 			sessionFetch<{ company: CrmCompany }>(`/api/crm/companies/${id}?site_id=${siteId}`),
 		enabled: Boolean(siteId && id),
@@ -148,7 +149,7 @@ export function useCompany(siteId: string, id: string) {
 
 export function useCompanyContacts(siteId: string, id: string, offset: number) {
 	return useQuery({
-		queryKey: ['crm', 'company-contacts', siteId, id, offset],
+		queryKey: siteQueryKey(['crm', 'company-contacts'], siteId, id, offset),
 		queryFn: () =>
 			sessionFetch<{ contacts: CrmContact[]; total: number; role?: string }>(
 				`/api/crm/companies/${id}/contacts?site_id=${siteId}&limit=${CRM_PAGE_SIZE}&offset=${offset}`,
@@ -160,7 +161,7 @@ export function useCompanyContacts(siteId: string, id: string, offset: number) {
 
 export function useCompanyAnalytics(siteId: string, id: string) {
 	return useQuery({
-		queryKey: ['crm', 'company-analytics', siteId, id],
+		queryKey: siteQueryKey(['crm', 'company-analytics'], siteId, id),
 		queryFn: () =>
 			sessionFetch<CompanyAnalytics>(`/api/crm/companies/${id}/analytics?site_id=${siteId}`),
 		enabled: Boolean(siteId && id),
@@ -183,7 +184,7 @@ export interface DealListParams {
 
 export function useDeals(siteId: string, params: DealListParams) {
 	return useQuery({
-		queryKey: ['crm', 'deals', siteId, params],
+		queryKey: siteQueryKey(['crm', 'deals'], siteId, params),
 		queryFn: () => {
 			const qs = baseListQuery(siteId, params.offset);
 			if (params.stage) qs.set('stage', params.stage);
@@ -202,7 +203,7 @@ export function useDeals(siteId: string, params: DealListParams) {
 
 export function useDeal(siteId: string, id: string) {
 	return useQuery({
-		queryKey: ['crm', 'deal', siteId, id],
+		queryKey: siteQueryKey(['crm', 'deal'], siteId, id),
 		queryFn: () => sessionFetch<{ deal: CrmDeal }>(`/api/crm/deals/${id}?site_id=${siteId}`),
 		enabled: Boolean(siteId && id),
 		retry,
@@ -215,7 +216,7 @@ export function useDeal(siteId: string, id: string) {
  */
 export function useDealPipeline(siteId: string) {
 	return useQuery({
-		queryKey: ['crm', 'pipeline', siteId],
+		queryKey: siteQueryKey(['crm', 'pipeline'], siteId),
 		queryFn: () =>
 			sessionFetch<{ pipeline: PipelineCurrencySummary[] }>(
 				`/api/crm/pipeline?site_id=${siteId}`,
@@ -261,7 +262,7 @@ export interface CrmAuditParams {
  */
 export function useCrmAudit(siteId: string, params: CrmAuditParams) {
 	return useQuery({
-		queryKey: ['crm', 'audit', siteId, params],
+		queryKey: siteQueryKey(['crm', 'audit'], siteId, params),
 		queryFn: () => {
 			const qs = baseListQuery(siteId, params.offset);
 			if (params.action) qs.set('action', params.action);

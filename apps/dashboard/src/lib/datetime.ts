@@ -178,6 +178,21 @@ export function formatWindowLabel(start: number, end: number, withTime: boolean)
 	return `${render(start)} – ${render(end)} ${clockLabel()}`;
 }
 
+/** Compact "how long ago" duration ("45s" / "2m"): seconds under 90, minutes above. Locale-aware via
+ * `Intl.NumberFormat`'s unit style, so the unit letter follows the visitor's language rather than a
+ * hardcoded "s"/"min" suffix. Named `formatElapsed`, not `formatDuration`, to stay distinct from
+ * `lib/format.ts`'s `formatDuration` (a "M:SS" session-length clock — a different shape entirely). */
+export function formatElapsed(ms: number): string {
+	const seconds = Math.max(0, Math.round(ms / 1000));
+	const useMinutes = seconds >= 90;
+	const value = useMinutes ? Math.round(seconds / 60) : seconds;
+	return new Intl.NumberFormat(uiLocale(), {
+		style: 'unit',
+		unit: useMinutes ? 'minute' : 'second',
+		unitDisplay: 'narrow',
+	}).format(value);
+}
+
 export interface HourWindow {
 	/** ISO instant of the window start, for `<time datetime>`. */
 	iso: string;

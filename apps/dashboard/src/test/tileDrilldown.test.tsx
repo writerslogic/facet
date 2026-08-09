@@ -270,6 +270,39 @@ describe('in-tile drill-down', () => {
 		expect(inspectControl('US')).toHaveAttribute('data-chrome');
 	});
 
+	it('falls back to the list container when the inspected row is gone at close', () => {
+		const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+		const { rerender } = render(
+			<QueryClientProvider client={client}>
+				<DashboardProvider>
+					<ListBody title="Countries" rows={COUNTRY_ROWS} drill={spec()} />
+				</DashboardProvider>
+			</QueryClientProvider>,
+		);
+		fireEvent.click(inspectControl('US'));
+		expect(panel()).toBeInTheDocument();
+
+		// A data refresh drops the US row while its panel is still open — the row's ref is now stale.
+		rerender(
+			<QueryClientProvider client={client}>
+				<DashboardProvider>
+					<ListBody
+						title="Countries"
+						rows={[{ key: 'DE', count: 30 }]}
+						drill={spec()}
+					/>
+				</DashboardProvider>
+			</QueryClientProvider>,
+		);
+
+		fireEvent.click(within(panel()).getByRole('button', { name: 'Countries' }));
+
+		// No `[data-inspect-key="US"]` exists to focus, so the fallback (the tabIndex=-1 list
+		// container) took it instead of leaving focus on the panel's now-unmounted Close button.
+		expect(document.activeElement).not.toBe(document.body);
+		expect(document.activeElement).toHaveAttribute('tabindex', '-1');
+	});
+
 	it('a list with no drill spec behaves exactly as it did before', () => {
 		wrap(<ListBody title="Countries" rows={COUNTRY_ROWS} onSelect={vi.fn()} />);
 		expect(screen.queryByRole('button', { name: /Break down/ })).toBeNull();

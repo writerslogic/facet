@@ -6,8 +6,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, renderHook, screen } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Realtime, formatAgo, hasVariance } from '../components/Realtime.js';
+import { Realtime, hasVariance } from '../components/Realtime.js';
 import { useRealtime, useRealtimeBreakdown, useVisible } from '../hooks/realtime.js';
+import { formatElapsed } from '../lib/datetime.js';
 
 function setVisibility(state: 'visible' | 'hidden'): void {
 	Object.defineProperty(document, 'visibilityState', {
@@ -86,17 +87,17 @@ describe('hasVariance', () => {
 	});
 });
 
-describe('formatAgo', () => {
+describe('formatElapsed', () => {
 	it('uses seconds below 90s and minutes above', () => {
-		expect(formatAgo(0)).toBe('0s');
-		expect(formatAgo(15_000)).toBe('15s');
-		expect(formatAgo(89_000)).toBe('89s');
-		expect(formatAgo(90_000)).toBe('2 min');
-		expect(formatAgo(180_000)).toBe('3 min');
+		expect(formatElapsed(0)).toBe('0s');
+		expect(formatElapsed(15_000)).toBe('15s');
+		expect(formatElapsed(89_000)).toBe('89s');
+		expect(formatElapsed(90_000)).toBe('2m');
+		expect(formatElapsed(180_000)).toBe('3m');
 	});
 
 	it('never reports a negative age', () => {
-		expect(formatAgo(-5000)).toBe('0s');
+		expect(formatElapsed(-5000)).toBe('0s');
 	});
 });
 

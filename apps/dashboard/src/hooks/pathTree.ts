@@ -12,6 +12,7 @@ import type { PathTreeNode, PathTreeResponse } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api.js';
 import type { ServerFilter } from '../lib/cube.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import type { Range } from '../state.js';
 
 /**
@@ -151,7 +152,7 @@ export function usePathTree(
 	filter: ServerFilter = {},
 ) {
 	return useQuery({
-		queryKey: ['path-tree', siteId, range, filter],
+		queryKey: siteQueryKey('path-tree', siteId, range, filter),
 		queryFn: () => {
 			const params = new URLSearchParams({
 				site_id: siteId,
