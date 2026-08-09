@@ -21,7 +21,7 @@ import { SegmentNotice } from './CubeFilterBar.js';
 import { AuditPanel } from './crm/AuditPanel.js';
 import { CompaniesPanel } from './crm/CompaniesPanel.js';
 import { ContactsPanel } from './crm/ContactsPanel.js';
-import { DealsPanel } from './crm/DealsPanel.js';
+import { type DealFilter, DealsPanel, NO_DEAL_FILTER } from './crm/DealsPanel.js';
 
 type Section = 'contacts' | 'companies' | 'deals' | 'audit';
 
@@ -62,10 +62,8 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 	const [companyId, setCompanyId] = useState('');
 	const [dealId, setDealId] = useState('');
 	const [auditTarget, setAuditTarget] = useState('');
-	// A company's or a contact's deals, viewed from its detail pane — mutually exclusive, since a
-	// deal names at most one of each and showing both at once would silently intersect them.
-	const [dealCompanyFilter, setDealCompanyFilter] = useState('');
-	const [dealContactFilter, setDealContactFilter] = useState('');
+	// A company's or a contact's deals, viewed from its detail pane.
+	const [dealFilter, setDealFilter] = useState<DealFilter>(NO_DEAL_FILTER);
 
 	const openCompany = (id: string): void => {
 		setCompanyId(id);
@@ -82,13 +80,11 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 		setSection('audit');
 	};
 	const viewCompanyDeals = (id: string): void => {
-		setDealCompanyFilter(id);
-		setDealContactFilter('');
+		setDealFilter({ kind: 'company', id });
 		setSection('deals');
 	};
 	const viewContactDeals = (id: string): void => {
-		setDealContactFilter(id);
-		setDealCompanyFilter('');
+		setDealFilter({ kind: 'contact', id });
 		setSection('deals');
 	};
 
@@ -166,12 +162,8 @@ export function Crm({ siteId }: { siteId: string }): ReactElement {
 						onOpenCompany={openCompany}
 						onOpenContact={openContact}
 						onOpenAudit={openAudit}
-						companyFilter={dealCompanyFilter}
-						contactFilter={dealContactFilter}
-						onClearFilter={() => {
-							setDealCompanyFilter('');
-							setDealContactFilter('');
-						}}
+						filter={dealFilter}
+						onClearFilter={() => setDealFilter(NO_DEAL_FILTER)}
 					/>
 				) : (
 					<AuditPanel siteId={siteId} targetId={auditTarget} onTarget={setAuditTarget} />

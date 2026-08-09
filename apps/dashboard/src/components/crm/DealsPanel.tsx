@@ -23,6 +23,17 @@ import { CrmAccessNotice, Pager, StatusChip } from './shared.js';
 
 const SEARCH_DEBOUNCE_MS = 300;
 
+/** Pre-set when the reader arrived from a company's or contact's detail view. A deal names at most
+ * one of each, so this is a union rather than two independent optional strings — `none` is the only
+ * state without a target, ruling out the "both set" case the two-string shape allowed by convention
+ * only. */
+export type DealFilter =
+	| { kind: 'none' }
+	| { kind: 'company'; id: string }
+	| { kind: 'contact'; id: string };
+
+export const NO_DEAL_FILTER: DealFilter = { kind: 'none' };
+
 /** One currency's row: open value and count beside won value and count. Deliberately not summed
  * across the two, since "open plus won" is not a quantity anyone asked for. */
 function PipelineRow({
@@ -83,24 +94,25 @@ function PipelineSummary({ siteId }: { siteId: string }): ReactElement | null {
  * specifically — mirrors AuditPanel's targetId banner. */
 function FilterBanner({
 	siteId,
-	companyFilter,
-	contactFilter,
+	filter,
 	onClear,
 }: {
 	siteId: string;
-	companyFilter: string;
-	contactFilter: string;
+	filter: DealFilter;
 	onClear: () => void;
 }): ReactElement | null {
-	const company = useCompany(siteId, companyFilter);
-	const contact = useContact(siteId, contactFilter);
-	if (!companyFilter && !contactFilter) return null;
-	const label = companyFilter
-		? (company.data?.company.name ?? companyFilter)
-		: contact.data?.contact.name ||
-			contact.data?.contact.email ||
-			contact.data?.contact.external_user_id ||
-			contactFilter;
+	const companyId = filter.kind === 'company' ? filter.id : '';
+	const contactId = filter.kind === 'contact' ? filter.id : '';
+	const company = useCompany(siteId, companyId);
+	const contact = useContact(siteId, contactId);
+	if (filter.kind === 'none') return null;
+	const label =
+		filter.kind === 'company'
+			? (company.data?.company.name ?? companyId)
+			: contact.data?.contact.name ||
+				contact.data?.contact.email ||
+				contact.data?.contact.external_user_id ||
+				contactId;
 	return (
 		<div className="surface-2 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs">
 			<p data-chrome className="text-[color:var(--muted)]">
@@ -129,8 +141,7 @@ export function DealsPanel({
 	onOpenCompany,
 	onOpenContact,
 	onOpenAudit,
-	companyFilter = '',
-	contactFilter = '',
+	filter = NO_DEAL_FILTER,
 	onClearFilter,
 }: {
 	siteId: string;
@@ -140,10 +151,8 @@ export function DealsPanel({
 	onOpenContact: (contactId: string) => void;
 	/** Open the access log filtered to this deal. */
 	onOpenAudit?: (targetId: string) => void;
-	/** Pre-set when the reader arrived from a company's or contact's detail view — mutually
-	 * exclusive, since a deal names at most one of each. */
-	companyFilter?: string;
-	contactFilter?: string;
+	/** Pre-set when the reader arrived from a company's or contact's detail view. */
+	filter?: DealFilter;
 	onClearFilter?: () => void;
 }): ReactElement {
 	const [search, setSearch] = useState('');
@@ -156,22 +165,21 @@ export function DealsPanel({
 	const query = useDebouncedValue(search, SEARCH_DEBOUNCE_MS, () => setOffset(0));
 
 	// A filter arriving from a different company/contact (or being cleared) also starts the roster
-	// over. Adjusted during render rather than a `useEffect` watching the props, for the same reason
-	// as above: an effect fires one render after `companyFilter`/`contactFilter` change, so the
-	// `useDeals` call just below would go out once with the new filter and the stale offset first.
-	const [prevFilters, setPrevFilters] = useState({ companyFilter, contactFilter });
-	if (
-		prevFilters.companyFilter !== companyFilter ||
-		prevFilters.contactFilter !== contactFilter
-	) {
-		setPrevFilters({ companyFilter, contactFilter });
+	// over. Adjusted during render rather than a `useEffect` watching the prop, for the same reason
+	// as above: an effect fires one render after `filter` changes, so the `useDeals` call just below
+	// would go out once with the new filter and the stale offset first.
+	const [prevFilter, setPrevFilter] = useState(filter);
+	if (prevFilter !== filter) {
+		setPrevFilter(filter);
 		setOffset(0);
 	}
 
+	const companyId = filter.kind === 'company' ? filter.id : '';
+	const contactId = filter.kind === 'contact' ? filter.id : '';
 	const list = useDeals(siteId, {
 		stage,
-		companyId: companyFilter,
-		contactId: contactFilter,
+		companyId,
+		contactId,
 		q: query,
 		offset,
 	});
@@ -194,18 +202,13 @@ export function DealsPanel({
 
 	const deals = list.data?.deals ?? [];
 	const total = list.data?.total ?? 0;
-	const filtering = Boolean(query.trim() || stage || companyFilter || contactFilter);
+	const filtering = Boolean(query.trim() || stage || filter.kind !== 'none');
 
 	return (
 		<div className="space-y-3">
 			<PipelineSummary siteId={siteId} />
 			{onClearFilter ? (
-				<FilterBanner
-					siteId={siteId}
-					companyFilter={companyFilter}
-					contactFilter={contactFilter}
-					onClear={onClearFilter}
-				/>
+				<FilterBanner siteId={siteId} filter={filter} onClear={onClearFilter} />
 			) : null}
 			<div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-2">
 				<div className="min-w-0 space-y-3">
