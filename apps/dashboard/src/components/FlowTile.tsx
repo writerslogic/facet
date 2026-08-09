@@ -31,6 +31,14 @@ export function FlowTile({
 	}, [expanded, allDevices]);
 	const [isolated, setIsolated] = useState<string | null>(null);
 	const flow = useMemo(() => cubeFlow(cells, expandedDevices), [cells, expandedDevices]);
+	// A stale isolated id (the range/segment changed so its node no longer exists) matches nothing in
+	// Sankey's connectedTo, dimming EVERY node/ribbon instead of highlighting one — the chart reads as
+	// broken until the reader clicks something. Drop the isolation the moment its node disappears.
+	useEffect(() => {
+		if (isolated !== null && !flow.nodes.some((n) => n.id === isolated)) {
+			setIsolated(null);
+		}
+	}, [flow, isolated]);
 
 	const onNodeClick = (id: string): void => {
 		if (id.startsWith(FLOW_DEVICE_PREFIX)) {
