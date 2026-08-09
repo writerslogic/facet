@@ -119,6 +119,39 @@ describe('POST /api/auth/verify → GET /api/auth/me', () => {
 		);
 		expect(res.status).toBe(401);
 	});
+
+	// Regression: /verify mints a session cookie from an attacker-suppliable token. Hono's JSON body
+	// parser does not check Content-Type, so a cross-site `enctype="text/plain"` form could otherwise
+	// deliver a token and log the victim into the attacker's account (session fixation). The guard has
+	// to reject the request before the token is consumed, not just before the cookie is set.
+	it('rejects a cross-site /verify request before it can consume the token (CSRF)', async () => {
+		const app = createApp();
+		const email = 'csrf@example.com';
+		const token = await createMagicToken(env, email, Date.now());
+		const crossSite = await app.request(
+			'/api/auth/verify',
+			{
+				method: 'POST',
+				headers: { 'content-type': 'application/json', 'sec-fetch-site': 'cross-site' },
+				body: JSON.stringify({ token }),
+			},
+			env,
+		);
+		expect(crossSite.status).toBe(403);
+		expect(await crossSite.json()).toEqual({ error: 'csrf_rejected' });
+
+		// The token is single-use; a request the guard rejected must not have spent it.
+		const sameOrigin = await app.request(
+			'/api/auth/verify',
+			{
+				method: 'POST',
+				headers: { 'content-type': 'application/json' },
+				body: JSON.stringify({ token }),
+			},
+			env,
+		);
+		expect(sameOrigin.status).toBe(200);
+	});
 });
 
 describe('POST /api/auth/admin-link (self-hosted bootstrap, no email)', () => {
