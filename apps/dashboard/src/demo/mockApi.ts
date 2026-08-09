@@ -4,7 +4,7 @@
 // covers the typed helpers (api.ts) AND the raw fetch() calls (download.ts, transparency.ts).
 
 import type { CohortPeriod, CountRow, Interval, SeriesDimension } from '@facet/shared';
-import { DEMO_API_KEY, DEMO_LABEL, DEMO_SITE_ID } from './constants.js';
+import { DEMO_SITE_ID } from './constants.js';
 import {
 	DEMO_EXPERIMENTS,
 	DEMO_FUNNELS,
@@ -368,10 +368,3 @@ export function installDemoApi(): void {
 		return route(url, method, parsed) ?? originalFetch(input, init);
 	};
 }
-
-/** The synthetic demo profile the static build auto-loads (skips the key gate). */
-export const DEMO_PROFILE = {
-	siteId: DEMO_SITE_ID,
-	apiKey: DEMO_API_KEY,
-	label: DEMO_LABEL,
-};
