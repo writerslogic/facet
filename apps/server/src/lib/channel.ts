@@ -49,14 +49,20 @@ function extractHostname(url: string): string | null {
 	}
 }
 
+/** Strips a leading `www.` so a hostname comparison doesn't split on that one label — the same
+ * site (or the same known host) reached with or without the `www` subdomain is still the same
+ * site or host. */
+function stripWww(hostname: string): string {
+	return hostname.startsWith('www.') ? hostname.slice(4) : hostname;
+}
+
 /**
  * Matches a hostname against search-engine prefixes by registrable-domain.
  * Strips a leading `www.` so `www.google.com` matches the `google.` prefix,
  * then checks whether any label sequence begins with a known prefix.
  */
 function isSearchHost(hostname: string): boolean {
-	const normalized = hostname.startsWith('www.') ? hostname.slice(4) : hostname;
-	return SEARCH_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+	return SEARCH_PREFIXES.some((prefix) => stripWww(hostname).startsWith(prefix));
 }
 
 export function classifyChannel(args: {
@@ -73,10 +79,11 @@ export function classifyChannel(args: {
 
 	const referrerHost = extractHostname(referrer);
 
-	if (medium === 'social' || (referrerHost !== null && SOCIAL_HOSTS.has(referrerHost)))
+	if (medium === 'social' || (referrerHost !== null && SOCIAL_HOSTS.has(stripWww(referrerHost))))
 		return 'social';
 	if (referrerHost !== null && isSearchHost(referrerHost)) return 'organic';
 	if (!referrer || referrer.trim() === '') return 'direct';
-	if (referrerHost !== null && referrerHost === siteHostname.toLowerCase()) return 'internal';
+	if (referrerHost !== null && stripWww(referrerHost) === stripWww(siteHostname.toLowerCase()))
+		return 'internal';
 	return 'referral';
 }
