@@ -11,6 +11,7 @@ import {
 	useCallback,
 	useContext,
 	useMemo,
+	useRef,
 	useState,
 } from 'react';
 import { DEMO_API_KEY, DEMO_LABEL, DEMO_SITE_ID, STATIC_DEMO } from './demo/constants.js';
@@ -298,9 +299,20 @@ export function DashboardProvider({
 }: {
 	children: ReactNode;
 }): ReactElement {
-	const [profiles, setProfiles] = useState<Profile[]>(() => initialProfileState().profiles);
+	// initialProfileState() performs a one-time storage migration as a side effect (see readProfiles),
+	// so it must run exactly once per mount, not once per useState initializer: two independent calls
+	// could observe different storage states if the first call's migration write partially failed,
+	// leaving `profiles` and `activeProfileId` seeded from two different snapshots.
+	const initialStateRef = useRef<{ profiles: Profile[]; activeId: string } | null>(null);
+	function getInitialState(): { profiles: Profile[]; activeId: string } {
+		if (initialStateRef.current === null) {
+			initialStateRef.current = initialProfileState();
+		}
+		return initialStateRef.current;
+	}
+	const [profiles, setProfiles] = useState<Profile[]>(() => getInitialState().profiles);
 	const [activeProfileId, setActiveProfileId] = useState<string>(
-		() => initialProfileState().activeId,
+		() => getInitialState().activeId,
 	);
 	const [selection, setSelectionState] = useState<RangeSelection>(readSelectionFromUrl);
 	const [compare, setCompareState] = useState<boolean>(readCompareFromUrl);
