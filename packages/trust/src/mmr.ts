@@ -68,9 +68,13 @@ export function peakIndices(count: number): number[] {
 	const out: number[] = [];
 	let s = count;
 	while (s !== 0) {
-		// 2 ** k (not 1 << k): the shift overflows Int32 and goes negative for trees past ~2^31 nodes,
-		// which would non-terminate this loop; 2 ** k is exact through 2^52.
-		const highest = 2 ** Math.floor(Math.log2(s + 1)) - 1;
+		// Exact doubling, not `Math.log2`: past s≈2^49, float rounding in `Math.log2(s + 1)` can pick
+		// the wrong power of two and return a `highest` greater than `s`, driving `s` negative and
+		// corrupting every peak after it. Same failure this file's `indexHeight` comment (above) already
+		// documents for `Math.log2`; `peakIndices` was missed when that fix landed.
+		let p = 1;
+		while (p * 2 <= s + 1) p *= 2;
+		const highest = p - 1;
 		peak += highest;
 		out.push(peak - 1);
 		s -= highest;
