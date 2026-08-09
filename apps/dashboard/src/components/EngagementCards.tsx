@@ -4,14 +4,14 @@
 import type { EngagementSummary } from '@facet/shared';
 import type { ReactElement } from 'react';
 import {
-	type MetricDirection,
 	computeDelta,
 	exactHint,
 	formatDecimal,
 	formatDuration,
 	formatKpi,
+	rateMovement,
 } from '../lib/format.js';
-import { KpiCard } from './KpiCard.js';
+import { KpiCard, type KpiDelta } from './KpiCard.js';
 
 export function EngagementCards({
 	engagement,
@@ -23,9 +23,7 @@ export function EngagementCards({
 	const cards: {
 		label: string;
 		value: string;
-		metric: number;
-		prev: number | undefined;
-		direction: MetricDirection;
+		delta: KpiDelta | null;
 		hint?: string;
 	}[] = [
 		{
@@ -38,30 +36,34 @@ export function EngagementCards({
 			hint: exactHint(engagement.sessions)
 				? `${exactHint(engagement.sessions)} sessions`
 				: undefined,
-			metric: engagement.sessions,
-			prev: compare?.sessions,
-			direction: 'up',
+			delta:
+				compare?.sessions != null
+					? computeDelta(engagement.sessions, compare.sessions, 'up')
+					: null,
 		},
 		{
 			label: 'Bounce Rate',
 			value: `${Math.round(engagement.bounce_rate * 100)}%`,
-			metric: engagement.bounce_rate,
-			prev: compare?.bounce_rate,
-			direction: 'down',
+			// Already a rate (0..1), so its movement is reported in percentage POINTS, not a relative
+			// percent of a percent (computeDelta's shape) — a 0.32 → 0.40 rise is "+8.0 pts", not the
+			// misleading "+25%" a plain relative-change calculation would produce.
+			delta: rateMovement(engagement.bounce_rate, compare?.bounce_rate, 'down'),
 		},
 		{
 			label: 'Pages / Session',
 			value: formatDecimal(engagement.pages_per_session),
-			metric: engagement.pages_per_session,
-			prev: compare?.pages_per_session,
-			direction: 'up',
+			delta:
+				compare?.pages_per_session != null
+					? computeDelta(engagement.pages_per_session, compare.pages_per_session, 'up')
+					: null,
 		},
 		{
 			label: 'Avg Duration',
 			value: formatDuration(engagement.avg_duration_ms),
-			metric: engagement.avg_duration_ms,
-			prev: compare?.avg_duration_ms,
-			direction: 'up',
+			delta:
+				compare?.avg_duration_ms != null
+					? computeDelta(engagement.avg_duration_ms, compare.avg_duration_ms, 'up')
+					: null,
 		},
 	];
 
@@ -73,11 +75,7 @@ export function EngagementCards({
 					label={card.label}
 					value={card.value}
 					hint={card.hint}
-					delta={
-						card.prev != null
-							? computeDelta(card.metric, card.prev, card.direction)
-							: null
-					}
+					delta={card.delta}
 				/>
 			))}
 		</div>

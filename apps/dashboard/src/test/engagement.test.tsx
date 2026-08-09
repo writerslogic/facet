@@ -23,6 +23,30 @@ describe('EngagementCards', () => {
 		expect(screen.getByText('2.7')).toBeInTheDocument();
 		expect(screen.getByText('1:35')).toBeInTheDocument();
 	});
+
+	it('reports the bounce rate delta in percentage points, not a relative percent of a percent', () => {
+		render(
+			<EngagementCards
+				engagement={{
+					sessions: 1234,
+					bounce_rate: 0.4,
+					pages_per_session: 2.7,
+					avg_duration_ms: 95_000,
+				}}
+				compare={{
+					sessions: 1000,
+					bounce_rate: 0.32,
+					pages_per_session: 2.5,
+					avg_duration_ms: 90_000,
+				}}
+			/>,
+		);
+		// 0.32 -> 0.40 is a real +8.0-point regression. Routed through the count-shaped computeDelta
+		// this would render as "+25%" (0.08 / 0.32) — the classic funnel misread lib/format.ts warns
+		// against — instead of the correct points-based movement.
+		expect(screen.getByText('+8.0 pts')).toBeInTheDocument();
+		expect(screen.queryByText('+25%')).not.toBeInTheDocument();
+	});
 });
 
 describe('ChannelsPanel', () => {

@@ -4,9 +4,18 @@
 // disagreeing about sign and wording.
 
 import type { ReactElement, ReactNode } from 'react';
-import { type Delta, toMovement } from '../lib/format.js';
+import { type Delta, type Movement, toMovement } from '../lib/format.js';
 import { DeltaBadge } from './Delta.js';
 import { Sparkline } from './Sparkline.js';
+
+/** A count/percent change (converted via `toMovement`) or, for a metric that is already a rate
+ * (e.g. bounce rate), a `Movement` computed with `rateMovement` — reported in points, never a
+ * relative percent of a percent. */
+export type KpiDelta = Delta | Movement;
+
+function isMovement(delta: KpiDelta): delta is Movement {
+	return 'kind' in delta;
+}
 
 export function KpiCard({
 	label,
@@ -18,7 +27,7 @@ export function KpiCard({
 }: {
 	label: string;
 	value: ReactNode;
-	delta?: Delta | null;
+	delta?: KpiDelta | null;
 	sparkline?: number[];
 	sparklineStroke?: string;
 	hint?: string;
@@ -44,7 +53,7 @@ export function KpiCard({
 			</div>
 			{delta ? (
 				<div className="mt-3">
-					<DeltaBadge movement={toMovement(delta)} />
+					<DeltaBadge movement={isMovement(delta) ? delta : toMovement(delta)} />
 				</div>
 			) : null}
 		</div>
