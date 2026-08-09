@@ -110,10 +110,34 @@ function isBlockedIPv4(host: string): boolean {
 	return false;
 }
 
+/** Expand a canonical (WHATWG-serialized) IPv6 literal into its 8 16-bit groups, or null if it
+ * does not parse as one. Only needed for the transition-range unwrap below. */
+function expandIPv6Groups(host: string): number[] | null {
+	const halves = host.split('::');
+	if (halves.length > 2) return null;
+	const parseGroups = (s: string): number[] =>
+		s === '' ? [] : s.split(':').map((g) => Number.parseInt(g, 16));
+	const head = parseGroups(halves[0] ?? '');
+	const tail = halves.length === 2 ? parseGroups(halves[1] ?? '') : [];
+	const missing = 8 - head.length - tail.length;
+	if (halves.length === 1 ? head.length !== 8 : missing < 0) return null;
+	const groups = halves.length === 1 ? head : [...head, ...Array(missing).fill(0), ...tail];
+	return groups.every((g) => Number.isFinite(g) && g >= 0 && g <= 0xffff) ? groups : null;
+}
+
+/** Dotted-quad for two 16-bit groups, high group first. */
+function ipv4FromHextets(hi: number, lo: number): string {
+	return `${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`;
+}
+
 /**
  * True when an IPv6 literal is not public unicast. Anything written with a leading `::` is
  * special-purpose (`::`, `::1`, and the `::ffff:0:0/96` IPv4-mapped range the URL parser produces
  * for `[::ffff:127.0.0.1]`), so the whole prefix is refused rather than enumerated.
+ *
+ * 6to4 (2002::/16) and Teredo (2001:0000::/32) both embed an arbitrary client IPv4 IN the address
+ * itself (RFC 3056 / RFC 4380), which can smuggle a private/loopback/metadata target past the IPv4
+ * blocklist wrapped in a public-looking IPv6 literal — so both are unwrapped and re-checked.
  */
 function isBlockedIPv6(bracketed: string): boolean {
 	const host = bracketed.slice(1, -1).toLowerCase();
@@ -124,6 +148,20 @@ function isBlockedIPv6(bracketed: string): boolean {
 	if ((first & 0xffc0) === 0xfe80) return true; // fe80::/10 link-local
 	if ((first & 0xff00) === 0xff00) return true; // ff00::/8 multicast
 	if (host.startsWith('64:ff9b')) return true; // NAT64 — embeds an arbitrary IPv4
+	if (first === 0x2002 || first === 0x2001) {
+		const groups = expandIPv6Groups(host);
+		if (!groups) return true; // can't unwrap a known transition prefix — refuse rather than guess
+		if (first === 0x2002) {
+			// 6to4: the embedded IPv4 is the 32 bits right after the prefix (groups[1], groups[2]).
+			if (isBlockedIPv4(ipv4FromHextets(groups[1] ?? 0, groups[2] ?? 0))) return true;
+		} else if (groups[1] === 0) {
+			// Teredo (2001:0000::/32 specifically, not every 2001:: prefix): the last 32 bits are the
+			// client's IPv4, XORed with 0xFFFFFFFF (RFC 4380 §4).
+			const a = (groups[6] ?? 0) ^ 0xffff;
+			const b = (groups[7] ?? 0) ^ 0xffff;
+			if (isBlockedIPv4(ipv4FromHextets(a, b))) return true;
+		}
+	}
 	return false;
 }
 

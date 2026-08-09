@@ -21,6 +21,34 @@ import {
 } from './identity.js';
 import { dayKey, getDailySalt } from './salt.js';
 
+const DEDUP_WINDOW_MS = 5000;
+const DEDUP_MAX_ENTRIES = 2000;
+
+/** In-isolate, best-effort guard against a client SDK double-boot firing the same beacon twice —
+ * NOT a substitute for the queue-redelivery idempotency below, which is unconditional. Content-
+ * keyed and unpersisted, so it only catches a repeat the same isolate happens to see, and it runs
+ * AFTER hash derivation, so it suppresses the duplicate row, not the reads that produced the hash. */
+const recentContentKeys = new Map<string, number>();
+
+function isDuplicateContent(input: IngestInput, vh: string): boolean {
+	const bucket = Math.floor(input.now / DEDUP_WINDOW_MS);
+	const key = `${input.siteId}|${vh}|${input.path}|${input.name ?? ''}|${bucket}`;
+	if (recentContentKeys.size > DEDUP_MAX_ENTRIES) {
+		for (const [k, t] of recentContentKeys) {
+			if (input.now - t > DEDUP_WINDOW_MS * 2) recentContentKeys.delete(k);
+		}
+	}
+	if (recentContentKeys.has(key)) return true;
+	recentContentKeys.set(key, input.now);
+	return false;
+}
+
+/** pool-workers reuses the isolate (and this module's state) across tests in one file, so
+ * apply-migrations.ts's per-test reset calls this too. */
+export function __resetIngestDedupForTests(): void {
+	recentContentKeys.clear();
+}
+
 export interface IngestInput {
 	siteId: string;
 	/** Raw IP, used only to derive the visitor hash. Never stored, logged, or returned. */
@@ -140,6 +168,9 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 	const dk = dayKey(input.now);
 	const policy = await resolvePolicy(env, input.siteId);
 	const vh = await deriveForIngest(env, input, policy, dk);
+	if (isDuplicateContent(input, vh)) {
+		return null;
+	}
 	const utm = {
 		source: input.utm?.source ?? null,
 		medium: input.utm?.medium ?? null,
@@ -194,7 +225,7 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 	// still touches no database and its result is still safe to enqueue.
 	writeEvent(env, row);
 	// The id is minted HERE (not at insert) so an at-least-once queue redelivery re-inserts the same id
-	// as a no-op — the persist path is idempotent, so a retry can never duplicate the event.
+	// as a no-op — the persist path is idempotent, so a queue retry can never duplicate the event.
 	return {
 		id: crypto.randomUUID(),
 		row,
