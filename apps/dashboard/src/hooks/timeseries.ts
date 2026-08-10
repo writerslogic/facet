@@ -20,6 +20,7 @@ import type {
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, qs } from '../api.js';
 import { formatDateTime, formatDayShort } from '../lib/datetime.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import { segmentParams } from '../lib/segment.js';
 import { useDashboard } from '../state.js';
 import { useSegment } from './segment.js';
@@ -360,7 +361,7 @@ export function useDimensionSeries({
 	};
 
 	return useQuery({
-		queryKey: ['timeseries', dimension, limit, query],
+		queryKey: siteQueryKey('timeseries', siteId, dimension, limit, query),
 		queryFn: () =>
 			apiFetch<DimensionSeriesResponse>(
 				`/api/stats/timeseries?${qs(query)}&dimension=${encodeURIComponent(dimension)}&limit=${limit}`,
@@ -372,8 +373,6 @@ export function useDimensionSeries({
 		// chart instead of collapsing it to a skeleton. Scoped to the same site: a site switch must
 		// not draw the previous site's lines under the new site's label.
 		placeholderData: (prev, prevQuery) =>
-			(prevQuery?.queryKey[3] as { site_id?: string } | undefined)?.site_id === siteId
-				? prev
-				: undefined,
+			prevQuery?.queryKey[1] === siteId ? prev : undefined,
 	});
 }

@@ -14,7 +14,6 @@ import {
 	errorHint,
 	formatMetricValue,
 	formatWindow,
-	looksLikeFallbackIntent,
 } from '../components/AskPanel.js';
 import { clockLabel, setClockMode } from '../lib/datetime.js';
 
@@ -105,21 +104,30 @@ describe('AskPanel', () => {
 		expect(screen.getByText('bounce rate')).toBeInTheDocument();
 	});
 
-	it('flags a result that resolved to the server default intent', () => {
+	it('flags a result the server marked as its default-intent fallback', () => {
 		state.data = {
 			intent: { metric: 'pageviews' },
 			answer: 'pageviews: 12',
 			result: { kind: 'scalar', value: 12 },
+			fallback: true,
 		} satisfies NlQueryResult;
 		renderPanel();
-		fireEvent.change(screen.getByLabelText('Question'), {
-			target: { value: 'how much revenue did we make' },
-		});
-		fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
-		// The mutate mock never resolves, so the panel falls back to the live question + range.
 		expect(
 			screen.getByText(/resolved to the default query: total pageviews/i),
 		).toBeInTheDocument();
+	});
+
+	it('does not flag a real pageviews resolution', () => {
+		state.data = {
+			intent: { metric: 'pageviews' },
+			answer: 'pageviews: 12',
+			result: { kind: 'scalar', value: 12 },
+			fallback: false,
+		} satisfies NlQueryResult;
+		renderPanel();
+		expect(
+			screen.queryByText(/resolved to the default query: total pageviews/i),
+		).not.toBeInTheDocument();
 	});
 
 	it('asks over a panel-scoped window without touching the dashboard range', () => {
@@ -167,19 +175,6 @@ describe('Ask helpers', () => {
 		expect(describeIntent({ metric: 'pageviews', dimension: 'path', limit: 5 })).toBe(
 			'Top 5 pages by pageviews',
 		);
-	});
-
-	it('only flags a default intent when the question never asked for pageviews', () => {
-		expect(looksLikeFallbackIntent('how much revenue', { metric: 'pageviews' })).toBe(true);
-		expect(looksLikeFallbackIntent('how many pageviews', { metric: 'pageviews' })).toBe(false);
-		expect(looksLikeFallbackIntent('how busy was the site', { metric: 'pageviews' })).toBe(
-			false,
-		);
-		expect(looksLikeFallbackIntent('anything', { metric: 'visitors' })).toBe(false);
-		expect(
-			looksLikeFallbackIntent('anything', { metric: 'pageviews', dimension: 'path' }),
-		).toBe(false);
-		expect(looksLikeFallbackIntent('   ', { metric: 'pageviews' })).toBe(false);
 	});
 
 	// An answer window is labelled in the reader's chosen clock and always names it. UTC is pinned

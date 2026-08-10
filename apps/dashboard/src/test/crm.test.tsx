@@ -69,6 +69,8 @@ interface Handlers {
 	contactAnalytics?: unknown;
 	companyAnalytics?: unknown;
 	pipeline?: unknown[];
+	/** Empties the deal roster response, for the empty-state copy tests. */
+	noDeals?: boolean;
 	contactDeleteResult?: { consent_records_erased: number; deals_unlinked: number };
 	companyDeleteResult?: { contacts_unlinked: number; deals_unlinked: number };
 }
@@ -128,7 +130,10 @@ function mockApi(handlers: Handlers & { unavailable?: boolean } = {}) {
 			return {
 				ok: true,
 				status: 200,
-				json: async () => ({ deals: [DEAL], total: 1, role: handlers.role }),
+				json: async () =>
+					handlers.noDeals
+						? { deals: [], total: 0, role: handlers.role }
+						: { deals: [DEAL], total: 1, role: handlers.role },
 			};
 		}
 		if (url.startsWith('/api/crm/contacts/') && init?.method === 'DELETE') {
@@ -462,6 +467,22 @@ describe('viewing a company or contact’s deals', () => {
 
 		expect(screen.getByRole('tab', { name: 'Deals', selected: true })).toBeInTheDocument();
 		expect(await screen.findByText(/Showing deals for/i)).toHaveTextContent('Acme Inc');
+	});
+
+	it('names the company/contact scope in the empty state, not just search and stage', async () => {
+		// No search term, no stage — the company banner above the list is the ONLY active filter, so
+		// the empty state has to name it or a reader has no way to explain a zero-deal roster.
+		mockApi({
+			role: 'analyst',
+			noDeals: true,
+			companyAnalytics: { linked: false, reason: 'no_linked_contacts' },
+		});
+		renderCrm();
+		await openCompany();
+		fireEvent.click(await screen.findByRole('button', { name: 'Deals' }));
+
+		expect(await screen.findByText('No deals match')).toBeInTheDocument();
+		expect(screen.getByText(/Clear the company filter above/i)).toBeInTheDocument();
 	});
 });
 

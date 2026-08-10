@@ -27,7 +27,7 @@ import { type Delta, exactHint, formatKpi, formatNumber, toMovement } from '../l
 import { useDashboard } from '../state.js';
 import { DeltaBadge } from './Delta.js';
 import { KpiCard } from './KpiCard.js';
-import { siteColorVar } from './SiteSwitcher.js';
+import { siteColor } from './SiteSwitcher.js';
 import { Sparkline } from './Sparkline.js';
 import {
 	AuthErrorBanner,
@@ -77,7 +77,7 @@ function MetricCell({ value, delta }: { value: number; delta: Delta | null }): R
 /** The site identity cell: colour dot + label + site id. Clicking makes it the active site. */
 function SiteCell({ row, active }: { row: SiteRollup; active: boolean }): ReactElement {
 	const { setActiveProfile } = useDashboard();
-	const color = `var(${siteColorVar(row.profile.siteId)})`;
+	const color = siteColor(row.profile.siteId);
 	return (
 		<th scope="row" className="max-w-[22rem] px-3 py-2 text-left align-middle font-normal">
 			<button
@@ -172,7 +172,7 @@ function SiteRow({ row, active }: { row: SiteRollup; active: boolean }): ReactEl
 								values={spark}
 								width={88}
 								height={24}
-								stroke={`var(${siteColorVar(row.profile.siteId)})`}
+								stroke={siteColor(row.profile.siteId)}
 								fill
 								marker
 							/>

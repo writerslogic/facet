@@ -11,6 +11,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type { LeafClaim, ProvenanceResult } from '../lib/provenance.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 
 /** A signed MMR checkpoint (tree head), from GET /api/transparency/checkpoint. Null when the log is
  * unconfigured (no deployment signing key). */
@@ -85,7 +86,7 @@ export function useCheckpoint(apiKey: string) {
  * next hourly cron, so a just-elapsed hour legitimately has no proof for a few minutes. */
 export function useInclusionProof(apiKey: string, siteId: string, ref: ProofRef | null) {
 	return useQuery({
-		queryKey: ['transparency-inclusion', siteId, ref],
+		queryKey: siteQueryKey('transparency-inclusion', siteId, ref),
 		queryFn: () => {
 			const r = ref as ProofRef;
 			const params = new URLSearchParams({
@@ -119,7 +120,7 @@ export function useProvenance(
 	enabled: boolean,
 ) {
 	return useQuery<ProvenanceResult>({
-		queryKey: ['provenance', siteId, ref, claim],
+		queryKey: siteQueryKey('provenance', siteId, ref, claim),
 		queryFn: async () => {
 			const { runProvenance } = await import('../lib/provenance.js');
 			return runProvenance({ apiKey, siteId, ref, claim });

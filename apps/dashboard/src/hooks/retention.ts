@@ -5,11 +5,12 @@
 import type { CohortPeriod, CohortRetentionResponse } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import type { Range } from '../state.js';
 
 export function useRetention(apiKey: string, siteId: string, range: Range, period: CohortPeriod) {
 	return useQuery({
-		queryKey: ['retention', siteId, range, period],
+		queryKey: siteQueryKey('retention', siteId, range, period),
 		queryFn: () =>
 			apiFetch<CohortRetentionResponse>(
 				`/api/stats/retention?site_id=${siteId}&start=${range.start}&end=${range.end}&period=${period}`,

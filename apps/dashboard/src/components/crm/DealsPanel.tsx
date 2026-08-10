@@ -15,6 +15,7 @@ import {
 import { useDebouncedValue } from '../../hooks/debounce.js';
 import { cn } from '../../lib/cn.js';
 import { DEAL_STAGES, canAdministerCrm, formatMoney } from '../../lib/crm.js';
+import { uiLocale } from '../../lib/datetime.js';
 import { formatNumber } from '../../lib/format.js';
 import { CardSkeletons, EmptyState, Skeleton } from '../StatusStates.js';
 import { DealDetail } from './DealDetail.js';
@@ -33,6 +34,23 @@ export type DealFilter =
 	| { kind: 'contact'; id: string };
 
 export const NO_DEAL_FILTER: DealFilter = { kind: 'none' };
+
+/** Every currently-active filter source named for the empty-state copy, in the order its control
+ * appears on screen: search, stage, then the company/contact scope banner above the list. The banner
+ * is easy to miss as a "filter" — it reads as a breadcrumb, not a control — so an empty roster naming
+ * only the two inline inputs left a reader unable to explain a zero when the banner was the cause. */
+function activeDealFilters(query: string, stage: string, filter: DealFilter): string[] {
+	const active: string[] = [];
+	if (query.trim()) active.push('the search');
+	if (stage) active.push('the stage filter');
+	if (filter.kind !== 'none') active.push(`the ${filter.kind} filter above`);
+	return active;
+}
+
+/** "a", "a and b", "a, b, and c" — locale-aware via `Intl.ListFormat`, not a hardcoded "and". */
+function joinFilterNames(items: string[]): string {
+	return new Intl.ListFormat(uiLocale(), { type: 'conjunction' }).format(items);
+}
 
 /** One currency's row: open value and count beside won value and count. Deliberately not summed
  * across the two, since "open plus won" is not a quantity anyone asked for. */
@@ -297,7 +315,10 @@ export function DealsPanel({
 					) : deals.length === 0 ? (
 						<EmptyState title={filtering ? 'No deals match' : 'No deals yet'}>
 							{filtering ? (
-								<>Clear the search or the stage filter to see the whole pipeline.</>
+								<>
+									Clear {joinFilterNames(activeDealFilters(query, stage, filter))}{' '}
+									to see the whole pipeline.
+								</>
 							) : (
 								<>Add the first opportunity above to start tracking the pipeline.</>
 							)}

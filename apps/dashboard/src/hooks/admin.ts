@@ -18,6 +18,7 @@ import type {
 } from '@facet/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminFetch, adminPatch, adminPost, adminQueryRetry } from '../admin.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 
 export function useSites(token: string) {
 	return useQuery({
@@ -39,7 +40,7 @@ export function useCreateSite(token: string) {
 
 export function useKeys(token: string, siteId: string) {
 	return useQuery({
-		queryKey: ['admin', 'keys', siteId],
+		queryKey: siteQueryKey(['admin', 'keys'], siteId),
 		queryFn: () => adminFetch<{ keys: ApiKeyRecord[] }>(`/api/keys?site_id=${siteId}`, token),
 		retry: adminQueryRetry,
 		enabled: Boolean(token && siteId),
@@ -68,7 +69,7 @@ export function useRevokeKey(token: string, siteId: string) {
 
 export function useAdminGoals(token: string, siteId: string) {
 	return useQuery({
-		queryKey: ['admin', 'goals', siteId],
+		queryKey: siteQueryKey(['admin', 'goals'], siteId),
 		queryFn: () => adminFetch<{ goals: Goal[] }>(`/api/goals?site_id=${siteId}`, token),
 		retry: adminQueryRetry,
 		enabled: Boolean(token && siteId),
@@ -96,7 +97,7 @@ export function useDeleteGoal(token: string, siteId: string) {
 
 export function useAdminFunnels(token: string, siteId: string) {
 	return useQuery({
-		queryKey: ['admin', 'funnels', siteId],
+		queryKey: siteQueryKey(['admin', 'funnels'], siteId),
 		queryFn: () => adminFetch<{ funnels: Funnel[] }>(`/api/funnels?site_id=${siteId}`, token),
 		retry: adminQueryRetry,
 		enabled: Boolean(token && siteId),
@@ -125,7 +126,7 @@ export function useDeleteFunnel(token: string, siteId: string) {
 
 export function useAdminExperiments(token: string, siteId: string) {
 	return useQuery({
-		queryKey: ['admin', 'experiments', siteId],
+		queryKey: siteQueryKey(['admin', 'experiments'], siteId),
 		queryFn: () =>
 			adminFetch<{ experiments: Experiment[] }>(`/api/experiments?site_id=${siteId}`, token),
 		retry: adminQueryRetry,
