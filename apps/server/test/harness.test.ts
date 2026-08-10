@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 const EXPECTED_TABLES = [
 	'alert_deliveries',
 	'alert_destinations',
+	'api_key_scopes',
 	'api_keys',
 	'auth_tokens',
 	'consent_records',
