@@ -91,4 +91,16 @@ describe('auto-init', () => {
 		history.pushState({}, '', '/');
 		expect(beacons()).toBe(2);
 	});
+
+	it('fires only one pageview when the tracking script is embedded twice on the same page', async () => {
+		// A theme AND a plugin both including the snippet loads two independent module instances —
+		// they don't share module-local state, only window. Simulate that with vi.resetModules()
+		// between imports while keeping the SAME stubbed window/location from one setup() call.
+		const { beacons } = setup();
+		await import('../src/auto.js');
+		expect(beacons()).toBe(1);
+		vi.resetModules();
+		await import('../src/auto.js');
+		expect(beacons()).toBe(1);
+	});
 });

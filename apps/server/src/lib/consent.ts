@@ -367,6 +367,9 @@ export async function revokeConsent(
 		now: number;
 	},
 ): Promise<number> {
+	if (!params.externalUserId && !params.visitorHash) {
+		throw new Error('revokeConsent: externalUserId or visitorHash is required');
+	}
 	const clause = params.externalUserId ? 'external_user_id = ?' : 'visitor_hash = ?';
 	const ident = params.externalUserId ?? params.visitorHash ?? '';
 	const res = await env.DB.prepare(

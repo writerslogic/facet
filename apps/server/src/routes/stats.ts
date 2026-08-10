@@ -6,7 +6,6 @@ import {
 	BreakdownQuerySchema,
 	type CountRow,
 	DimensionSeriesQuerySchema,
-	type Goal,
 	type StatsFilter,
 	type StatsQueryInput,
 	StatsQuerySchema,
@@ -21,11 +20,16 @@ import {
 	verificationMethodId,
 } from '@facet/trust';
 import { vValidator } from '@hono/valibot-validator';
-import { eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { detectAnomalies } from '../db/anomaly.js';
 import { breakdown } from '../db/breakdown.js';
-import { listExperiments, listFunnels, listGoals } from '../db/catalog.js';
+import {
+	getGoalById,
+	getSiteMeta,
+	listExperiments,
+	listFunnels,
+	listGoals,
+} from '../db/catalog.js';
 import { goalConversions } from '../db/conversions.js';
 import { experimentResult } from '../db/experiments.js';
 import {
@@ -36,8 +40,6 @@ import {
 	sessionDistribution,
 	unsupportedDistributionFilters,
 } from '../db/insights.js';
-import { db } from '../db/queries.js';
-import * as schema from '../db/schema.js';
 import {
 	attribution,
 	channels,
@@ -606,22 +608,10 @@ statsRoutes.get('/stats/conversions', requireSiteAccess, async (c) => {
 		throw new ApiError('bad_range', 400);
 	}
 	assertRange(start, end);
-	const row = await db(c.env)
-		.select()
-		.from(schema.goals)
-		.where(eq(schema.goals.id, c.req.query('goal_id') ?? ''))
-		.get();
-	if (!row || row.site_id !== siteId) {
+	const goal = await getGoalById(c.env, c.req.query('goal_id') ?? '');
+	if (!goal || goal.site_id !== siteId) {
 		return c.json({ error: 'not_found' }, 404);
 	}
-	const goal: Goal = {
-		id: row.id,
-		site_id: row.site_id,
-		name: row.name,
-		type: row.type as Goal['type'],
-		match_value: row.match_value,
-		created_at: row.created_at,
-	};
 	const result = await goalConversions(c.env, siteId, goal, {
 		siteId,
 		start,
@@ -729,7 +719,7 @@ statsRoutes.get(
 			anomalies,
 			freshness,
 		] = await Promise.all([
-			db(c.env).select().from(schema.sites).where(eq(schema.sites.id, f.siteId)).get(),
+			getSiteMeta(c.env, f.siteId),
 			summary(c.env, f),
 			summary(c.env, previousFilter),
 			engagement(c.env, f),

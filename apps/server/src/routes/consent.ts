@@ -140,8 +140,11 @@ consentRoutes.delete(
 			windowEndMs(policy.window, now),
 			now,
 		);
+		// Always the pseudonymous ip|ua pre-image here (never 'identified' — there is no uid on this
+		// branch, and `buildPreimage` now requires one for that tier). Byte-identical to before: the
+		// ip|ua formula doesn't vary by tier label, only by uid presence.
 		const vh = await deriveVisitorHash(
-			policy.tier,
+			'pseudonymous',
 			{ ip: body.ip, ua: body.user_agent ?? '', uid: null },
 			salt,
 			siteId,

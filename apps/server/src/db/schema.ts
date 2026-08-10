@@ -203,10 +203,24 @@ export const apiKeys = sqliteTable(
 		label: text('label'),
 		createdAt: integer('created_at').notNull(),
 		lastUsed: integer('last_used'),
-		// Comma-separated fixed allowlist. Existing keys migrate to all scopes for compatibility.
-		scopes: text('scopes').notNull().default('read,write,consent'),
 	},
 	(t) => [index('idx_apikeys_site').on(t.siteId)],
+);
+
+/** One row per (key, granted scope) — normalized out of `apiKeys.scopes`'s former comma-separated
+ * string so a scope is a real value, not a substring match. `scope` stays fixed-allowlist text
+ * (validated in app code against `API_KEY_SCOPES`) rather than a foreign key to a scopes table:
+ * the allowlist is a closed set that changes with a code deploy, not runtime data. */
+export const apiKeyScopes = sqliteTable(
+	'api_key_scopes',
+	{
+		apiKeyId: text('api_key_id').notNull(),
+		scope: text('scope').notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.apiKeyId, t.scope] }),
+		index('idx_apikeyscopes_key').on(t.apiKeyId),
+	],
 );
 
 /** Durable cron heartbeat. Readiness and operators can distinguish "the Worker answers" from
@@ -325,6 +339,22 @@ export const scittLog = sqliteTable('scitt_log', {
 	entryId: integer('entry_id').primaryKey({ autoIncrement: true }),
 	statementHash: text('statement_hash').notNull(),
 	registeredAt: integer('registered_at').notNull(),
+});
+
+// The SCITT log's own MMR, persisted incrementally — same shape as `mmr_nodes`/`mmr_leaves` above but
+// a SEPARATE tree (a different log entirely; node indices are not comparable across the two).
+export const scittMmrNodes = sqliteTable('scitt_mmr_nodes', {
+	nodeIndex: integer('node_index').primaryKey(),
+	hash: text('hash').notNull(),
+});
+
+// Maps each registered statement to its MMR leaf node index (for inclusion proofs). `leafNo` IS the
+// receipt's `entryId` — a 0-based, contiguous sequence number. `scitt_log.entry_id` is NOT used for
+// this: SQLite AUTOINCREMENT never reuses an id after a rolled-back insert, so it can carry gaps that
+// a receipt's "zero-based registration sequence number" must not.
+export const scittMmrLeaves = sqliteTable('scitt_mmr_leaves', {
+	leafNo: integer('leaf_no').primaryKey(),
+	nodeIndex: integer('node_index').notNull(),
 });
 
 // Identity spectrum (U2). All three tables are additive; nothing existing changes, so a site with no

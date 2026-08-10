@@ -4,6 +4,7 @@ import { createApp } from './app.js';
 import type { Env } from './env.js';
 import { alertsJob } from './lib/alerts.js';
 import { type DerivedEvent, persistDerived } from './lib/ingest.js';
+import { createLogger } from './lib/log.js';
 import { registerJob, runScheduled } from './lib/scheduled.js';
 
 const app = createApp();
@@ -22,13 +23,35 @@ export default {
 		ctx.waitUntil(runScheduled(event, env));
 	},
 
-	// Ingest queue consumer: persist a whole batch of derived events in one D1 round-trip. Persistence is
-	// idempotent (id minted at derive time + onConflictDoNothing), so throwing to retry the at-least-once
-	// batch can never duplicate an event.
+	// Ingest queue consumer: try the whole batch as one D1 round-trip first (the common case).
+	// Persistence is idempotent (id minted at derive time + onConflictDoNothing), so a retry can never
+	// duplicate an event. `persistEvents` batches every message into one D1 transaction, so a single
+	// poisoned row (a constraint violation, an oversized value) fails all of them together — the
+	// fallback below isolates messages one at a time so only the actual bad one is retried/dead-lettered
+	// instead of the other ~99 real events in the batch going down with it.
 	async queue(batch: MessageBatch<DerivedEvent>, env: Env): Promise<void> {
-		await persistDerived(
-			env,
-			batch.messages.map((m) => m.body),
-		);
+		const log = createLogger({ handler: 'queue' });
+		try {
+			await persistDerived(
+				env,
+				batch.messages.map((m) => m.body),
+			);
+			return;
+		} catch (err) {
+			log.error('batch_persist_failed', err instanceof Error ? err : String(err), {
+				batch_size: batch.messages.length,
+			});
+		}
+		for (const message of batch.messages) {
+			try {
+				await persistDerived(env, [message.body]);
+				message.ack();
+			} catch (err) {
+				log.error('message_persist_failed', err instanceof Error ? err : String(err), {
+					event_id: message.body.id,
+				});
+				message.retry();
+			}
+		}
 	},
 } satisfies ExportedHandler<Env, DerivedEvent>;

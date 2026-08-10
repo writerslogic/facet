@@ -402,43 +402,27 @@ async function setCompanyFields(
 	if ('company_id' in input) set.company_id = null;
 }
 
+const IDENTIFIER_FIELDS = ['email', 'external_user_id', 'name'] as const;
+
 /**
- * Refuse a patch that would leave a contact with no email, no external id and no name.
- *
- * `ContactCreateSchema` enforces this at creation and states why: such a row "is not a contact, it is
- * an empty row that can never be matched, deduped, or erased on request". A PATCH could reach exactly
- * that state by blanking the three fields one request later, and the NULLs are distinct in both
- * unique indexes so nothing downstream would object. The check has to run against the MERGED row —
- * a patch that only clears `email` is fine when a name remains — so it reads the stored row rather
- * than judging the patch alone, and only when the patch actually touches an identifier.
+ * WHERE condition refusing a patch that would leave a contact with none of email/external_user_id/
+ * name set (`undefined` if the patch touches none of them, in which case the row's existing state is
+ * untouched and by construction still fine). A touched field is checked against the value being
+ * written (known in JS); an untouched one against the column's value AT UPDATE TIME, so two concurrent
+ * PATCHes each clearing a different field can no longer both pass against a snapshot taken before
+ * either committed — see `db/alerts.ts`'s `claimDelivery` for the same conditional-UPDATE pattern.
  */
-async function assertStillIdentifiable(
-	binding: D1Database,
-	siteId: string,
-	id: string,
-	set: Record<string, string | number | null>,
-): Promise<void> {
-	const IDENTIFIERS = ['email', 'external_user_id', 'name'] as const;
-	if (!IDENTIFIERS.some((field) => field in set)) return;
-	const existing = await crmDb(binding)
-		.select({
-			email: crmSchema.contacts.email,
-			external_user_id: crmSchema.contacts.external_user_id,
-			name: crmSchema.contacts.name,
-		})
-		.from(crmSchema.contacts)
-		.where(and(eq(crmSchema.contacts.site_id, siteId), eq(crmSchema.contacts.id, id)))
-		.get();
-	// No row means the update will report 404 on its own; that is a better answer than this one.
-	if (!existing) return;
-	const survives = IDENTIFIERS.some((field) => (field in set ? set[field] : existing[field]));
-	if (!survives) {
-		throw new ApiError(
-			'contact_needs_an_identifier',
-			400,
-			'a contact must keep at least one of email, external_user_id or name',
-		);
-	}
+function survivesAsIdentifiable(set: Record<string, string | number | null>) {
+	if (!IDENTIFIER_FIELDS.some((field) => field in set)) return undefined;
+	// Static `1`/`0` literals, not a bound JS boolean: D1's bind parameters are null/number/string/blob,
+	// not boolean, so this sidesteps the question of how a driver would coerce one.
+	return or(
+		'email' in set ? sql`${set.email !== null ? 1 : 0}` : isNotNull(crmSchema.contacts.email),
+		'external_user_id' in set
+			? sql`${set.external_user_id !== null ? 1 : 0}`
+			: isNotNull(crmSchema.contacts.external_user_id),
+		'name' in set ? sql`${set.name !== null ? 1 : 0}` : isNotNull(crmSchema.contacts.name),
+	);
 }
 
 /** Apply a partial update. Only keys actually present in `input` are written, so a PATCH that omits
@@ -456,7 +440,6 @@ export async function updateContact(
 	if ('external_user_id' in input) set.external_user_id = orNull(input.external_user_id);
 	if ('email' in input) set.email = normalizeEmail(input.email);
 	if ('name' in input) set.name = orNull(input.name);
-	await assertStillIdentifiable(binding, siteId, id, set);
 	if ('phone' in input) set.phone = orNull(input.phone);
 	await setCompanyFields(client, siteId, input, set);
 	if ('title' in input) set.title = orNull(input.title);
@@ -464,14 +447,40 @@ export async function updateContact(
 	if ('source' in input) set.source = orNull(input.source);
 	if ('notes' in input) set.notes = orNull(input.notes);
 	if ('owner_user_id' in input) set.owner_user_id = orNull(input.owner_user_id);
+	const identifierGuard = survivesAsIdentifiable(set);
 	const updated = await client
 		.update(crmSchema.contacts)
 		.set(set)
-		.where(and(eq(crmSchema.contacts.site_id, siteId), eq(crmSchema.contacts.id, id)))
+		.where(
+			and(
+				eq(crmSchema.contacts.site_id, siteId),
+				eq(crmSchema.contacts.id, id),
+				identifierGuard,
+			),
+		)
 		.returning({ id: crmSchema.contacts.id });
-	// `returning()` gives raw columns; the caller is promised the resolved shape, so re-read through
-	// the join rather than hand-assembling a second version of it here.
-	return updated[0] ? getContact(binding, siteId, id) : undefined;
+	if (updated[0]) {
+		// `returning()` gives raw columns; the caller is promised the resolved shape, so re-read
+		// through the join rather than hand-assembling a second version of it here.
+		return getContact(binding, siteId, id);
+	}
+	if (!identifierGuard) return undefined;
+	// Tell "no such row" (404) apart from "guard blocked it" (400) with the guard-free complement of
+	// the UPDATE's own predicate. Not a race: this only picks which error to report, it never gates a
+	// write.
+	const exists = await client
+		.select({ id: crmSchema.contacts.id })
+		.from(crmSchema.contacts)
+		.where(and(eq(crmSchema.contacts.site_id, siteId), eq(crmSchema.contacts.id, id)))
+		.get();
+	if (exists) {
+		throw new ApiError(
+			'contact_needs_an_identifier',
+			400,
+			'a contact must keep at least one of email, external_user_id or name',
+		);
+	}
+	return undefined;
 }
 
 /** Really delete a contact — the row is gone, not flagged. A tombstone carrying an email is still

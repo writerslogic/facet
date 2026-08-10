@@ -82,8 +82,9 @@ function validAt(cert: X509Certificate, at: Date): boolean {
 
 /**
  * Verify the ordered chain leaf → intermediates… → root: every link must be issued by the next cert
- * (`checkIssued`) with a valid signature (`verify(issuer.publicKey)`), the root must be present and
- * self-signed, and every cert must be valid at `at`. Returns a reason string on failure, or null on OK.
+ * (`checkIssued`) with a valid signature (`verify(issuer.publicKey)`) by an issuer authorized to sign
+ * certs (CA:TRUE + keyCertSign), the root must be present and self-signed, and every cert must be
+ * valid at `at`. Returns a reason string on failure, or null on OK.
  */
 function verifyChain(chain: X509Certificate[], root: X509Certificate, at: Date): string | null {
 	for (const cert of [...chain, root]) {
@@ -99,6 +100,13 @@ function verifyChain(chain: X509Certificate[], root: X509Certificate, at: Date):
 			return `"${cert.subject}" was not issued by "${issuer.subject}"`;
 		if (!cert.verify(issuer.publicKey))
 			return `signature on "${cert.subject}" does not verify against "${issuer.subject}"`;
+		// checkIssued + verify only prove issuer signed cert, not that issuer was ever AUTHORIZED
+		// to sign certs (RFC 5280 4.2.1.9/4.2.1.3) — without this, a non-CA leaf under a
+		// legitimate root could forge a fraudulent "hardware-attested" key.
+		if (issuer.ca !== true)
+			return `"${issuer.subject}" is not a CA (basicConstraints CA:FALSE) and cannot issue certificates`;
+		if (issuer.keyUsage !== undefined && !issuer.keyUsage.includes('keyCertSign'))
+			return `"${issuer.subject}" keyUsage does not permit keyCertSign`;
 	}
 	// The configured root must be self-signed (a real trust anchor), else the chain is not anchored.
 	if (!root.checkIssued(root) || !root.verify(root.publicKey)) {

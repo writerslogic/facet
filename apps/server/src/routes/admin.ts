@@ -10,11 +10,9 @@ import {
 	type Site,
 } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
-import { desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { insertSite, listSites, setSiteTeam, teamExists, upsertSiteConfig } from '../db/admin.js';
 import { siteExists } from '../db/catalog.js';
-import { db } from '../db/queries.js';
-import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import { revokeSessions } from '../lib/accounts.js';
 import { issueKey, listKeys, revokeKey } from '../lib/apikeys.js';
@@ -40,26 +38,13 @@ adminRoutes.post(
 			domain,
 			created_at: Date.now(),
 		};
-		await db(c.env).insert(schema.sites).values({
-			id: site.id,
-			name: site.name,
-			domain: site.domain,
-			createdAt: site.created_at,
-		});
+		await insertSite(c.env, site);
 		return c.json({ site }, 201);
 	},
 );
 
 adminRoutes.get('/sites', requireAdmin, async (c) => {
-	const sites = await db(c.env)
-		.select({
-			id: schema.sites.id,
-			name: schema.sites.name,
-			domain: schema.sites.domain,
-			created_at: schema.sites.createdAt,
-		})
-		.from(schema.sites)
-		.orderBy(desc(schema.sites.createdAt));
+	const sites = await listSites(c.env);
 	return c.json({ sites });
 });
 
@@ -82,22 +67,7 @@ adminRoutes.patch(
 		}
 		const saltWindow = body.tier === 'anonymous' ? 'day' : body.salt_window;
 		const now = Date.now();
-		await db(c.env)
-			.insert(schema.siteConfig)
-			.values({
-				site_id: siteId,
-				tier: body.tier,
-				salt_window: saltWindow,
-				updated_at: now,
-			})
-			.onConflictDoUpdate({
-				target: schema.siteConfig.site_id,
-				set: {
-					tier: body.tier,
-					salt_window: saltWindow,
-					updated_at: now,
-				},
-			});
+		await upsertSiteConfig(c.env, siteId, body.tier, saltWindow, now);
 		return c.json({
 			identity: {
 				site_id: siteId,
@@ -127,19 +97,11 @@ adminRoutes.patch(
 		// A site pointed at a team that does not exist grants access to nobody and is silently
 		// broken, so the id is checked rather than trusted.
 		if (team_id) {
-			const team = await db(c.env)
-				.select({ id: schema.teams.id })
-				.from(schema.teams)
-				.where(eq(schema.teams.id, team_id))
-				.get();
-			if (!team) {
+			if (!(await teamExists(c.env, team_id))) {
 				return c.json({ error: 'unknown_team' }, 400);
 			}
 		}
-		await db(c.env)
-			.update(schema.sites)
-			.set({ teamId: team_id ?? null })
-			.where(eq(schema.sites.id, siteId));
+		await setSiteTeam(c.env, siteId, team_id ?? null);
 		return c.json({ site: { id: siteId, team_id: team_id ?? null } });
 	},
 );

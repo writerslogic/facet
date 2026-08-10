@@ -69,7 +69,13 @@ exist before the deploy binds to it:
 
 ```sh
 wrangler queues create facet-ingest
+wrangler queues create facet-ingest-dlq
 ```
+
+`facet-ingest-dlq` is the dead-letter queue: a message that still fails after `max_retries` lands
+there instead of being dropped. Nothing reads it automatically — it exists so a poisoned message is
+inspectable (`wrangler queues consumer add facet-ingest-dlq <worker>` if you want to process it, or
+pull messages with the Cloudflare dashboard/API).
 
 Cloudflare Queues requires the **Workers Paid** plan. On the free plan, comment the `queues` block
 out of `apps/server/wrangler.jsonc` instead — with no `INGEST_QUEUE` binding the beacon writes to D1
@@ -351,29 +357,18 @@ stripped, and Cloudflare **Workers observability** is enabled in `wrangler.jsonc
 (`observability.enabled = true`). View and query logs in the Cloudflare dashboard or with
 `wrangler tail`.
 
-### Anomaly alerting (optional webhook)
-
-The cron job runs anomaly detection over each site's last completed hour and can POST an alert to a
-webhook. It is **disabled unless configured** and is never a dependency of ingestion:
-
-```sh
-# The endpoint that receives the alerts (a var):
-wrangler secret put WEBHOOK_URL      # or set as a var in wrangler.jsonc
-# Optional shared secret used to HMAC-sign each delivery:
-wrangler secret put WEBHOOK_SECRET
-```
-
-Each delivery is a JSON body `{ type: "anomaly", site_id, metric, bucket, direction, z, value,
-baseline_mean, summary, delivered_at }`, signed (when a secret is set) with header
-`X-Facet-Signature: sha256=<hmac>` — verify it before trusting the payload. Delivery is
-time-bounded (5s) and best-effort; the hourly cadence means each anomalous `(site_id, bucket)` is
-sent at most once, but consumers should still dedupe on those fields. If you prefer polling, use
-`GET /api/stats/anomalies` instead.
-
 ## Anomaly alerting
 
 Anomalies are scored on the hourly cron. To be told about them rather than having to open the
 dashboard, register a destination per site. These are admin endpoints, so they use `ADMIN_TOKEN`.
+
+> **If you had `WEBHOOK_URL`/`WEBHOOK_SECRET` configured**: those env vars are removed as of this
+> release. They drove a second, uncoordinated hourly anomaly pass with no SSRF hardening on the
+> target URL, running alongside the destination-based delivery below on the same cron — a
+> deployment with both configured double-evaluated and double-alerted on the same anomaly. Register
+> an equivalent `webhook` destination per site with the command below, then remove the two secrets
+> (`wrangler secret delete WEBHOOK_URL`, `wrangler secret delete WEBHOOK_SECRET`). The payload shape
+> and signature header differ from the old one — see below.
 
 ```sh
 curl -X POST https://your-deployment.example.com/api/alerts \
