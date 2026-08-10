@@ -118,7 +118,12 @@ export async function listExperiments(env: Env, siteId: string): Promise<Experim
 		.orderBy(desc(schema.experiments.created_at));
 	return rows
 		.map((r) => {
-			const variants = parseJsonColumn<ExperimentVariant[]>(r.variants, siteId, r.id, 'variants');
+			const variants = parseJsonColumn<ExperimentVariant[]>(
+				r.variants,
+				siteId,
+				r.id,
+				'variants',
+			);
 			if (variants === undefined) return undefined;
 			return {
 				id: r.id,
@@ -145,7 +150,12 @@ export async function listActiveExperiments(
 		.orderBy(desc(schema.experiments.created_at));
 	return rows
 		.map((r) => {
-			const variants = parseJsonColumn<ExperimentVariant[]>(r.variants, siteId, r.id, 'variants');
+			const variants = parseJsonColumn<ExperimentVariant[]>(
+				r.variants,
+				siteId,
+				r.id,
+				'variants',
+			);
 			if (variants === undefined) return undefined;
 			return { id: r.id, flag_key: r.flag_key, variants };
 		})
