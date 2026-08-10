@@ -82,6 +82,27 @@ describe('runStats', () => {
 		expect(url.searchParams.get('site_id')).toBe('a&b=c');
 	});
 
+	it('rejects an unrecognized --range instead of silently substituting the default (exit 1)', async () => {
+		const fetchImpl = vi.fn(() => Promise.resolve(RESPONSE));
+		const code = await runStats(
+			[
+				'--host',
+				'https://a.example.com',
+				'--key',
+				'clk_x',
+				'--site',
+				'site-1',
+				'--range',
+				'3d',
+			],
+			fetchImpl as never,
+		);
+		expect(code).toBe(1);
+		expect(fetchImpl).not.toHaveBeenCalled();
+		expect(stderr).toContain('--range must be one of');
+		expect(stderr).toContain('3d');
+	});
+
 	it('returns 1 when the request fails', async () => {
 		const fetchImpl = vi.fn(() => Promise.reject(new Error('invalid_api_key')));
 		const code = await runStats(
