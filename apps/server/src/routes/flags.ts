@@ -67,20 +67,24 @@ function activeEtag(flags: { version: number }[]): string {
 
 // --- Public: cacheable bucketing config (non-sensitive; no targeting rules) --------------------------
 // Registered before the admin routes so requireAdmin never shadows it.
-flagsRoutes.get('/active', async (c) => {
-	const siteId = c.req.query('site_id') ?? '';
-	if (!v.safeParse(UuidSchema, siteId).success) {
-		return c.json({ flags: [] });
-	}
-	const flags = await listActiveFlags(c.env, siteId);
-	const etag = activeEtag(flags);
-	c.header('Cache-Control', 'public, max-age=60');
-	c.header('ETag', etag);
-	if (c.req.header('If-None-Match') === etag) {
-		return c.body(null, 304);
-	}
-	return c.json({ flags });
-});
+flagsRoutes.get(
+	'/active',
+	rateLimit((c) => `flag-active:${clientIp(c.req.raw)}`),
+	async (c) => {
+		const siteId = c.req.query('site_id') ?? '';
+		if (!v.safeParse(UuidSchema, siteId).success) {
+			return c.json({ flags: [] });
+		}
+		const flags = await listActiveFlags(c.env, siteId);
+		const etag = activeEtag(flags);
+		c.header('Cache-Control', 'public, max-age=60');
+		c.header('ETag', etag);
+		if (c.req.header('If-None-Match') === etag) {
+			return c.body(null, 304);
+		}
+		return c.json({ flags });
+	},
+);
 
 // --- Public: server-side evaluation (rate-limited, GPC-aware, rules stay server-side) ---------------
 flagsRoutes.post(

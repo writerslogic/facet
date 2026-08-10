@@ -13,6 +13,8 @@ import { Hono } from 'hono';
 import type { AppEnv } from '../env.js';
 import { deploymentDescriptor } from '../lib/attestation.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
+import { rateLimit } from '../lib/ratelimit.js';
+import { clientIp } from '../lib/request-meta.js';
 import { buildSecurityTxt } from '../lib/security-txt.js';
 import {
 	deploymentDid,
@@ -81,34 +83,42 @@ wellKnownRoutes.get('/did.json', async (c) => {
 
 // DIF Well-Known DID Configuration: a Domain Linkage Credential binding the origin to the DID,
 // signed by the deployment key (eddsa-jcs-2022). Same Ed25519 requirement as did.json.
-wellKnownRoutes.get('/did-configuration.json', async (c) => {
-	const r = await loadEd25519Key(c.env);
-	if ('error' in r) {
-		return c.json(
-			{
-				error: ed25519KeyErrorCode(r.error, {
-					unconfigured: 'not_configured',
-					notEd25519: 'did_requires_ed25519',
-				}),
-			},
-			404,
-		);
-	}
-	const key = r.key;
-	const url = new URL(c.req.url);
-	const did = deploymentDid(url);
-	if (!did) return c.json({ error: 'did_unavailable' }, 404);
-	const credential = await issueDomainLinkageCredential({
-		did,
-		origin: url.origin,
-		key,
-		created: new Date().toISOString(),
-	});
-	return c.json(buildDidConfiguration([credential]), 200, {
-		'content-type': 'application/json',
-		'cache-control': 'public, max-age=3600',
-	});
-});
+//
+// Unlike the other .well-known routes, this one signs on every request (no server-side cache for the
+// credential) — rate-limited like flags' /eval so a flood can't turn a public GET into a signing-cost
+// amplifier.
+wellKnownRoutes.get(
+	'/did-configuration.json',
+	rateLimit((c) => `did-configuration:${clientIp(c.req.raw)}`),
+	async (c) => {
+		const r = await loadEd25519Key(c.env);
+		if ('error' in r) {
+			return c.json(
+				{
+					error: ed25519KeyErrorCode(r.error, {
+						unconfigured: 'not_configured',
+						notEd25519: 'did_requires_ed25519',
+					}),
+				},
+				404,
+			);
+		}
+		const key = r.key;
+		const url = new URL(c.req.url);
+		const did = deploymentDid(url);
+		if (!did) return c.json({ error: 'did_unavailable' }, 404);
+		const credential = await issueDomainLinkageCredential({
+			did,
+			origin: url.origin,
+			key,
+			created: new Date().toISOString(),
+		});
+		return c.json(buildDidConfiguration([credential]), 200, {
+			'content-type': 'application/json',
+			'cache-control': 'public, max-age=3600',
+		});
+	},
+);
 
 // RFC 9116 security.txt. Text is stable except for the request-relative Expires, so a modest cache
 // is safe. `Contact` is the one required field and only the operator can supply it: a shipped
