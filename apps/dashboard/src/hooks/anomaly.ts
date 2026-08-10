@@ -4,11 +4,12 @@
 import type { AnomaliesResponse } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import type { Range } from '../state.js';
 
 export function useAnomalies(apiKey: string, siteId: string, range: Range) {
 	return useQuery({
-		queryKey: ['anomalies', siteId, range],
+		queryKey: siteQueryKey('anomalies', siteId, range),
 		queryFn: () =>
 			apiFetch<AnomaliesResponse>(
 				`/api/stats/anomalies?site_id=${siteId}&start=${range.start}&end=${range.end}`,

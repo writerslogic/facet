@@ -7,6 +7,7 @@ import type { RealtimeSnapshot, StatsQuery, StatsResponse, StatsSummary } from '
 import { useQuery } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import { apiFetch, qs } from '../api.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import { EMPTY_SEGMENT, type Segment, segmentParams } from '../lib/segment.js';
 import { useStats } from './stats.js';
 
@@ -34,7 +35,7 @@ export function useRealtime(apiKey: string, siteId: string, paused = false) {
 	const visible = useVisible();
 	const live = visible && !paused;
 	return useQuery({
-		queryKey: ['realtime', siteId],
+		queryKey: siteQueryKey('realtime', siteId),
 		queryFn: () => apiFetch<RealtimeSnapshot>(`/api/stats/realtime?site_id=${siteId}`, apiKey),
 		enabled: Boolean(apiKey && siteId) && live,
 		refetchInterval: live ? REFETCH_MS : false,
@@ -83,7 +84,7 @@ export function useRealtimeBreakdown(
 export function useRecentActivity(apiKey: string, siteId: string, enabled: boolean) {
 	const bucket = Math.floor(Date.now() / HOUR_MS) * HOUR_MS;
 	return useQuery({
-		queryKey: ['realtime-recent', siteId, bucket],
+		queryKey: siteQueryKey('realtime-recent', siteId, bucket),
 		queryFn: async (): Promise<StatsSummary> => {
 			const end = Date.now();
 			const res = await apiFetch<StatsResponse>(

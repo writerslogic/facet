@@ -4,6 +4,7 @@
 import type { Freshness, StatsQuery, StatsResponse } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, qs } from '../api.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import type { Range } from '../state.js';
 
 /**
@@ -16,7 +17,7 @@ import type { Range } from '../state.js';
  */
 export function useStats(apiKey: string, query: StatsQuery, enabled = true) {
 	return useQuery({
-		queryKey: ['stats', query],
+		queryKey: siteQueryKey('stats', query.site_id, query),
 		queryFn: () => apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, apiKey),
 		enabled: Boolean(apiKey) && enabled,
 		// Keep the prior data on screen while the next query loads so a range/filter change never drops
@@ -24,16 +25,14 @@ export function useStats(apiKey: string, query: StatsQuery, enabled = true) {
 		// the same site: switching sites must NOT flash the previous site's numbers under the new label,
 		// so a cross-site swap falls through to undefined → skeleton.
 		placeholderData: (prev, prevQuery) =>
-			(prevQuery?.queryKey[1] as StatsQuery | undefined)?.site_id === query.site_id
-				? prev
-				: undefined,
+			prevQuery?.queryKey[1] === query.site_id ? prev : undefined,
 	});
 }
 
 /** Same shape as useStats, but for a comparison window; only runs when `enabled`. */
 export function useCompareStats(apiKey: string, query: StatsQuery, enabled: boolean) {
 	return useQuery({
-		queryKey: ['stats-compare', query],
+		queryKey: siteQueryKey('stats-compare', query.site_id, query),
 		queryFn: () => apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, apiKey),
 		enabled: Boolean(apiKey) && enabled,
 	});
@@ -42,7 +41,7 @@ export function useCompareStats(apiKey: string, query: StatsQuery, enabled: bool
 /** Session-materialization freshness for a site/range, sourced from the main stats endpoint. */
 export function useFreshness(apiKey: string, siteId: string, range: Range, enabled = true) {
 	return useQuery({
-		queryKey: ['freshness', siteId, range],
+		queryKey: siteQueryKey('freshness', siteId, range),
 		queryFn: async (): Promise<Freshness | null> => {
 			const res = await apiFetch<StatsResponse>(
 				`/api/stats?${qs({ site_id: siteId, start: range.start, end: range.end })}`,

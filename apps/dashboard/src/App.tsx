@@ -72,6 +72,7 @@ import {
 	sliceCube,
 } from './lib/cube.js';
 import { toggleClockMode } from './lib/datetime.js';
+import { queryKeyReferencesSite } from './lib/queryKeys.js';
 import {
 	type Segment,
 	type SegmentKey,
@@ -148,18 +149,6 @@ function focusAskInput(): void {
 // Stable empty reference so `cube.data?.cells ?? EMPTY_CELLS` keeps the same identity across renders
 // (a fresh `[]` would defeat memoization of everything derived from the cube).
 const EMPTY_CELLS: CubeCell[] = [];
-
-/** True when a react-query key references the given site id, as a direct element or a nested site_id. */
-function queryKeyReferencesSite(key: readonly unknown[], siteId: string): boolean {
-	if (!siteId) return false;
-	return key.some((part) => {
-		if (part === siteId) return true;
-		if (part && typeof part === 'object') {
-			return (part as { site_id?: unknown }).site_id === siteId;
-		}
-		return false;
-	});
-}
 
 const TABS: { id: View; label: string }[] = [
 	{ id: 'overview', label: 'Overview' },

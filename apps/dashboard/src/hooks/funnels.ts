@@ -4,6 +4,7 @@
 import type { Funnel, FunnelReportResult, Goal, GoalConversionResult } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import { isAuthError } from '../lib/status.js';
 import type { Range } from '../state.js';
 
@@ -21,7 +22,7 @@ const CATALOG_STALE_MS = 5 * 60 * 1000;
 
 export function useGoals(apiKey: string, siteId: string) {
 	return useQuery({
-		queryKey: ['goals', siteId],
+		queryKey: siteQueryKey('goals', siteId),
 		queryFn: () => apiFetch<{ goals: Goal[] }>(`/api/stats/goals?site_id=${siteId}`, apiKey),
 		enabled: Boolean(apiKey && siteId),
 		staleTime: CATALOG_STALE_MS,
@@ -31,7 +32,7 @@ export function useGoals(apiKey: string, siteId: string) {
 
 export function useFunnels(apiKey: string, siteId: string) {
 	return useQuery({
-		queryKey: ['funnels', siteId],
+		queryKey: siteQueryKey('funnels', siteId),
 		queryFn: () =>
 			apiFetch<{ funnels: Funnel[] }>(`/api/stats/funnels?site_id=${siteId}`, apiKey),
 		enabled: Boolean(apiKey && siteId),
@@ -42,7 +43,7 @@ export function useFunnels(apiKey: string, siteId: string) {
 
 export function useConversions(apiKey: string, siteId: string, goalId: string, range: Range) {
 	return useQuery({
-		queryKey: ['conversions', siteId, goalId, range],
+		queryKey: siteQueryKey('conversions', siteId, goalId, range),
 		queryFn: () =>
 			apiFetch<GoalConversionResult>(
 				`/api/stats/conversions?site_id=${siteId}&goal_id=${goalId}&start=${range.start}&end=${range.end}`,
@@ -55,7 +56,7 @@ export function useConversions(apiKey: string, siteId: string, goalId: string, r
 
 export function useFunnelReport(apiKey: string, siteId: string, funnelId: string, range: Range) {
 	return useQuery({
-		queryKey: ['funnel-report', siteId, funnelId, range],
+		queryKey: siteQueryKey('funnel-report', siteId, funnelId, range),
 		queryFn: () =>
 			apiFetch<FunnelReportResult>(
 				`/api/funnels/${funnelId}/report?site_id=${siteId}&start=${range.start}&end=${range.end}`,

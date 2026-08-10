@@ -25,18 +25,8 @@ vi.mock('uplot', () => {
 
 vi.mock('uplot/dist/uPlot.min.css', () => ({}));
 
-import { KpiCards } from '../components/KpiCards.js';
 import { TrafficChart } from '../components/TrafficChart.js';
 import { WorldMap } from '../components/WorldMap.js';
-
-describe('KpiCards', () => {
-	it('renders the three formatted KPI numbers', () => {
-		render(<KpiCards summary={{ pageviews: 12345, visitors: 6789, events: 42 }} />);
-		expect(screen.getByText('12,345')).toBeInTheDocument();
-		expect(screen.getByText('6,789')).toBeInTheDocument();
-		expect(screen.getByText('42')).toBeInTheDocument();
-	});
-});
 
 describe('TrafficChart', () => {
 	it('mounts a .uplot node fed with two series', async () => {

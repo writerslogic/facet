@@ -250,11 +250,14 @@ function DrillFrame({
 		if (drill.open && !wasOpen.current) {
 			cameFrom.current = drill.rowKey;
 			host.querySelector<HTMLElement>('[data-drill-focus]')?.focus();
-		} else if (!drill.open && wasOpen.current) {
-			const key = cameFrom.current;
-			if (key !== undefined) {
-				host.querySelector<HTMLElement>(`[data-inspect-key="${CSS.escape(key)}"]`)?.focus();
-			}
+		} else if (!drill.open && wasOpen.current && cameFrom.current !== undefined) {
+			const row = host.querySelector<HTMLElement>(
+				`[data-inspect-key="${CSS.escape(cameFrom.current)}"]`,
+			);
+			// A data refresh while the panel was open can remove the inspected row before close — fall
+			// back to the list container (tabIndex below) so focus lands somewhere in the tile instead
+			// of silently staying nowhere as the closing panel's Close button unmounts under it.
+			(row ?? host).focus();
 		}
 		wasOpen.current = drill.open;
 	}, [drill.open, drill.rowKey, expanded]);
@@ -270,7 +273,13 @@ function DrillFrame({
 		/>
 	);
 	return (
-		<div ref={hostRef} className="flex h-full min-h-0 flex-col">
+		<div
+			ref={hostRef}
+			// Not in the tab order (reachable only via focus() above) — a fallback target for when the
+			// row the panel closed back to no longer exists in the DOM.
+			tabIndex={-1}
+			className="flex h-full min-h-0 flex-col"
+		>
 			{/* Drill transitions are a state change with no focus move, so they need announcing. */}
 			<output data-chrome className="sr-only" aria-live="polite">
 				{drill.announcement}

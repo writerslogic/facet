@@ -4,11 +4,12 @@
 import type { Experiment, ExperimentResult, Goal } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch } from '../api.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import type { Range } from '../state.js';
 
 export function useExperiments(apiKey: string, siteId: string) {
 	return useQuery({
-		queryKey: ['experiments', siteId],
+		queryKey: siteQueryKey('experiments', siteId),
 		queryFn: () =>
 			apiFetch<{ experiments: Experiment[] }>(
 				`/api/stats/experiments?${new URLSearchParams({ site_id: siteId })}`,
@@ -43,7 +44,7 @@ export function useExperimentResult(
 	}).toString();
 
 	return useQuery({
-		queryKey: ['experiment-result', siteId, experimentId, goal?.id, range],
+		queryKey: siteQueryKey('experiment-result', siteId, experimentId, goal?.id, range),
 		queryFn: () => apiFetch<ExperimentResult>(`/api/stats/experiment?${params}`, apiKey),
 		enabled: Boolean(apiKey && siteId && experimentId && goal) && enabled,
 		// A date-range change re-queries the same experiment + goal: keep the current table on screen

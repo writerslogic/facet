@@ -109,37 +109,6 @@ export function errorHint(message: string): string {
 }
 
 /**
- * Words that would make "pageviews" a correct resolution rather than a fallback. Used only to suppress
- * the fallback notice — a miss here costs a redundant hint, never a wrong number.
- */
-const PAGEVIEW_TERMS = [
-	'pageview',
-	'page view',
-	'view',
-	'hit',
-	'traffic',
-	'busy',
-	'impression',
-	'load',
-];
-
-/**
- * Whether a result looks like the server's silent fallback rather than a real resolution.
- *
- * `translateQuery` returns `{ metric: 'pageviews' }` whenever the model's output fails to parse or
- * validate, and that is indistinguishable on the wire from a genuine "how many pageviews?" — so the
- * signal is: the barest possible intent came back for a question that never mentioned pageviews. The
- * notice is phrased as a check, not a verdict, because this is a heuristic.
- */
-export function looksLikeFallbackIntent(question: string, intent: QueryIntent): boolean {
-	if (question.trim().length === 0) return false;
-	if (intent.metric !== 'pageviews') return false;
-	if (intent.dimension || intent.series || intent.limit != null) return false;
-	const q = question.toLowerCase();
-	return !PAGEVIEW_TERMS.some((term) => q.includes(term));
-}
-
-/**
  * The window an answer covers, in the reader's active clock and always naming it. This used to be
  * hardcoded to `en-US` and to UTC while the tab beside it rendered dates in the browser's timezone;
  * both now come from `lib/datetime.ts`. Times are shown only for short windows, where the hour is
@@ -340,7 +309,7 @@ export function AskPanel({
 	// Falls back to the live props when no ask has completed in this session (e.g. a restored result).
 	const context = answered ?? { question, range };
 	const empty = data ? isEmptyResult(data.result) : false;
-	const fallback = data ? looksLikeFallbackIntent(context.question, data.intent) : false;
+	const fallback = data?.fallback === true;
 
 	return (
 		<div className="space-y-6">

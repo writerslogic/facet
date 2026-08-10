@@ -125,6 +125,10 @@ export interface NlQueryResult {
 		| { kind: 'scalar'; value: number }
 		| { kind: 'breakdown'; rows: CountRow[] }
 		| { kind: 'series'; points: SeriesPoint[] };
+	/** True when `intent` is the server's silent default (the model's output could not be parsed or
+	 * validated), set only by `answerQuestion`. Absent (not false) when a caller executed an intent it
+	 * chose itself, e.g. `runQueryIntent` in isolation — there is no fallback question to answer. */
+	fallback?: boolean;
 }
 
 /**

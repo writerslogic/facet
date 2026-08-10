@@ -19,7 +19,7 @@ import {
 } from '../hooks/realtime.js';
 import { useSegment } from '../hooks/segment.js';
 import { cn } from '../lib/cn.js';
-import { clockLabel, formatTimeOfDay, useClockMode } from '../lib/datetime.js';
+import { clockLabel, formatElapsed, formatTimeOfDay, useClockMode } from '../lib/datetime.js';
 import { formatNumber } from '../lib/format.js';
 import { isAuthError } from '../lib/status.js';
 import { useThemeColors } from '../theme.js';
@@ -61,13 +61,6 @@ const EMPTY_HISTORY: History = { stamps: [], visitors: [], pageviews: [] };
 export function hasVariance(values: number[]): boolean {
 	if (values.length < 2) return false;
 	return values.some((v) => v !== values[0]);
-}
-
-/** Compact "how long ago" for the trend label: seconds under a minute and a half, minutes above. */
-export function formatAgo(ms: number): string {
-	const seconds = Math.max(0, Math.round(ms / 1000));
-	if (seconds < 90) return `${seconds}s`;
-	return `${Math.round(seconds / 60)} min`;
 }
 
 /** Signed change of a counter against the oldest sample still in the rolling window. */
@@ -287,7 +280,7 @@ export function Realtime({
 	// Trend vs the oldest poll still retained. Both endpoints of the comparison are the same trailing
 	// window measured at two times, so this is honestly "how the live number moved", not a period delta.
 	const spanMs = history.stamps.length > 1 ? dataUpdatedAt - (history.stamps[0] ?? 0) : 0;
-	const since = spanMs > 0 ? formatAgo(spanMs) : null;
+	const since = spanMs > 0 ? formatElapsed(spanMs) : null;
 	const visitorChange = since ? data.visitors - (history.visitors[0] ?? 0) : undefined;
 	const pageviewChange = since ? data.pageviews - (history.pageviews[0] ?? 0) : undefined;
 

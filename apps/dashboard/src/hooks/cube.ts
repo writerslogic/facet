@@ -5,11 +5,12 @@
 import type { CubeResponse } from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { apiFetch, qs } from '../api.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 import type { Range } from '../state.js';
 
 export function useCube(apiKey: string, siteId: string, range: Range, interval: 'hour' | 'day') {
 	return useQuery({
-		queryKey: ['cube', siteId, range, interval],
+		queryKey: siteQueryKey('cube', siteId, range, interval),
 		queryFn: () =>
 			apiFetch<CubeResponse>(
 				`/api/stats/cube?${qs({ site_id: siteId, start: range.start, end: range.end, interval })}`,
