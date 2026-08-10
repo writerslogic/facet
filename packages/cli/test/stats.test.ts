@@ -85,7 +85,16 @@ describe('runStats', () => {
 	it('rejects an unrecognized --range instead of silently substituting the default (exit 1)', async () => {
 		const fetchImpl = vi.fn(() => Promise.resolve(RESPONSE));
 		const code = await runStats(
-			['--host', 'https://a.example.com', '--key', 'clk_x', '--site', 'site-1', '--range', '3d'],
+			[
+				'--host',
+				'https://a.example.com',
+				'--key',
+				'clk_x',
+				'--site',
+				'site-1',
+				'--range',
+				'3d',
+			],
 			fetchImpl as never,
 		);
 		expect(code).toBe(1);

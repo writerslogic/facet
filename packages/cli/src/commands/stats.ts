@@ -47,9 +47,7 @@ export async function runStats(args: string[], fetchImpl: FetchJson = fetchJson)
 	const range = values.range ?? '7d';
 	const days = RANGE_DAYS[range];
 	if (days === undefined) {
-		printError(
-			`--range must be one of: ${Object.keys(RANGE_DAYS).join(', ')} (got: ${range})`,
-		);
+		printError(`--range must be one of: ${Object.keys(RANGE_DAYS).join(', ')} (got: ${range})`);
 		return 1;
 	}
 	const end = Date.now();
