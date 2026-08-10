@@ -327,6 +327,17 @@ export async function emailsByUserId(env: Env, userIds: string[]): Promise<Map<s
 	return byId;
 }
 
+/** Whether a user id resolves to a row. Used to validate a foreign key across the CRM/analytics DB
+ * boundary — D1 cannot enforce it as a constraint, so a caller-supplied id is checked here instead. */
+export async function userExists(env: Env, userId: string): Promise<boolean> {
+	const row = await db(env)
+		.select({ id: schema.users.id })
+		.from(schema.users)
+		.where(eq(schema.users.id, userId))
+		.get();
+	return Boolean(row);
+}
+
 /** A user's team memberships (team id + role). */
 export async function userMemberships(
 	env: Env,

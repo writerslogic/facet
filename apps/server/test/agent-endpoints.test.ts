@@ -425,6 +425,53 @@ describe('/api/mcp', () => {
 		expect(seen).toEqual([`mcp:${siteId}`]);
 	});
 
+	it('charges get_digest like several calls, so it cannot buy 11x the query volume of a cheap tool for one hit', async () => {
+		const { key } = await makeSite('Acme', 'acme.com');
+		// Succeeds exactly once per request — enough budget for one ordinary tool call, not enough
+		// for get_digest's extra charges.
+		const onceOnly = () => {
+			let used = false;
+			return {
+				limit: async () => {
+					const success = !used;
+					used = true;
+					return { success };
+				},
+			} as Env['RATE_LIMITER'];
+		};
+
+		const cheap = await rawPost(
+			key,
+			JSON.stringify({
+				jsonrpc: '2.0',
+				id: 1,
+				method: 'tools/call',
+				params: { name: 'get_summary', arguments: {} },
+			}),
+			{ ...env, RATE_LIMITER: onceOnly() } as Env,
+		);
+		expect(((await cheap.json()) as { result: { isError: boolean } }).result.isError).toBe(
+			false,
+		);
+
+		const digest = await rawPost(
+			key,
+			JSON.stringify({
+				jsonrpc: '2.0',
+				id: 1,
+				method: 'tools/call',
+				params: { name: 'get_digest', arguments: {} },
+			}),
+			{ ...env, RATE_LIMITER: onceOnly() } as Env,
+		);
+		expect(digest.status).toBe(200);
+		const body = (await digest.json()) as {
+			result: { isError: boolean; content: { text: string }[] };
+		};
+		expect(body.result.isError).toBe(true);
+		expect(body.result.content[0]?.text).toBe('rate_limited');
+	});
+
 	// A referrer is settable by anyone who can send a beacon at the site, and a path only has to start
 	// with "/" — so both are attacker-controlled text that lands in an LLM's context verbatim.
 	it('cannot be given forged rows by a tab or newline in a path', async () => {

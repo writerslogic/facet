@@ -16,6 +16,28 @@ describe('app shell', () => {
 		expect(res.status).toBe(401);
 	});
 
+	it('sets X-Content-Type-Options: nosniff on every response, including errors and the SPA shell', async () => {
+		const app = createApp();
+		// A happy-path c.json response.
+		expect((await app.request('/api/health')).headers.get('X-Content-Type-Options')).toBe(
+			'nosniff',
+		);
+		// A route that throws an ApiError, which unwinds past the middleware's `next()` — the case
+		// that would slip through a naive `await next(); c.header(...)` (no try/finally).
+		expect(
+			(await app.request('/api/ready', {}, env)).headers.get('X-Content-Type-Options'),
+		).toBe('nosniff');
+		// The default 404, built by `app.notFound`, not a handler at all.
+		expect((await app.request('/api/nope')).headers.get('X-Content-Type-Options')).toBe(
+			'nosniff',
+		);
+		// The SPA catch-all, which already sets this header itself via withDashboardSecurityHeaders —
+		// must not be clobbered or duplicated by the global middleware setting it a second time.
+		expect((await app.request('/', {}, env)).headers.get('X-Content-Type-Options')).toBe(
+			'nosniff',
+		);
+	});
+
 	it('unknown route → 404 { error: not_found }', async () => {
 		const res = await createApp().request('/api/nope');
 		expect(res.status).toBe(404);
