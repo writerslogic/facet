@@ -120,6 +120,25 @@ describe('facet keyattest verify', () => {
 		expect(stderr).toContain('not valid at');
 	});
 
+	it('rejects a chain whose intermediate lacks CA authority (basicConstraints CA:FALSE), even though checkIssued+verify pass (exit 1)', async () => {
+		// nonca-intermediate.pem is validly signed by nonca-root.pem and validly signs
+		// nonca-leaf.pem (checkIssued + verify both pass on every link) but is not itself a CA.
+		// Regression for the RFC 5280 CA-authority check: previously this chain verified.
+		const code = await main([
+			'keyattest',
+			'verify',
+			fx('nonca-leaf.pem'),
+			'--root',
+			fx('nonca-root.pem'),
+			'--intermediate',
+			fx('nonca-intermediate.pem'),
+			'--key',
+			fx('nonca-leaf.pub.pem'),
+		]);
+		expect(code).toBe(1);
+		expect(stderr).toContain('is not a CA');
+	});
+
 	it('errors on missing --root', async () => {
 		const code = await main([
 			'keyattest',

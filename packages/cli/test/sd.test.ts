@@ -1,7 +1,7 @@
 // `facet sd`: full keygen → issue → derive (selective reveal) → verify through the CLI entrypoint, for
 // both W3C cryptosuites, plus verify exit code 1 on a tampered presentation. Node-only.
 
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -52,6 +52,8 @@ for (const suite of ['ecdsa-sd-2023', 'bbs-2023'] as const) {
 			await writeFile(credFile, JSON.stringify(credential()));
 
 			expect(await main(['sd', 'keygen', '--suite', suite, '--out', keyFile])).toBe(0);
+			// The exported issuer private key is a secret: must land 0600, not world-readable.
+			expect((await stat(keyFile)).mode & 0o777).toBe(0o600);
 			expect(
 				await main([
 					'sd',

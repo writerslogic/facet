@@ -7,7 +7,7 @@
 //   derive  --suite <s> --credential <signed> --key <keyfile> --reveal <ptr,...> --out <file>
 //   verify  --suite <s> --presentation <file> --key <keyfile>
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { open, readFile, writeFile } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import pc from 'picocolors';
 import {
@@ -90,7 +90,16 @@ export async function runSd(args: string[]): Promise<number> {
 				return 1;
 			}
 			const key = await generateIssuerKey(suite);
-			await writeFile(flags.out, JSON.stringify(await exportIssuerKey(key), null, 2));
+			// Issuer private key, same secrecy class as `facet keys generate`: 0600 via chmod
+			// through the descriptor (not after) so an overwrite of a pre-existing world-readable
+			// file is never exposed at the old mode, even for one syscall's window.
+			const handle = await open(flags.out, 'w', 0o600);
+			try {
+				await handle.chmod(0o600);
+				await handle.writeFile(JSON.stringify(await exportIssuerKey(key), null, 2));
+			} finally {
+				await handle.close();
+			}
 			ok(`generated ${suite} issuer key → ${flags.out} (controller ${key.controller})`);
 			return 0;
 		}
