@@ -1311,7 +1311,9 @@ describe('a patch cannot strip a contact of every identifier', () => {
 		const body = (await after.json()) as {
 			contact: { email: string | null; name: string | null; external_user_id: string | null };
 		};
-		expect(body.contact.email || body.contact.name || body.contact.external_user_id).toBeTruthy();
+		expect(
+			body.contact.email || body.contact.name || body.contact.external_user_id,
+		).toBeTruthy();
 	});
 });
 
