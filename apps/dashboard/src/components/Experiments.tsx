@@ -344,12 +344,15 @@ function VariantTable({
 	variants,
 	movements,
 	comparable,
+	detailed,
 }: {
 	variants: Variant[];
 	/** Rate movement vs the preceding window, by variant key. Empty when there is nothing to compare. */
 	movements: Map<string, Movement>;
 	/** Whether a comparison was even attempted — drives the column's empty-cell explanation. */
 	comparable: boolean;
+	/** Whether to show the 95% CI column — the one table cell dense enough to gate behind the toggle. */
+	detailed: boolean;
 }): ReactElement {
 	const control = variants[0];
 	const peak = Math.max(...variants.map((v) => v.rate), 0);
@@ -363,7 +366,9 @@ function VariantTable({
 					<th className="py-2 text-right">Exposures</th>
 					<th className="py-2 text-right">Conversions</th>
 					<th className="py-2 text-right">Rate</th>
-					<th className="hidden py-2 text-right md:table-cell">95% CI</th>
+					{detailed ? (
+						<th className="hidden py-2 text-right md:table-cell">95% CI</th>
+					) : null}
 					<th className="py-2 text-right">Rate vs previous</th>
 					<th className="py-2 text-right">Lift vs control</th>
 					<th className="py-2 text-right">p-value</th>
@@ -417,13 +422,15 @@ function VariantTable({
 									</span>
 								)}
 							</td>
-							<td className="hidden py-2 text-right text-[color:var(--muted)] md:table-cell">
-								{ci === null ? (
-									<span className="text-[color:var(--faint)]">—</span>
-								) : (
-									`${(ci.low * 100).toFixed(1)}–${(ci.high * 100).toFixed(1)}%`
-								)}
-							</td>
+							{detailed ? (
+								<td className="hidden py-2 text-right text-[color:var(--muted)] md:table-cell">
+									{ci === null ? (
+										<span className="text-[color:var(--faint)]">—</span>
+									) : (
+										`${(ci.low * 100).toFixed(1)}–${(ci.high * 100).toFixed(1)}%`
+									)}
+								</td>
+							) : null}
 							<td className="py-2 text-right">
 								{movements.get(row.key) ? (
 									<DeltaBadge
@@ -573,6 +580,10 @@ export function Experiments({
 	const freshness = useFreshness(apiKey, siteId, range);
 	const [selectedExp, setSelectedExp] = useState<string | null>(null);
 	const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
+	// Defaults to the headline read (verdict + core table): Wilson CIs, the sample-size/MDE note, and
+	// the multiple-comparisons footnote are real statistics but not what a first-time reader needs to
+	// know "did it work" — they're one click away for whoever is checking the test's rigor.
+	const [detailed, setDetailed] = useState(false);
 
 	const expList = experiments.data?.experiments ?? [];
 	const goalList = goals.data?.goals ?? [];
@@ -718,7 +729,18 @@ export function Experiments({
 					<h2 className="text-sm font-medium text-[color:var(--muted)]">
 						Variant results
 					</h2>
-					<ExperimentStatus experiment={experiment} />
+					<div className="flex items-center gap-3">
+						<label className="flex items-center gap-1.5 text-[color:var(--muted)] text-xs">
+							<input
+								type="checkbox"
+								checked={detailed}
+								onChange={(e) => setDetailed(e.target.checked)}
+								className="h-3.5 w-3.5"
+							/>
+							Statistical detail
+						</label>
+						<ExperimentStatus experiment={experiment} />
+					</div>
 				</div>
 				{result.isLoading || !result.data ? (
 					<CardSkeletons count={2} />
@@ -727,7 +749,7 @@ export function Experiments({
 					// (see the hook's placeholderData) — dimmed, so they don't read as current.
 					<div className={result.isPlaceholderData ? 'opacity-60' : undefined}>
 						<ExperimentVerdict variants={result.data.variants} />
-						<SampleSizeNote variants={result.data.variants} />
+						{detailed ? <SampleSizeNote variants={result.data.variants} /> : null}
 						<VariantTable
 							variants={result.data.variants}
 							movements={variantMovements(
@@ -735,13 +757,14 @@ export function Experiments({
 								comparable ? (before.data?.variants ?? null) : null,
 							)}
 							comparable={comparable}
+							detailed={detailed}
 						/>
 						<PeriodComparisonNote
 							experiment={experiment}
 							comparable={comparable}
 							failed={before.isError}
 						/>
-						<StatsFootnote variants={result.data.variants} />
+						{detailed ? <StatsFootnote variants={result.data.variants} /> : null}
 					</div>
 				)}
 			</section>
