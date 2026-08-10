@@ -316,8 +316,8 @@ export function DealsPanel({
 						<EmptyState title={filtering ? 'No deals match' : 'No deals yet'}>
 							{filtering ? (
 								<>
-									Clear {joinFilterNames(activeDealFilters(query, stage, filter))} to
-									see the whole pipeline.
+									Clear {joinFilterNames(activeDealFilters(query, stage, filter))}{' '}
+									to see the whole pipeline.
 								</>
 							) : (
 								<>Add the first opportunity above to start tracking the pipeline.</>

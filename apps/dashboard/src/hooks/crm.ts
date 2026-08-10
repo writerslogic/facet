@@ -8,7 +8,6 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { sessionFetch } from '../api.js';
-import { siteQueryKey } from '../lib/queryKeys.js';
 import {
 	type CompanyAnalytics,
 	type ContactAnalytics,
@@ -19,6 +18,7 @@ import {
 	type PipelineCurrencySummary,
 	crmBlockOf,
 } from '../lib/crm.js';
+import { siteQueryKey } from '../lib/queryKeys.js';
 
 const retry = (failureCount: number, error: unknown): boolean =>
 	crmBlockOf(error) === null && failureCount < 1;

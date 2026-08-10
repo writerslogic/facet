@@ -286,11 +286,7 @@ describe('in-tile drill-down', () => {
 		rerender(
 			<QueryClientProvider client={client}>
 				<DashboardProvider>
-					<ListBody
-						title="Countries"
-						rows={[{ key: 'DE', count: 30 }]}
-						drill={spec()}
-					/>
+					<ListBody title="Countries" rows={[{ key: 'DE', count: 30 }]} drill={spec()} />
 				</DashboardProvider>
 			</QueryClientProvider>,
 		);

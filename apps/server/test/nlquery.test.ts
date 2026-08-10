@@ -143,7 +143,13 @@ describe('answerQuestion pipeline', () => {
 	});
 
 	it('marks a real resolution as not a fallback', async () => {
-		const r = await answerQuestion(env, stub('{"metric":"visitors"}'), S, 'how many visitors', f);
+		const r = await answerQuestion(
+			env,
+			stub('{"metric":"visitors"}'),
+			S,
+			'how many visitors',
+			f,
+		);
 		expect(r.fallback).toBe(false);
 	});
 
