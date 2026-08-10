@@ -44,10 +44,6 @@ export interface Env {
 	ALERT_EMAIL_FROM?: string;
 	/** Workers AI binding, used to translate natural-language analytics questions. */
 	AI: Ai;
-	/** Optional anomaly-alert webhook URL (var). When unset, anomaly webhooks are disabled. */
-	WEBHOOK_URL?: string;
-	/** Optional secret (Worker secret) used to HMAC-sign anomaly webhook payloads. */
-	WEBHOOK_SECRET?: string;
 	/** YOUR deployment's security.txt contact URI (var), e.g. `mailto:security@example.com`. There is
 	 * deliberately no default: until this is set, `/.well-known/security.txt` returns 404 rather than
 	 * publishing someone else's address as this deployment's disclosure contact. */
