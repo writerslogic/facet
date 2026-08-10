@@ -28,6 +28,8 @@ const EXPECTED_TABLES = [
 	'salts',
 	'scheduled_job_runs',
 	'scitt_log',
+	'scitt_mmr_leaves',
+	'scitt_mmr_nodes',
 	'sessions',
 	'site_config',
 	'sites',

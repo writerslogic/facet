@@ -129,6 +129,7 @@ authRoutes.post(
 // query param (direct link click).
 authRoutes.post(
 	'/verify',
+	requireSameOrigin,
 	verifyLimit,
 	vValidator('json', VerifySchema, validationErrorHook),
 	async (c) => {
