@@ -83,7 +83,9 @@ describe('track', () => {
 			sendBeacon: (_url: string, blob: Blob) => {
 				void blob
 					.text()
-					.then((t) => sent.push((JSON.parse(t) as { name?: string }).name ?? 'pageview'));
+					.then((t) =>
+						sent.push((JSON.parse(t) as { name?: string }).name ?? 'pageview'),
+					);
 				return true;
 			},
 		});
