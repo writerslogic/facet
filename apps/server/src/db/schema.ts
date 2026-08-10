@@ -327,6 +327,22 @@ export const scittLog = sqliteTable('scitt_log', {
 	registeredAt: integer('registered_at').notNull(),
 });
 
+// The SCITT log's own MMR, persisted incrementally — same shape as `mmr_nodes`/`mmr_leaves` above but
+// a SEPARATE tree (a different log entirely; node indices are not comparable across the two).
+export const scittMmrNodes = sqliteTable('scitt_mmr_nodes', {
+	nodeIndex: integer('node_index').primaryKey(),
+	hash: text('hash').notNull(),
+});
+
+// Maps each registered statement to its MMR leaf node index (for inclusion proofs). `leafNo` IS the
+// receipt's `entryId` — a 0-based, contiguous sequence number. `scitt_log.entry_id` is NOT used for
+// this: SQLite AUTOINCREMENT never reuses an id after a rolled-back insert, so it can carry gaps that
+// a receipt's "zero-based registration sequence number" must not.
+export const scittMmrLeaves = sqliteTable('scitt_mmr_leaves', {
+	leafNo: integer('leaf_no').primaryKey(),
+	nodeIndex: integer('node_index').notNull(),
+});
+
 // Identity spectrum (U2). All three tables are additive; nothing existing changes, so a site with no
 // `site_config` row behaves byte-for-byte as today (Tier 0, daily-rotating anonymous hash via the
 // legacy `salts` table). Absence of a row is the default everywhere.
