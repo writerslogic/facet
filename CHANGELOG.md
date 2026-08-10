@@ -4,6 +4,17 @@ All notable changes to Facet are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Removed
+
+- **`WEBHOOK_URL`/`WEBHOOK_SECRET` anomaly webhook.** This legacy single-URL webhook ran its own
+  hourly anomaly-detection pass, uncoordinated with the destination-based alerting added later — a
+  deployment with both configured double-evaluated and double-alerted on the same anomaly, and the
+  legacy path had no SSRF hardening on the configured target. Register an equivalent `webhook`
+  destination per site instead (see `docs/self-hosting.md`'s Anomaly alerting section); the payload
+  shape and signature header differ from the removed path.
+
 ## [0.6.0] - 2026-07-23
 
 ### Added
