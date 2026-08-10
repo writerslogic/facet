@@ -9,7 +9,7 @@ import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv, Env } from '../env.js';
 import { type Role, SESSION_COOKIE, roleAtLeast, sessionUser, siteRole } from './accounts.js';
-import { type ApiKeyScope, hashKey, parseScopes } from './apikeys.js';
+import { type ApiKeyScope, hashKey, keyScopes } from './apikeys.js';
 import { constantTimeEqualHex, sha256Hex } from './crypto.js';
 import { ApiError } from './http.js';
 
@@ -40,7 +40,7 @@ export async function authenticateKeyDetails(
 	}
 	const keyHash = await hashKey(key);
 	const row = await db(env)
-		.select({ siteId: schema.apiKeys.siteId, scopes: schema.apiKeys.scopes })
+		.select({ id: schema.apiKeys.id, siteId: schema.apiKeys.siteId })
 		.from(schema.apiKeys)
 		.where(eq(schema.apiKeys.keyHash, keyHash))
 		.get();
@@ -55,7 +55,7 @@ export async function authenticateKeyDetails(
 	} catch {
 		// last_used is best-effort telemetry; never fail auth because the bump failed.
 	}
-	return { siteId: row.siteId, scopes: parseScopes(row.scopes) };
+	return { siteId: row.siteId, scopes: await keyScopes(env, row.id) };
 }
 
 export function requireApiScope(scope: ApiKeyScope): MiddlewareHandler<AppEnv> {
