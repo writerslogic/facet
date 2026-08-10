@@ -69,7 +69,13 @@ exist before the deploy binds to it:
 
 ```sh
 wrangler queues create facet-ingest
+wrangler queues create facet-ingest-dlq
 ```
+
+`facet-ingest-dlq` is the dead-letter queue: a message that still fails after `max_retries` lands
+there instead of being dropped. Nothing reads it automatically — it exists so a poisoned message is
+inspectable (`wrangler queues consumer add facet-ingest-dlq <worker>` if you want to process it, or
+pull messages with the Cloudflare dashboard/API).
 
 Cloudflare Queues requires the **Workers Paid** plan. On the free plan, comment the `queues` block
 out of `apps/server/wrangler.jsonc` instead — with no `INGEST_QUEUE` binding the beacon writes to D1
