@@ -127,6 +127,13 @@
       "when": 1786317684505,
       "tag": "0018_free_stone_men",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1786323924978,
+      "tag": "0019_pink_dormammu",
+      "breakpoints": true
     }
   ]
 }
