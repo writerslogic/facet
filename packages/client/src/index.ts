@@ -13,6 +13,11 @@ export interface FacetConfig {
 
 let Config: FacetConfig | undefined;
 
+// track() calls made before init() (a plausible ordering for programmatic `import { track, init }`
+// use) used to silently drop the event since Config was undefined. Buffer them here and replay in
+// call order once init() sets Config, instead of losing them.
+let preInitQueue: Array<{ name?: string; props?: EventProps }> = [];
+
 // Must match CollectPayloadSchema's utm.source/medium/campaign v.maxLength(200) in
 // packages/shared/src/schemas.ts. The server validates the WHOLE payload and rejects it outright
 // on any field over this bound (no per-field stripping), so an untruncated value from a
@@ -61,7 +66,11 @@ function viewport(): { screen?: string; orientation?: string; dpr?: string } {
 export function track(_name?: string, _props?: EventProps): void {
 	// Only a DELIBERATE opt-out suppresses the anonymous, cookieless pageview/event — a passive GPC/DNT
 	// signal does not, so total traffic stays accurately counted (see isExplicitlyOptedOut).
-	if (!Config || isExplicitlyOptedOut()) return;
+	if (isExplicitlyOptedOut()) return;
+	if (!Config) {
+		preInitQueue.push({ name: _name, props: _props });
+		return;
+	}
 	const { host, siteId } = Config;
 	const hostname = typeof location !== 'undefined' ? location.hostname : '';
 	const path = typeof location !== 'undefined' ? location.pathname : '/';
@@ -103,6 +112,11 @@ export function purchase(revenue: number, currency = 'USD', props?: EventProps):
 /** Configure the tracker (host + site id). Called by the auto-init shim. */
 export function init(_config_: FacetConfig): void {
 	Config = _config_;
+	// Config is assigned above, so a track() call made from inside this flush (or triggered
+	// re-entrantly while it runs) resolves immediately instead of re-queuing.
+	const queued = preInitQueue;
+	preInitQueue = [];
+	for (const { name, props } of queued) track(name, props);
 }
 
 /** The active config, or undefined before init(). Used by the experiments module. */

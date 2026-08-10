@@ -89,14 +89,17 @@ export interface DeriveInputs {
 
 /** Build the hash pre-image for a tier. Tier < identified is the legacy `ip|ua|salt|siteId`; the
  * identified pre-image is `uid:<uid>|salt|siteId` — the `uid:` prefix guarantees it can never equal
- * an anonymous pre-image (no forged collision between an identified user and an anonymous visitor). */
+ * an anonymous pre-image (no forged collision between an identified user and an anonymous visitor).
+ * REQUIRED: `identified` MUST carry a `uid` — thrown here, not just guarded at call sites, so a
+ * missing uid can't silently downgrade to the anonymous pre-image under an `identified` label. */
 export function buildPreimage(
 	tier: IdentityTier,
 	inputs: DeriveInputs,
 	salt: string,
 	siteId: string,
 ): string {
-	if (tier === 'identified' && inputs.uid) {
+	if (tier === 'identified') {
+		if (!inputs.uid) throw new Error('buildPreimage: identified tier requires a uid');
 		return [`uid:${inputs.uid}`, salt, siteId].join(HASH_DELIMITER);
 	}
 	return [inputs.ip, inputs.ua, salt, siteId].join(HASH_DELIMITER);
@@ -104,7 +107,7 @@ export function buildPreimage(
 
 /** Derive the 64-hex visitor hash for a tier. For `anonymous`/`pseudonymous` this is identical to
  * `visitorHash(ip, ua, salt, siteId)`, so the Tier-0 path is a proven no-op. */
-export function deriveVisitorHash(
+export async function deriveVisitorHash(
 	tier: IdentityTier,
 	inputs: DeriveInputs,
 	salt: string,

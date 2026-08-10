@@ -1,5 +1,6 @@
 import { applyD1Migrations, env, reset } from 'cloudflare:test';
 import { beforeEach } from 'vitest';
+import { __resetIngestDedupForTests } from '../src/lib/ingest.js';
 
 // pool-workers 0.18 isolates storage per test file, not per test (the old `isolatedStorage`).
 // Restore per-test isolation: wipe all binding storage and re-apply migrations before each test,
@@ -13,4 +14,7 @@ beforeEach(async () => {
 	await reset();
 	await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);
 	await applyD1Migrations(env.CRM_DB, env.TEST_CRM_MIGRATIONS);
+	// Same isolate-reuse problem as storage: ingest.ts's dedup guard is module-scope state, so it
+	// leaks across tests in one file too.
+	__resetIngestDedupForTests();
 });

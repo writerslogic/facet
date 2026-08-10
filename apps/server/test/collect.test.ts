@@ -31,11 +31,11 @@ function post(body: string, headers: Record<string, string> = {}) {
 	);
 }
 
-function validPayload(siteId: string) {
+function validPayload(siteId: string, path = '/pricing') {
 	return JSON.stringify({
 		site_id: siteId,
 		hostname: 'example.com',
-		path: '/pricing',
+		path,
 		referrer: '',
 	});
 }
@@ -153,8 +153,9 @@ describe('POST /api/collect', () => {
 	});
 
 	it('counts repeat visits in a day as many events but one session', async () => {
-		await post(validPayload(SITE_REP));
-		await post(validPayload(SITE_REP));
+		// Different paths: two genuinely distinct pageviews, not two beacons of the same content.
+		await post(validPayload(SITE_REP, '/pricing'));
+		await post(validPayload(SITE_REP, '/docs'));
 		expect(await eventCount(SITE_REP)).toBe(2);
 		const session = await env.DB.prepare(
 			'SELECT count(*) as count FROM sessions WHERE site_id = ?',
@@ -162,5 +163,12 @@ describe('POST /api/collect', () => {
 			.bind(SITE_REP)
 			.first<{ count: number }>();
 		expect(session?.count).toBe(1);
+	});
+
+	it('collapses two back-to-back identical beacons (client double-boot) into one event', async () => {
+		const SITE_DUP = '66666666-6666-4666-8666-666666666666';
+		await post(validPayload(SITE_DUP, '/checkout'));
+		await post(validPayload(SITE_DUP, '/checkout'));
+		expect(await eventCount(SITE_DUP)).toBe(1);
 	});
 });

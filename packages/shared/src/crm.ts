@@ -242,7 +242,9 @@ const DealFieldsSchema = v.object(dealFields);
  * summed into a pipeline total, and a currency with no value names nothing. Shared by create and
  * update so the two can never drift on what "paired" means. */
 function moneyIsPaired<T extends { value?: number; currency?: string }>(b: T): boolean {
-	return Boolean(b.value) === Boolean(b.currency);
+	// `Boolean(b.value)` would reject `value: 0` as absent — 0 is a valid deal amount (see `dealFields`
+	// above), so presence must be checked against `undefined`, not truthiness.
+	return (b.value !== undefined) === (b.currency !== undefined);
 }
 
 /** Create a deal. The name is required and is the display value, matching `CompanyCreateSchema`. */

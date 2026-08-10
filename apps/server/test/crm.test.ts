@@ -1283,6 +1283,38 @@ describe('a patch cannot strip a contact of every identifier', () => {
 			contact: { email: null, name: 'Ada' },
 		});
 	});
+
+	it('two concurrent PATCHes cannot each pass a stale check and together zero every identifier', async () => {
+		// Each PATCH below is individually valid: clearing email is fine while name survives, and
+		// clearing name is fine while email survives. A check-then-act guard reading its snapshot before
+		// either write commits would pass both, leaving the contact with none of the three. The fix
+		// folds the check into the UPDATE's own WHERE clause so whichever write commits second sees the
+		// first one's result and is refused.
+		const cookie = await operator(env, 'admin@example.com', 'admin');
+		const contact = await createContact(env, cookie, { name: 'Ada', email: 'ada@example.com' });
+		const [resA, resB] = await Promise.all([
+			crm(
+				env,
+				`/contacts/${contact.id}`,
+				{ method: 'PATCH', body: JSON.stringify({ email: '' }) },
+				cookie,
+			),
+			crm(
+				env,
+				`/contacts/${contact.id}`,
+				{ method: 'PATCH', body: JSON.stringify({ name: '' }) },
+				cookie,
+			),
+		]);
+		expect([resA.status, resB.status]).toContain(400);
+		const after = await crm(env, `/contacts/${contact.id}`, {}, cookie);
+		const body = (await after.json()) as {
+			contact: { email: string | null; name: string | null; external_user_id: string | null };
+		};
+		expect(
+			body.contact.email || body.contact.name || body.contact.external_user_id,
+		).toBeTruthy();
+	});
 });
 
 describe('the foreign key is a real constraint, not a comment', () => {

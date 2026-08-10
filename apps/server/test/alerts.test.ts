@@ -308,6 +308,10 @@ describe('SSRF policy', () => {
 		['https://[::ffff:127.0.0.1]/x', 'private_address'],
 		['https://[fd00::1]/x', 'private_address'],
 		['https://[fe80::1]/x', 'private_address'],
+		// 6to4/Teredo embed an arbitrary client IPv4 in the address; these wrap the cloud-metadata
+		// address and the loopback address respectively, so both must still be refused.
+		['https://[2002:a9fe:a9fe::]/x', 'private_address'],
+		['https://[2001::80ff:fffe]/x', 'private_address'],
 		['https://localhost/x', 'blocked_host'],
 		['https://metadata.google.internal/x', 'blocked_host'],
 		['https://foo.internal/x', 'blocked_host'],
@@ -324,6 +328,11 @@ describe('SSRF policy', () => {
 		expect(checkWebhookUrl(HOOK)).toBeNull();
 		expect(checkWebhookUrl('https://hooks.example.com:443/x')).toBeNull();
 		expect(checkWebhookUrl('https://8.8.8.8/x')).toBeNull();
+	});
+
+	it('allows 6to4/Teredo wrapping a public IPv4 (proves the unwrap checks the embedded address, not just the prefix)', () => {
+		expect(checkWebhookUrl('https://[2002:808:808::]/x')).toBeNull();
+		expect(checkWebhookUrl('https://[2001::f7f7:f7f7]/x')).toBeNull();
 	});
 
 	it('refuses to store a blocked URL, without echoing the URL back', async () => {

@@ -21,6 +21,34 @@ import {
 } from './identity.js';
 import { dayKey, getDailySalt } from './salt.js';
 
+const DEDUP_WINDOW_MS = 5000;
+const DEDUP_MAX_ENTRIES = 2000;
+
+/** In-isolate, best-effort guard against a client SDK double-boot firing the same beacon twice —
+ * NOT a substitute for the queue-redelivery idempotency below, which is unconditional. Content-
+ * keyed and unpersisted, so it only catches a repeat the same isolate happens to see, and it runs
+ * AFTER hash derivation, so it suppresses the duplicate row, not the reads that produced the hash. */
+const recentContentKeys = new Map<string, number>();
+
+function isDuplicateContent(input: IngestInput, vh: string): boolean {
+	const bucket = Math.floor(input.now / DEDUP_WINDOW_MS);
+	const key = `${input.siteId}|${vh}|${input.path}|${input.name ?? ''}|${bucket}`;
+	if (recentContentKeys.size > DEDUP_MAX_ENTRIES) {
+		for (const [k, t] of recentContentKeys) {
+			if (input.now - t > DEDUP_WINDOW_MS * 2) recentContentKeys.delete(k);
+		}
+	}
+	if (recentContentKeys.has(key)) return true;
+	recentContentKeys.set(key, input.now);
+	return false;
+}
+
+/** pool-workers reuses the isolate (and this module's state) across tests in one file, so
+ * apply-migrations.ts's per-test reset calls this too. */
+export function __resetIngestDedupForTests(): void {
+	recentContentKeys.clear();
+}
+
 export interface IngestInput {
 	siteId: string;
 	/** Raw IP, used only to derive the visitor hash. Never stored, logged, or returned. */
@@ -63,6 +91,14 @@ export interface IngestInput {
 	consent?: boolean;
 }
 
+/** The anonymous Tier-0 day hash — the fallback for a GPC visitor, a zero-config site, and any
+ * elevated event that cannot or does not qualify for elevation. Never dropped. */
+function anonymousFallback(env: Env, input: IngestInput, dk: string): Promise<string> {
+	return getDailySalt(env, dk, input.now).then((salt) =>
+		visitorHash(input.ip, input.ua, salt, input.siteId),
+	);
+}
+
 /** Derive the visitor hash under the site's identity policy. Tier 0 is the legacy day-salt path,
  * byte-for-byte unchanged. Above Tier 0, elevation happens ONLY when an active, deployment-key-signed,
  * context-bound consent record exists for the derived per-window hash; otherwise the event silently
@@ -76,8 +112,14 @@ async function deriveForIngest(
 	dk: string,
 ): Promise<string> {
 	if (policy.tier === 'anonymous' || input.gpc) {
-		const salt = await getDailySalt(env, dk, input.now);
-		return visitorHash(input.ip, input.ua, salt, input.siteId);
+		return anonymousFallback(env, input, dk);
+	}
+	const uid = policy.tier === 'identified' && input.consent === true ? (input.uid ?? null) : null;
+	// An identified event with no uid can never match a consent record (those are always uid-derived,
+	// per `buildPreimage`'s invariant), so it skips straight to Tier-0 without minting a scoped salt
+	// it would never use.
+	if (policy.tier === 'identified' && !uid) {
+		return anonymousFallback(env, input, dk);
 	}
 	const wk = windowKey(policy.window, input.now);
 	const scope = `${input.siteId}:${policy.window}:${wk}`;
@@ -88,7 +130,6 @@ async function deriveForIngest(
 		windowEndMs(policy.window, input.now),
 		input.now,
 	);
-	const uid = policy.tier === 'identified' && input.consent === true ? (input.uid ?? null) : null;
 	const vh = await deriveVisitorHash(
 		policy.tier,
 		{ ip: input.ip, ua: input.ua, uid },
@@ -103,9 +144,7 @@ async function deriveForIngest(
 		now: input.now,
 	});
 	if (consent) return vh;
-	// Downgrade this event to the anonymous Tier-0 day hash. Never dropped.
-	const daySalt = await getDailySalt(env, dk, input.now);
-	return visitorHash(input.ip, input.ua, daySalt, input.siteId);
+	return anonymousFallback(env, input, dk);
 }
 
 /** A fully-derived, IP-free event ready to persist — the queue message shape. The raw IP is consumed
@@ -129,6 +168,9 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 	const dk = dayKey(input.now);
 	const policy = await resolvePolicy(env, input.siteId);
 	const vh = await deriveForIngest(env, input, policy, dk);
+	if (isDuplicateContent(input, vh)) {
+		return null;
+	}
 	const utm = {
 		source: input.utm?.source ?? null,
 		medium: input.utm?.medium ?? null,
@@ -183,7 +225,7 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 	// still touches no database and its result is still safe to enqueue.
 	writeEvent(env, row);
 	// The id is minted HERE (not at insert) so an at-least-once queue redelivery re-inserts the same id
-	// as a no-op — the persist path is idempotent, so a retry can never duplicate the event.
+	// as a no-op — the persist path is idempotent, so a queue retry can never duplicate the event.
 	return {
 		id: crypto.randomUUID(),
 		row,

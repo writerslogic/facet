@@ -38,7 +38,7 @@ import { DAY_MS, MAX_RANGE_DAYS, REALTIME_WINDOW_MS } from '../lib/constants.js'
 import { renderDigest, sanitizeKey } from '../lib/digest.js';
 import { ApiError } from '../lib/http.js';
 import { createLogger } from '../lib/log.js';
-import { rateLimit } from '../lib/ratelimit.js';
+import { enforceRateLimit, rateLimit } from '../lib/ratelimit.js';
 
 export const mcpRoutes = new Hono<AppEnv>();
 
@@ -53,6 +53,10 @@ const PROTOCOL_VERSION = '2025-06-18';
  * multi-tenant availability control, not just hygiene. `/api/collect` sets its own for the same
  * reason (see `app.ts`); this route is mounted after that middleware and needs its own. */
 const MCP_MAX_BODY_BYTES = 16_384;
+
+/** Extra rate-limit hits `get_digest` charges beyond the one every tool call already pays, so it costs
+ * roughly what its eleven-query fan-out is worth rather than one flat per-request charge. */
+const GET_DIGEST_EXTRA_CHARGES = 3;
 
 /** JSON-RPC 2.0 error codes used here. -32000 is the reserved implementation-defined range. */
 const PARSE_ERROR = -32700;
@@ -417,6 +421,15 @@ mcpRoutes.post(
 						? (params.arguments as Record<string, unknown>)
 						: {};
 				try {
+					// get_digest fans out to eleven queries per rate-limit hit; charge the extra so it
+					// can't buy 11x the query volume of every other tool for the same per-site budget.
+					if (name === 'get_digest') {
+						await Promise.all(
+							Array.from({ length: GET_DIGEST_EXTRA_CHARGES }, () =>
+								enforceRateLimit(c, `mcp:${siteId}`),
+							),
+						);
+					}
 					return c.json(ok(id, await callTool(c.env, siteId, name, args)), 200);
 				} catch (error) {
 					// A tool failure is a RESULT with isError, not a JSON-RPC error: the distinction
