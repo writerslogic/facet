@@ -5,7 +5,7 @@
 
 import type { ExperimentResult } from '@facet/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -113,6 +113,14 @@ function renderExperiments() {
 	);
 }
 
+/** Renders and switches on the "Statistical detail" toggle — the CI column, sample-size note, and
+ * multiple-comparisons footnote are all gated behind it and hidden by default. */
+function renderDetailed() {
+	const result = renderExperiments();
+	fireEvent.click(screen.getByRole('checkbox', { name: /statistical detail/i }));
+	return result;
+}
+
 beforeEach(() => {
 	experimentsMock.mockReturnValue(experiments());
 	resultMock.mockReturnValue({ data: { variants: SIGNIFICANT } });
@@ -214,21 +222,30 @@ describe('Experiments', () => {
 		expect(screen.getByText('+50.0%')).toBeInTheDocument();
 	});
 
-	it('shows a 95% confidence interval per variant', () => {
+	it('hides the statistical detail (CI, sample-size note, multi-comparison footnote) by default', () => {
 		renderExperiments();
+		expect(screen.queryByText('95% CI')).not.toBeInTheDocument();
+		expect(screen.queryByText(/can only resolve a gap/)).not.toBeInTheDocument();
+		// The headline verdict and the core table are NOT gated — only the deeper stats layer is.
+		expect(screen.getByText(/is winning/)).toBeInTheDocument();
+		expect(screen.getByText('Exposures')).toBeInTheDocument();
+	});
+
+	it('shows a 95% confidence interval per variant once detail is switched on', () => {
+		renderDetailed();
 		expect(screen.getByText('95% CI')).toBeInTheDocument();
 		expect(screen.getByText('8.3–12.0%')).toBeInTheDocument();
 		expect(screen.getByText('12.9–17.3%')).toBeInTheDocument();
 	});
 
-	it('states the resolution of the sample collected so far', () => {
-		renderExperiments();
+	it('states the resolution of the sample collected so far, once detail is switched on', () => {
+		renderDetailed();
 		// 1,000 exposures per arm at a 10% control rate resolves ~3.8 points (~38% relative).
 		expect(screen.getByText(/can only resolve a gap/)).toHaveTextContent('3.8 points');
 		expect(screen.getByText(/can only resolve a gap/)).toHaveTextContent('38% relative');
 	});
 
-	it('says how many more exposures an unresolved difference needs', () => {
+	it('says how many more exposures an unresolved difference needs, once detail is switched on', () => {
 		// 10% vs 11% on 400 exposures each: nowhere near separable yet.
 		resultMock.mockReturnValue({
 			data: {
@@ -238,7 +255,7 @@ describe('Experiments', () => {
 				],
 			},
 		});
-		renderExperiments();
+		renderDetailed();
 		const note = screen.getByText(/Confirming the gap now showing/);
 		expect(note).toHaveTextContent('14,751 exposures per variant');
 		expect(note).toHaveTextContent('14,351 more each');
@@ -288,7 +305,7 @@ describe('Experiments', () => {
 				],
 			},
 		});
-		renderExperiments();
+		renderDetailed();
 		const verdict = screen.getByText(/is ahead/);
 		expect(verdict).toHaveTextContent('Bonferroni-adjusted bar here is 0.0250');
 		expect(screen.getByText('unadjusted')).toBeInTheDocument();
