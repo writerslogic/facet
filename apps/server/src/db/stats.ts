@@ -309,8 +309,11 @@ export async function revenueByChannel(env: Env, f: StatsFilter, limit = 12): Pr
 	}));
 }
 
-/** Cap on events scanned for attribution — a heavier read, so it is bounded for very high-volume ranges
- * (the newest events are kept). */
+/** Cap on events scanned for attribution — a heavier read, so it is bounded for very high-volume
+ * ranges. Ordered by (visitor, time), NOT recency: the grouping loop needs each visitor-day's
+ * touches complete and chronological to credit first/last touch correctly. A `desc(createdAt)`
+ * order would look like it "keeps the newest" but would actually truncate journeys mid-day; this
+ * order instead drops only whole visitor-days, all but the one straddling the cap. */
 const ATTRIBUTION_MAX_EVENTS = 50000;
 
 /** Multi-touch attribution: build each visitor's within-day channel path (identity is only stable inside
@@ -506,6 +509,11 @@ export async function channels(env: Env, f: StatsFilter): Promise<CountRow[]> {
  * response never grows with the range — the SQL over `sessions` is unbounded, so we window it here. */
 const COHORT_MAX_PERIODS = 12;
 
+/** Cap on (visitor, day_key) rows scanned for the retention triangle — same defensive bound as
+ * `ATTRIBUTION_MAX_EVENTS`, for a very wide range. Ordered oldest-first so a truncated range drops
+ * only the newest cohorts, which haven't had time to show multi-period retention anyway. */
+const COHORT_MAX_ROWS = 100_000;
+
 const SALT_WINDOW_NOTE =
 	'Retention depth is bounded by the site salt window: a visitor_hash is stable only within one ' +
 	'window (default: daily). At the daily window a returning person gets a new hash each day, so ' +
@@ -562,7 +570,9 @@ export async function cohortRetention(
 				gte(schema.sessions.firstSeen, f.start),
 				lt(schema.sessions.firstSeen, f.end),
 			),
-		);
+		)
+		.orderBy(schema.sessions.firstSeen)
+		.limit(COHORT_MAX_ROWS);
 
 	if (rows.length === 0) {
 		return { period, cohorts: [], note: SALT_WINDOW_NOTE };

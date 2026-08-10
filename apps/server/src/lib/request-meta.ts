@@ -28,7 +28,7 @@ export function device(userAgent: string): 'mobile' | 'tablet' | 'desktop' {
 	if (/\bipad\b|\btablet\b/i.test(userAgent)) {
 		return 'tablet';
 	}
-	if (/\b(mobi|android|iphone)\b/i.test(userAgent)) {
+	if (/\b(?:mobile|android|iphone)\b|mobi/i.test(userAgent)) {
 		return 'mobile';
 	}
 	return 'desktop';
