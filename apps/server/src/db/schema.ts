@@ -203,10 +203,24 @@ export const apiKeys = sqliteTable(
 		label: text('label'),
 		createdAt: integer('created_at').notNull(),
 		lastUsed: integer('last_used'),
-		// Comma-separated fixed allowlist. Existing keys migrate to all scopes for compatibility.
-		scopes: text('scopes').notNull().default('read,write,consent'),
 	},
 	(t) => [index('idx_apikeys_site').on(t.siteId)],
+);
+
+/** One row per (key, granted scope) — normalized out of `apiKeys.scopes`'s former comma-separated
+ * string so a scope is a real value, not a substring match. `scope` stays fixed-allowlist text
+ * (validated in app code against `API_KEY_SCOPES`) rather than a foreign key to a scopes table:
+ * the allowlist is a closed set that changes with a code deploy, not runtime data. */
+export const apiKeyScopes = sqliteTable(
+	'api_key_scopes',
+	{
+		apiKeyId: text('api_key_id').notNull(),
+		scope: text('scope').notNull(),
+	},
+	(t) => [
+		primaryKey({ columns: [t.apiKeyId, t.scope] }),
+		index('idx_apikeyscopes_key').on(t.apiKeyId),
+	],
 );
 
 /** Durable cron heartbeat. Readiness and operators can distinguish "the Worker answers" from
