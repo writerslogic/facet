@@ -71,6 +71,32 @@ describe('index math (draft reference values)', () => {
 			expect(indexHeight(i)).toBe(indexHeightBig(i));
 		}
 	});
+
+	// peakIndices used to derive its highest-peak size via `Math.log2`, which agrees with an exact
+	// doubling loop for every small tree — the divergence only appears once float rounding in
+	// `Math.log2(s + 1)` misjudges the power of two, which starts at s = 2^49 - 2 (verified empirically:
+	// the old formula returned `highest = 562949953421311`, one more than `s` itself, which would have
+	// driven the peak-decomposition remainder negative).
+	function peakIndicesBig(count: number): number[] {
+		let peak = 0n;
+		const out: number[] = [];
+		let s = BigInt(count);
+		while (s !== 0n) {
+			let p = 1n;
+			while (p * 2n <= s + 1n) p *= 2n;
+			const highest = p - 1n;
+			peak += highest;
+			out.push(Number(peak - 1n));
+			s -= highest;
+		}
+		return out;
+	}
+
+	it('peak_indices agrees with a BigInt reference past the Math.log2 float boundary', () => {
+		for (const count of [2 ** 49 - 2, 2 ** 49 - 1, 2 ** 49, 2 ** 50 - 2, 2 ** 52 - 4]) {
+			expect(peakIndices(count)).toEqual(peakIndicesBig(count));
+		}
+	});
 });
 
 describe('MMR inclusion', () => {
