@@ -125,6 +125,30 @@ describe('buildSessions', () => {
 		expect(s?.durationMs).toBe(6 * MIN);
 	});
 
+	it('merges a session that spans midnight instead of splitting or double-counting it', async () => {
+		// A chain of sub-timeout gaps (20/25/20 min) starting the evening before DAY, so the true
+		// session start is further back than a single SESSION_TIMEOUT_MS lookback would reach.
+		const PREV_DAY = '2025-12-31';
+		const at = [T0 - 60 * MIN, T0 - 40 * MIN, T0 - 15 * MIN, T0 + 5 * MIN];
+		for (const [i, ts] of at.entries()) {
+			await ev({ visitor: 'spanner', path: `/p${i}`, name: null, channel: 'direct', at: ts });
+		}
+
+		// Simulate the real cron order: the previous day's own run happens first (writing a truncated
+		// view), then this day's run, which must correct it in place rather than add a second row.
+		await buildSessions(env, PREV_DAY);
+		const written = await buildSessions(env, DAY);
+		expect(written).toBe(1);
+
+		const rows = await sessionRows();
+		expect(rows.length).toBe(1);
+		expect(rows[0]?.startedAt).toBe(at[0]);
+		expect(rows[0]?.dayKey).toBe(PREV_DAY);
+		expect(rows[0]?.pageviews).toBe(4);
+		expect(rows[0]?.entryPath).toBe('/p0');
+		expect(rows[0]?.exitPath).toBe('/p3');
+	});
+
 	it('is idempotent — re-running yields identical rows', async () => {
 		await ev({
 			visitor: 'v1',

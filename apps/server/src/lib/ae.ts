@@ -89,6 +89,14 @@ export const MAX_BLOBS = 20;
 export const MAX_BLOB_BYTES = 16 * 1024;
 export const MAX_DOUBLES = 20;
 
+// A future field appended past the limit would silently truncate every write instead of failing,
+// so catch it at import time rather than in production traffic.
+if (BLOB_SCHEMA.length > MAX_BLOBS) {
+	throw new Error(
+		`ae: BLOB_SCHEMA has ${BLOB_SCHEMA.length} slots, exceeds Analytics Engine's ${MAX_BLOBS}-blob limit`,
+	);
+}
+
 /**
  * How long Analytics Engine keeps a data point. Cloudflare documents it as "three months" and offers
  * no delete API — a written point cannot be purged early, by Facet or by the operator.
