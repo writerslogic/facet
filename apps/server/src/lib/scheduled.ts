@@ -11,7 +11,6 @@ import { runRollups } from './rollups.js';
 import { dayKey } from './salt.js';
 import { buildSessions } from './sessions.js';
 import { runTransparency } from './transparency.js';
-import { notifyAnomalies } from './webhook.js';
 
 /** A unit of scheduled work: a stable name and an idempotent run function. */
 export interface ScheduledJob {
@@ -44,11 +43,6 @@ registerJob({
 	run: async (env, now) => {
 		await enforceCrmAuditRetention(env, now);
 	},
-});
-// Optional: deliver anomaly-alert webhooks. No-op unless WEBHOOK_URL is configured.
-registerJob({
-	name: 'anomaly-alerts',
-	run: (env, now) => notifyAnomalies(env, now),
 });
 // Optional: maintain the MMR transparency log + signed checkpoint. No-op unless FACET_SIGNING_JWK is set.
 registerJob({
