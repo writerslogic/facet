@@ -53,7 +53,8 @@ export async function insertEvent(env: Env, row: NewEvent): Promise<string> {
 			...row,
 			id,
 			props: row.props ? JSON.stringify(row.props) : null,
-		});
+		})
+		.onConflictDoNothing();
 	return id;
 }
 

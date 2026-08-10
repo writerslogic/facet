@@ -101,10 +101,21 @@
   // Ingest queue: the beacon enqueues a derived (IP-free) event and returns immediately; a consumer
   // batches the D1 writes off the hot path. At-least-once with idempotent inserts (id minted at derive
   // time + onConflictDoNothing), so a retried batch can never duplicate an event.
+  //
+  // `dead_letter_queue` catches whatever still fails after `max_retries`: the consumer (src/index.ts)
+  // already isolates one poisoned message from the rest of its batch, so what lands here is a message
+  // that fails on its own, every time — worth inspecting, not silently dropped. Requires the queue to
+  // exist first: `wrangler queues create facet-ingest-dlq` (see docs/self-hosting.md).
   "queues": {
     "producers": [{ "binding": "INGEST_QUEUE", "queue": "facet-ingest" }],
     "consumers": [
-      { "queue": "facet-ingest", "max_batch_size": 100, "max_batch_timeout": 5, "max_retries": 3 }
+      {
+        "queue": "facet-ingest",
+        "max_batch_size": 100,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "facet-ingest-dlq"
+      }
     ]
   },
 
