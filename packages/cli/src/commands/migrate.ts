@@ -2,12 +2,16 @@
 
 import { type SpawnOptions, spawn } from 'node:child_process';
 import { parseArgs } from 'node:util';
+import { printError } from '../util.js';
 
 type SpawnLike = (
 	command: string,
 	args: string[],
 	options: SpawnOptions,
-) => { on(event: 'close', listener: (code: number | null) => void): void };
+) => {
+	on(event: 'close', listener: (code: number | null) => void): void;
+	on(event: 'error', listener: (err: Error) => void): void;
+};
 
 export function runMigrate(args: string[], spawnImpl: SpawnLike = spawn): Promise<number> {
 	const { values } = parseArgs({
@@ -24,6 +28,13 @@ export function runMigrate(args: string[], spawnImpl: SpawnLike = spawn): Promis
 
 	return new Promise((resolve) => {
 		const child = spawnImpl('wrangler', argv, { stdio: 'inherit' });
+		// Without this, a missing `wrangler` binary (not installed / not on PATH) throws an
+		// uncaught ENOENT and dumps a raw Node stack trace instead of an actionable message.
+		child.on('error', (err) => {
+			printError(`could not run wrangler: ${err.message}`);
+			printError('is wrangler installed and on PATH? try `pnpm install` at the repo root.');
+			resolve(1);
+		});
 		child.on('close', (code) => resolve(code ?? 0));
 	});
 }
