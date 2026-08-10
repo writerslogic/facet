@@ -48,7 +48,6 @@ import {
 	DealUpdateSchema,
 } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
-import { eq } from 'drizzle-orm';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { every } from 'hono/combine';
@@ -88,10 +87,8 @@ import {
 	updateContact,
 	updateDeal,
 } from '../db/crm.js';
-import { db } from '../db/queries.js';
-import * as schema from '../db/schema.js';
 import type { AppEnv, Env } from '../env.js';
-import { type Role, emailsByUserId } from '../lib/accounts.js';
+import { type Role, emailsByUserId, userExists } from '../lib/accounts.js';
 import { requireTeamRole } from '../lib/auth.js';
 import {
 	eraseConsentByExternalUserId,
@@ -212,12 +209,7 @@ async function loadContact(env: Env, siteId: string, id: string): Promise<Contac
 async function assertOwnerExists(env: Env, ownerUserId: string | undefined): Promise<void> {
 	const id = ownerUserId?.trim();
 	if (!id) return;
-	const user = await db(env)
-		.select({ id: schema.users.id })
-		.from(schema.users)
-		.where(eq(schema.users.id, id))
-		.get();
-	if (!user) {
+	if (!(await userExists(env, id))) {
 		throw new ApiError('unknown_owner', 400, 'owner_user_id does not match a known user');
 	}
 }
