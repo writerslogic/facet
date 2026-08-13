@@ -37,11 +37,29 @@ export function retentionDays(env: Env): number {
 	return Number.isInteger(days) && days >= 1 ? days : DEFAULT_RAW_RETENTION_DAYS;
 }
 
-/** Purge raw rows older than `RAW_RETENTION_DAYS` (falling back to the default when unset/NaN). */
+/**
+ * Purge raw rows older than `RAW_RETENTION_DAYS` (falling back to the default when unset/NaN).
+ *
+ * Each delete is isolated in its own try/catch: `events` is the largest table and the most likely to
+ * hit a transient D1 error, and it must never be able to block the salt/identity-salt deletes below it
+ * — those are what irreversibly sever the hash→input mapping the retention window promises, and a
+ * privacy-critical purge silently skipping every run because an unrelated table's delete threw would
+ * defeat that promise. Every statement always runs; failures are collected and re-thrown together at
+ * the end so the caller (`runScheduled`) still sees and logs the job as failed.
+ */
 export async function enforceRetention(env: Env, now: number): Promise<void> {
 	const cutoff = now - retentionDays(env) * DAY_MS;
-	await db(env).delete(schema.events).where(lt(schema.events.createdAt, cutoff));
-	await db(env).delete(schema.sessions).where(lt(schema.sessions.firstSeen, cutoff));
+	const errors: unknown[] = [];
+	const purge = async (fn: () => Promise<unknown>): Promise<void> => {
+		try {
+			await fn();
+		} catch (err) {
+			errors.push(err);
+		}
+	};
+
+	await purge(() => db(env).delete(schema.events).where(lt(schema.events.createdAt, cutoff)));
+	await purge(() => db(env).delete(schema.sessions).where(lt(schema.sessions.firstSeen, cutoff)));
 	// The OTHER session table. `sessions` is the per-day dedupe key behind the visitor count;
 	// `event_sessions` is the materialized visit the cron folds out of raw events, and it carries the
 	// visitor hash alongside entry path, exit path, duration and bounce. Purging the first and not the
@@ -52,15 +70,21 @@ export async function enforceRetention(env: Env, now: number): Promise<void> {
 	// what it summarises: present exactly while the events it was folded from are. `ended_at` would
 	// invert that — a visit straddling the cutoff would keep an aggregate counting rows that are gone.
 	// It is also the same key by the same reasoning as `sessions.first_seen` directly above.
-	await db(env).delete(schema.eventSessions).where(lt(schema.eventSessions.startedAt, cutoff));
-	await db(env).delete(schema.salts).where(lt(schema.salts.createdAt, cutoff));
+	await purge(() =>
+		db(env).delete(schema.eventSessions).where(lt(schema.eventSessions.startedAt, cutoff)),
+	);
+	await purge(() => db(env).delete(schema.salts).where(lt(schema.salts.createdAt, cutoff)));
 	// Windowed identity salts purge on window END, not creation: the salt outlives every event whose
 	// timestamp could fall in its window, then is destroyed — irreversibly severing the hash→input
 	// mapping exactly like the daily salt, at the chosen granularity. Linkage is bounded by retention.
-	await db(env).delete(schema.identitySalts).where(lt(schema.identitySalts.window_end, cutoff));
+	await purge(() =>
+		db(env).delete(schema.identitySalts).where(lt(schema.identitySalts.window_end, cutoff)),
+	);
 	// Consent records aged past the window: the events they governed are gone, so drop the mapping and
 	// the at-rest raw uid. (Elevation already stops the instant a record expires or is revoked.)
-	await db(env).delete(schema.consentRecords).where(lt(schema.consentRecords.granted_at, cutoff));
+	await purge(() =>
+		db(env).delete(schema.consentRecords).where(lt(schema.consentRecords.granted_at, cutoff)),
+	);
 	// Magic-link tokens, keyed on their OWN expiry rather than the raw window — a token's life is
 	// fifteen minutes, so ageing it out over ninety days would keep it for the other eighty-nine and a
 	// half for no reason. `consumeMagicToken` already refuses any row whose `expires_at` has passed, so
@@ -70,7 +94,20 @@ export async function enforceRetention(env: Env, now: number): Promise<void> {
 	// and read by one, and deleted by NOTHING, so every login attempt a deployment ever served left a
 	// permanent row holding the operator's email address long after the link it authorised went dead.
 	// That is exactly the accumulation this job exists to stop, on the one table that was missed.
-	await db(env).delete(schema.authTokens).where(lt(schema.authTokens.expiresAt, now));
+	await purge(() =>
+		db(env).delete(schema.authTokens).where(lt(schema.authTokens.expiresAt, now)),
+	);
+
+	if (errors.length > 0) {
+		// log.error only reads `.message`/`.name` off the thrown error — AggregateError.errors is
+		// non-enumerable and would otherwise vanish from the log entirely, leaving only this synthetic
+		// wrapper text and none of the actual per-table failure reasons.
+		const detail = errors.map((e) => (e instanceof Error ? e.message : String(e))).join('; ');
+		throw new AggregateError(
+			errors,
+			`enforceRetention: ${errors.length} purge statement(s) failed: ${detail}`,
+		);
+	}
 }
 
 /**

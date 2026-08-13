@@ -1,0 +1,1 @@
+CREATE INDEX `idx_sessions_site_first_seen` ON `sessions` (`site_id`,`first_seen`);

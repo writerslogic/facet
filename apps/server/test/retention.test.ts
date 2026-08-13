@@ -229,6 +229,34 @@ describe('enforceRetention', () => {
 		expect(await count('SELECT COUNT(*) AS n FROM auth_tokens WHERE id = ?', 't-live')).toBe(1);
 	});
 
+	it('still purges salts/identity_salts when an earlier delete (events) fails', async () => {
+		// The privacy-critical invariant under test: `events` runs first and is the table most likely to
+		// hit a real D1 error, but its failure must never block the salt/identity-salt deletes below it —
+		// those irreversibly sever the hash→input mapping the retention window promises. Simulate a
+		// failure by dropping `events` out from under the delete (isolated per-test by apply-migrations.ts).
+		await env.DB.prepare('INSERT INTO salts (day_key, salt, created_at) VALUES (?,?,?)')
+			.bind('2026-02-01', 'aa', OLD)
+			.run();
+		await env.DB.prepare(
+			'INSERT INTO identity_salts (scope, salt, window, window_end, created_at) VALUES (?,?,?,?,?)',
+		)
+			.bind(`${S}:week:closed`, 'aa', 'week', OLD, OLD)
+			.run();
+		await env.DB.exec('DROP TABLE events');
+
+		await expect(enforceRetention(env, NOW)).rejects.toThrow(/purge statement.* failed/);
+
+		expect(await count('SELECT COUNT(*) AS n FROM salts WHERE day_key = ?', '2026-02-01')).toBe(
+			0,
+		);
+		expect(
+			await count(
+				'SELECT COUNT(*) AS n FROM identity_salts WHERE scope = ?',
+				`${S}:week:closed`,
+			),
+		).toBe(0);
+	});
+
 	it('leaves no operator email behind once the tokens carrying it expire', async () => {
 		// The privacy claim, asserted on the column rather than the row count: `auth_tokens.email` is
 		// the only place a would-be operator's address is stored before they ever sign in, so a request

@@ -134,6 +134,20 @@
       "when": 1786323924978,
       "tag": "0019_pink_dormammu",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1786586110370,
+      "tag": "0020_fantastic_sphinx",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "6",
+      "when": 1786591706179,
+      "tag": "0021_hesitant_eddie_brock",
+      "breakpoints": true
     }
   ]
 }
