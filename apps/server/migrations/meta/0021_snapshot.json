@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "11862123-bc87-437d-8691-03701f27cb4f",
-  "prevId": "a1f94847-9090-40b7-8fe3-0a670190582c",
+  "id": "fc4db305-3102-4db4-88bf-a85118743329",
+  "prevId": "79ae0f94-ed02-4758-a0c5-52ba976e6c5b",
   "tables": {
     "alert_deliveries": {
       "name": "alert_deliveries",
@@ -922,6 +922,13 @@
             "created_at"
           ],
           "isUnique": false
+        },
+        "idx_events_created": {
+          "name": "idx_events_created",
+          "columns": [
+            "created_at"
+          ],
+          "isUnique": false
         }
       },
       "foreignKeys": {},
@@ -1640,7 +1647,16 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "idx_sessions_site_first_seen": {
+          "name": "idx_sessions_site_first_seen",
+          "columns": [
+            "site_id",
+            "first_seen"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "sessions_site_id_visitor_hash_day_key_pk": {

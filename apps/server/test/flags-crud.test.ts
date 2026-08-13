@@ -172,12 +172,18 @@ describe('flags public /eval', () => {
 				{
 					method: 'POST',
 					headers: gpc
-						? { 'content-type': 'application/json', 'Sec-GPC': '1' }
-						: { 'content-type': 'application/json' },
+						? {
+								'content-type': 'application/json',
+								'Sec-GPC': '1',
+								'CF-IPCountry': 'US',
+							}
+						: { 'content-type': 'application/json', 'CF-IPCountry': 'US' },
+					// The client-supplied ctx.country is deliberately omitted here — the edge-derived
+					// CF-IPCountry header above is what should drive targeting, per the test below.
 					body: JSON.stringify({
 						site_id: SITE,
 						id: 'visitor-1',
-						ctx: { country: 'US' },
+						ctx: {},
 					}),
 				},
 				env,
@@ -202,5 +208,41 @@ describe('flags public /eval', () => {
 			participating: false,
 			reason: 'gpc',
 		});
+	});
+
+	it('never lets a client-supplied ctx.country override the edge-derived value', async () => {
+		await createFlag();
+		const evalWith = (headers: Record<string, string>) =>
+			app.request(
+				'/api/flags/eval',
+				{
+					method: 'POST',
+					headers: { 'content-type': 'application/json', ...headers },
+					// A spoofed client ctx claims US targeting regardless of what the edge sees.
+					body: JSON.stringify({
+						site_id: SITE,
+						id: 'visitor-1',
+						ctx: { country: 'US' },
+					}),
+				},
+				env,
+			);
+		// The country rule's reason is 'rule:0' (see FLAG.rules[0].priority above); anything else
+		// means the spoofed 'US' did not drive targeting.
+		const expectRuleDidNotMatch = async (headers: Record<string, string>) => {
+			const res = await evalWith(headers);
+			const { flags } = (await res.json()) as {
+				flags: Record<string, { reason: string }>;
+			};
+			expect(flags['new-checkout']?.reason).not.toBe('rule:0');
+		};
+
+		// No CF-IPCountry at all (edge can't resolve it): the spoofed 'US' must not survive.
+		await expectRuleDidNotMatch({});
+		// Anonymized/Tor traffic (XX, T1): country() resolves to null, same as above.
+		await expectRuleDidNotMatch({ 'CF-IPCountry': 'XX' });
+		await expectRuleDidNotMatch({ 'CF-IPCountry': 'T1' });
+		// A genuine non-US edge country must also win over the spoofed ctx, not just a null one.
+		await expectRuleDidNotMatch({ 'CF-IPCountry': 'DE' });
 	});
 });

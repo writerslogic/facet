@@ -111,10 +111,12 @@ flagsRoutes.post(
 		// The SDK always supplies a stable id (facet.exp); a keyless caller gets a non-sticky draw.
 		const stableId = body.id ?? crypto.randomUUID();
 		// Server-derived country/device are authoritative (a browser can't know geo and could spoof it),
-		// so they overlay the client-supplied ctx; only set when present, to not clobber with undefined.
+		// so they always overlay the client-supplied ctx — including clearing it when the edge can't
+		// resolve a country (Tor exit nodes, anonymized IPs), which is exactly when a client-supplied
+		// value would otherwise survive unchallenged.
 		const ctx: FlagContext = { ...(body.ctx ?? {}) };
 		const co = country(c.req.raw);
-		if (co) ctx.country = co;
+		ctx.country = co ?? undefined;
 		ctx.device = device(c.req.header('user-agent') ?? '');
 		const entries = await Promise.all(
 			configs.map(async (f: FlagConfig) => [

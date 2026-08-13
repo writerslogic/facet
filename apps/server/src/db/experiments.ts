@@ -65,13 +65,6 @@ export async function experimentResult(
 				eq(variantProp, variant.key),
 			);
 
-			const exposureRow = await db(env)
-				.select({ count: sql<number>`COUNT(*)` })
-				.from(schema.events)
-				.where(exposureWhere)
-				.get();
-			const exposures = Number(exposureRow?.count ?? 0);
-
 			// Distinct visitors with an exposure in this variant AND a goal-matching event in range.
 			const converted = sql`EXISTS (
 				SELECT 1 FROM ${schema.events} AS g
@@ -81,14 +74,17 @@ export async function experimentResult(
 					AND g.created_at < ${f.end}
 					AND ${goalMatch.type === 'event' ? sql`g.name` : sql`g.path`} = ${goalMatch.value}
 			)`;
-			const conversionRow = await db(env)
+			// PERF: one D1 round-trip for both aggregates instead of two identical-WHERE queries.
+			const row = await db(env)
 				.select({
-					count: sql<number>`COUNT(DISTINCT CASE WHEN ${converted} THEN ${schema.events.visitorHash} END)`,
+					exposures: sql<number>`COUNT(*)`,
+					conversions: sql<number>`COUNT(DISTINCT CASE WHEN ${converted} THEN ${schema.events.visitorHash} END)`,
 				})
 				.from(schema.events)
 				.where(exposureWhere)
 				.get();
-			const conversions = Number(conversionRow?.count ?? 0);
+			const exposures = Number(row?.exposures ?? 0);
+			const conversions = Number(row?.conversions ?? 0);
 
 			return {
 				key: variant.key,

@@ -136,6 +136,10 @@ export const events = sqliteTable(
 		// unranged IN-list) fell back to a full table scan. visitor_hash leads here since
 		// contact-analytics.ts's lookup carries no time bound at all.
 		index('idx_events_site_visitor_created').on(t.siteId, t.visitorHash, t.createdAt),
+		// retention.ts's cron purge deletes by createdAt alone, across every site — every other index
+		// above requires siteId as its leading column, so that delete could only seek the PK prefix
+		// and had to scan the whole table.
+		index('idx_events_created').on(t.createdAt),
 	],
 );
 
@@ -165,7 +169,12 @@ export const sessions = sqliteTable(
 		dayKey: text('day_key').notNull(),
 		firstSeen: integer('first_seen').notNull(),
 	},
-	(t) => [primaryKey({ columns: [t.siteId, t.visitorHash, t.dayKey] })],
+	(t) => [
+		primaryKey({ columns: [t.siteId, t.visitorHash, t.dayKey] }),
+		// cohortRetention (db/stats.ts) filters on siteId + firstSeen and orders by firstSeen; without
+		// this, D1 can only seek the PK prefix and must scan+sort every row for the site.
+		index('idx_sessions_site_first_seen').on(t.siteId, t.firstSeen),
+	],
 );
 
 export const eventSessions = sqliteTable(

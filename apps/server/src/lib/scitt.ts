@@ -78,6 +78,11 @@ async function scittLeafCount(env: Env): Promise<number> {
 	return row?.n ?? 0;
 }
 
+async function scittLogCount(env: Env): Promise<number> {
+	const [row] = await db(env).select({ n: count() }).from(schema.scittLog);
+	return row?.n ?? 0;
+}
+
 /**
  * Backfill `scitt_mmr_nodes`/`scitt_mmr_leaves` from `scitt_log`'s full history, when the persisted
  * MMR state is behind it — true for a deployment that registered statements before this incremental
@@ -86,14 +91,16 @@ async function scittLeafCount(env: Env): Promise<number> {
  */
 async function seedScittMmr(env: Env): Promise<void> {
 	const client = db(env);
-	const [rows, leafCount] = await Promise.all([
-		client
-			.select({ hash: schema.scittLog.statementHash })
-			.from(schema.scittLog)
-			.orderBy(asc(schema.scittLog.entryId)),
-		scittLeafCount(env),
-	]);
-	if (leafCount >= rows.length) return;
+	// PERF: cheap COUNT(*) catch-up check first — this runs on every registration attempt (up to
+	// MAX_REGISTER_ATTEMPTS times under contention), and the common case (already caught up) never
+	// needs the rows themselves, only whether backfill is needed at all.
+	const [logCount, leafCount] = await Promise.all([scittLogCount(env), scittLeafCount(env)]);
+	if (leafCount >= logCount) return;
+
+	const rows = await client
+		.select({ hash: schema.scittLog.statementHash })
+		.from(schema.scittLog)
+		.orderBy(asc(schema.scittLog.entryId));
 
 	const nodes: Uint8Array[] = [];
 	const leafIndices: number[] = [];
