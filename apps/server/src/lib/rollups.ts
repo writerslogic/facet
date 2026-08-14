@@ -24,7 +24,8 @@ export async function rollupBucket(
 	bucketStart: number,
 	bucketEnd: number,
 ): Promise<void> {
-	const rows = await db(env)
+	const client = db(env);
+	const rows = await client
 		.select({
 			siteId: schema.events.siteId,
 			hostname: schema.events.hostname,
@@ -38,11 +39,17 @@ export async function rollupBucket(
 		)
 		.groupBy(schema.events.siteId, schema.events.hostname);
 
-	for (const r of rows) {
+	if (rows.length === 0) return;
+
+	// One batched D1 round-trip for every (site, hostname) upsert instead of one round-trip per row
+	// (see transparency.ts's node/leaf insert for the same pattern). D1 runs a batch as one atomic
+	// transaction, which is also stronger than the prior per-row awaits: either every bucket in this
+	// tick lands or none do, rather than a partial rollup on a mid-loop failure.
+	const stmts = rows.map((r) => {
 		const pageviews = Number(r.pageviews ?? 0);
 		const events = Number(r.events ?? 0);
 		const visitors = Number(r.visitors ?? 0);
-		await db(env)
+		return client
 			.insert(schema.eventRollups)
 			.values({
 				siteId: r.siteId,
@@ -62,7 +69,8 @@ export async function rollupBucket(
 				],
 				set: { pageviews, events, visitors },
 			});
-	}
+	});
+	await client.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
 }
 
 /** Roll up the most recently completed hour, plus the completed day at each UTC midnight. */
