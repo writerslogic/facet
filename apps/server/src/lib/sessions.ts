@@ -68,7 +68,17 @@ async function resolveSpanningStart(
 	}
 }
 
-/** Build (upsert) `event_sessions` for the UTC day identified by `dayKey`. Returns rows written.
+/** Distinct sites with any event in the query window — the tenants that need sessionizing this run. */
+async function activeSiteIds(env: Env, queryStart: number, dayEnd: number): Promise<string[]> {
+	const rows = await db(env)
+		.selectDistinct({ siteId: schema.events.siteId })
+		.from(schema.events)
+		.where(and(gte(schema.events.createdAt, queryStart), lt(schema.events.createdAt, dayEnd)));
+	return rows.map((r) => r.siteId);
+}
+
+/** Build (upsert) one site's `event_sessions` for the UTC day identified by `dayKey`. Returns rows
+ * written.
  *
  * Queries a SESSION_TIMEOUT_MS lookback before `dayStart` so a visit spanning midnight groups with
  * its pre-midnight events instead of splitting into two sessions. A group that never reaches this day
@@ -76,20 +86,24 @@ async function resolveSpanningStart(
  * whose start lands inside the lookback is truncation-prone, so `resolveSpanningStart` finds its true
  * start first; that resolved `startedAt` also decides the row's `dayKey`, so a spanning session is
  * attributed to the day it began, not the day it happens to end. */
-export async function buildSessions(env: Env, dayKey: string): Promise<number> {
-	const dayStart = Date.parse(`${dayKey}T00:00:00.000Z`);
-	const dayEnd = dayStart + DAY_MS;
-	const queryStart = dayStart - SESSION_TIMEOUT_MS;
-
+async function buildSessionsForSite(
+	env: Env,
+	siteId: string,
+	dayStart: number,
+	dayEnd: number,
+	queryStart: number,
+): Promise<number> {
 	const rows = (await db(env)
 		.select(EVENT_COLUMNS)
 		.from(schema.events)
-		.where(and(gte(schema.events.createdAt, queryStart), lt(schema.events.createdAt, dayEnd)))
-		.orderBy(
-			asc(schema.events.siteId),
-			asc(schema.events.visitorHash),
-			asc(schema.events.createdAt),
-		)) as EventRow[];
+		.where(
+			and(
+				eq(schema.events.siteId, siteId),
+				gte(schema.events.createdAt, queryStart),
+				lt(schema.events.createdAt, dayEnd),
+			),
+		)
+		.orderBy(asc(schema.events.visitorHash), asc(schema.events.createdAt))) as EventRow[];
 
 	let group: EventRow[] = [];
 	let written = 0;
@@ -157,9 +171,8 @@ export async function buildSessions(env: Env, dayKey: string): Promise<number> {
 	let prev: EventRow | undefined;
 	for (const e of rows) {
 		if (prev) {
-			const sameVisitor = prev.siteId === e.siteId && prev.visitorHash === e.visitorHash;
 			const gapExceeded = e.createdAt - prev.createdAt > SESSION_TIMEOUT_MS;
-			if (!sameVisitor || gapExceeded) {
+			if (e.visitorHash !== prev.visitorHash || gapExceeded) {
 				await flush();
 			}
 		}
@@ -168,5 +181,36 @@ export async function buildSessions(env: Env, dayKey: string): Promise<number> {
 	}
 	await flush();
 
+	return written;
+}
+
+/** Build (upsert) `event_sessions` for the UTC day identified by `dayKey`, one site at a time so a
+ * single high-volume or misbehaving tenant can't fail sessionization for every other tenant in the
+ * same cron tick. Mirrors `enforceRetention`'s per-statement failure isolation: every site's own run
+ * always happens regardless of another site's failure, and any failures are collected and re-thrown
+ * together so the job still surfaces as failed to `runScheduled`. */
+export async function buildSessions(env: Env, dayKey: string): Promise<number> {
+	const dayStart = Date.parse(`${dayKey}T00:00:00.000Z`);
+	const dayEnd = dayStart + DAY_MS;
+	const queryStart = dayStart - SESSION_TIMEOUT_MS;
+
+	const siteIds = await activeSiteIds(env, queryStart, dayEnd);
+
+	let written = 0;
+	const errors: unknown[] = [];
+	for (const siteId of siteIds) {
+		try {
+			written += await buildSessionsForSite(env, siteId, dayStart, dayEnd, queryStart);
+		} catch (err) {
+			errors.push(err);
+		}
+	}
+	if (errors.length > 0) {
+		const detail = errors.map((e) => (e instanceof Error ? e.message : String(e))).join('; ');
+		throw new AggregateError(
+			errors,
+			`buildSessions: sessionization failed for ${errors.length} of ${siteIds.length} site(s): ${detail}`,
+		);
+	}
 	return written;
 }
