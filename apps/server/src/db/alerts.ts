@@ -6,7 +6,7 @@
 // hour being re-detected on the next run (the trailing 24h window still ends at the same completed
 // hour, so `detectAnomalies` legitimately returns it again).
 
-import { and, eq, lt, ne, sql } from 'drizzle-orm';
+import { and, eq, lt, ne, or, sql } from 'drizzle-orm';
 import type { Env } from '../env.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
@@ -14,6 +14,13 @@ import * as schema from './schema.js';
 /** Attempts after which a destination stops being retried for one anomaly. Bounded so a permanently
  * broken endpoint cannot make the cron do unbounded work every hour, forever. */
 export const ALERT_MAX_ATTEMPTS = 3 as const;
+
+/** A 'pending' claim younger than this must not be re-claimed; older, the isolate holding it is
+ * presumed dead. `now` is always `event.scheduledTime` (one fixed value per cron invocation, never
+ * wall-clock), so a same-tick duplicate always compares exactly equal and is blocked regardless of
+ * this constant — it is not measuring real elapsed delivery time. If `now` is ever switched to real
+ * wall-clock time, this becomes load-bearing against actual latency and must be reassessed. */
+const PENDING_CLAIM_STALE_MS = 30_000 as const;
 
 /** A destination row as stored (secret included — only the delivery path may read it). */
 export interface StoredDestination {
@@ -99,6 +106,12 @@ export async function claimDelivery(
 				// A delivered alert is never re-sent — this is the "never spam" guarantee.
 				ne(schema.alertDeliveries.status, 'delivered'),
 				lt(schema.alertDeliveries.attempts, ALERT_MAX_ATTEMPTS),
+				// A fresh 'pending' row may be another caller's in-flight delivery (duplicate Cron Trigger
+				// fire) — only re-claim it once stale enough that the holder is presumed dead.
+				or(
+					eq(schema.alertDeliveries.status, 'failed'),
+					lt(schema.alertDeliveries.updated_at, now - PENDING_CLAIM_STALE_MS),
+				),
 			),
 		)
 		.returning({

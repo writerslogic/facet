@@ -11,6 +11,7 @@ import type { AnomalyAlertPayload } from '@facet/shared';
 import { generateSigningJwk, verifyDetachedJws } from '@facet/trust';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
+import { claimDelivery } from '../src/db/alerts.js';
 import { insertEvent } from '../src/db/queries.js';
 import { db } from '../src/db/queries.js';
 import * as schema from '../src/db/schema.js';
@@ -663,6 +664,52 @@ describe('cron alerting', () => {
 		const rows = await deliveryRows();
 		expect(rows).toHaveLength(1);
 		expect(rows[0]?.status).toBe('failed');
+	});
+});
+
+describe('claimDelivery: overlapping cron invocations', () => {
+	it('refuses a second claim on a fresh pending delivery — no double-send window', async () => {
+		const first = await claimDelivery(env as Env, {
+			destinationId: 'dest-race',
+			siteId: SITE,
+			dedupeKey: 'race-1',
+			severity: 'warning',
+			now: NOW,
+		});
+		expect(first).not.toBeNull();
+
+		// A duplicate Cron Trigger fire racing in while `first` is presumably still mid-delivery.
+		const second = await claimDelivery(env as Env, {
+			destinationId: 'dest-race',
+			siteId: SITE,
+			dedupeKey: 'race-1',
+			severity: 'warning',
+			now: NOW + 1_000,
+		});
+		expect(second).toBeNull();
+	});
+
+	it('lets a later run reclaim a pending delivery once it is stale enough to presume the holder dead', async () => {
+		const first = await claimDelivery(env as Env, {
+			destinationId: 'dest-stale',
+			siteId: SITE,
+			dedupeKey: 'race-2',
+			severity: 'warning',
+			now: NOW,
+		});
+		expect(first).not.toBeNull();
+
+		// Simulates an isolate that died mid-POST: no markDelivered/markFailed ever ran, so status
+		// stays 'pending' forever unless a later run is allowed to retry it.
+		const second = await claimDelivery(env as Env, {
+			destinationId: 'dest-stale',
+			siteId: SITE,
+			dedupeKey: 'race-2',
+			severity: 'warning',
+			now: NOW + 60_000,
+		});
+		expect(second).not.toBeNull();
+		expect(second?.attempt).toBe(2);
 	});
 });
 
