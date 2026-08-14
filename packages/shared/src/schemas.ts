@@ -116,6 +116,13 @@ export const ConsentRevokeSchema = v.pipe(
 		(b) => (b.user_id?.length ?? 0) > 0 || (b.ip?.length ?? 0) > 0,
 		'revoke_needs_identifier',
 	),
+	// Mirrors ConsentGrantSchema: an identified-tier grant is keyed by the raw uid (buildPreimage's
+	// identified branch requires one), so an ip-only revoke against it can never match — it would
+	// silently hash under the pseudonymous ip|ua formula instead and return revoked:0 either way.
+	v.check(
+		(b) => b.tier !== 'identified' || (b.user_id?.length ?? 0) > 0,
+		'user_id_required_for_identified',
+	),
 );
 
 export const StatsQuerySchema = v.object({

@@ -63,6 +63,15 @@ describe('runRollups', () => {
 		expect(await rollup(B)).toEqual({ pageviews: 2, events: 0, visitors: 2 });
 	});
 
+	it('no-ops when the bucket has no matching events', async () => {
+		// The routine, not edge-case, path for a low-traffic site's hourly tick: rollupBucket's D1
+		// batch requires at least one statement, so this must return before ever calling client.batch.
+		await env.DB.prepare('DELETE FROM events WHERE site_id = ?').bind(S).run();
+		await runRollups(env, NOW);
+		expect(await rollup(A)).toBeNull();
+		expect(await rollup(B)).toBeNull();
+	});
+
 	it('is idempotent: a second run leaves identical rows and no duplicates', async () => {
 		await runRollups(env, NOW);
 		await runRollups(env, NOW);

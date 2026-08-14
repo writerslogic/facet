@@ -171,6 +171,36 @@ describe('POST /api/consent', () => {
 		);
 		expect(res.status).toBe(401);
 	});
+
+	// An ip-only revoke against an identified-tier site would otherwise pass validation, then hash
+	// under the pseudonymous ip|ua formula (the only one revokeConsent's route branch can compute
+	// without a uid) and match zero rows — a misleading revoked:0 rather than a rejected request,
+	// since an identified-tier grant is keyed by the raw uid instead.
+	it('rejects an identified-tier revoke with no user_id, instead of a silent revoked:0', async () => {
+		const key = (await issueKey(signingEnv, SITE, null, Date.now())).key;
+		const del = await app.request(
+			'/api/consent',
+			{
+				method: 'DELETE',
+				headers: {
+					Authorization: `Bearer ${key}`,
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					tier: 'identified',
+					salt_window: 'week',
+					ip: GRANT.ip,
+					user_agent: GRANT.user_agent,
+				}),
+			},
+			signingEnv,
+		);
+		expect(del.status).toBe(400);
+		expect(await del.json()).toMatchObject({
+			error: 'validation_failed',
+			issues: [{ message: 'user_id_required_for_identified' }],
+		});
+	});
 });
 
 describe('PATCH /api/sites/:id/identity', () => {

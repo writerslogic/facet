@@ -213,8 +213,7 @@ export function checkWebhookUrl(raw: string): UrlRejection | null {
 	return null;
 }
 
-/** HMAC-SHA256 of `message` under `secret`, lowercase hex. Local to the alert transport; the legacy
- * single-URL notifier in lib/webhook.ts keeps its own copy so the two can diverge independently. */
+/** HMAC-SHA256 of `message` under `secret`, lowercase hex. */
 async function hmacSha256Hex(secret: string, message: string): Promise<string> {
 	const key = await crypto.subtle.importKey(
 		'raw',

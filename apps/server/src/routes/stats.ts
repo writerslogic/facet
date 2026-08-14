@@ -222,10 +222,11 @@ statsRoutes.get(
 	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
-		return c.json({
-			engagement: await engagement(c.env, f),
-			meta: await sessionFreshness(c.env, f),
-		});
+		const [engagementResult, meta] = await Promise.all([
+			engagement(c.env, f),
+			sessionFreshness(c.env, f),
+		]);
+		return c.json({ engagement: engagementResult, meta });
 	},
 );
 
@@ -235,10 +236,11 @@ statsRoutes.get(
 	vValidator('query', StatsQuerySchema, validationErrorHook),
 	async (c) => {
 		const f = toStatsFilter(c.req.valid('query'), c.get('siteId'));
-		return c.json({
-			channels: await channels(c.env, f),
-			meta: await sessionFreshness(c.env, f),
-		});
+		const [channelsResult, meta] = await Promise.all([
+			channels(c.env, f),
+			sessionFreshness(c.env, f),
+		]);
+		return c.json({ channels: channelsResult, meta });
 	},
 );
 

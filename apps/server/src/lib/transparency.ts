@@ -25,7 +25,7 @@ import {
 	signCheckpoint,
 	toHex,
 } from '@facet/trust';
-import { asc, count, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -88,33 +88,62 @@ async function nodeCount(env: Env): Promise<number> {
 	return row?.n ?? 0;
 }
 
+/** The current count of logged leaves, without loading any leaf row. */
+async function mmrLeafCount(env: Env): Promise<number> {
+	const [row] = await db(env).select({ n: count() }).from(schema.mmrLeaves);
+	return row?.n ?? 0;
+}
+
+/** The same composite key `rollupKey()` builds, as a SQL expression over `event_rollups` columns —
+ * matched against `mmr_leaves.rollup_key` (unique-indexed) to anti-join already-logged rows without
+ * ever reading them. Separator and field order MUST stay in lockstep with `rollupKey()`. */
+const rollupKeyExpr = sql`${schema.eventRollups.siteId} || '|' || ${schema.eventRollups.hostname} || '|' || ${schema.eventRollups.bucketStart} || '|' || ${schema.eventRollups.interval}`;
+
 /** Append every finalized, not-yet-logged rollup as a leaf. Returns the number appended. */
 export async function appendFinalizedRollups(env: Env, now: number): Promise<number> {
 	const client = db(env);
 	// A rollup is finalized once its bucket has fully elapsed (bucket end <= the current hour floor).
 	const hourFloor = Math.floor(now / HOUR_MS) * HOUR_MS;
-	const rollups = await client
-		.select()
+	// event_rollups is never pruned (rollups.ts keeps every bucket forever) and mmr_leaves grows in
+	// lockstep with what's already logged, so both filters run in SQL — an unbounded hourly cron tick
+	// must never pull either table whole into the isolate.
+	const candidates = await client
+		.select({
+			siteId: schema.eventRollups.siteId,
+			hostname: schema.eventRollups.hostname,
+			bucketStart: schema.eventRollups.bucketStart,
+			interval: schema.eventRollups.interval,
+			pageviews: schema.eventRollups.pageviews,
+			events: schema.eventRollups.events,
+			visitors: schema.eventRollups.visitors,
+		})
 		.from(schema.eventRollups)
+		.leftJoin(schema.mmrLeaves, eq(schema.mmrLeaves.rollupKey, rollupKeyExpr))
+		.where(
+			and(
+				isNull(schema.mmrLeaves.rollupKey),
+				or(
+					and(
+						eq(schema.eventRollups.interval, 'day'),
+						lte(schema.eventRollups.bucketStart, hourFloor - 24 * HOUR_MS),
+					),
+					and(
+						ne(schema.eventRollups.interval, 'day'),
+						lte(schema.eventRollups.bucketStart, hourFloor - HOUR_MS),
+					),
+				),
+			),
+		)
 		.orderBy(
 			asc(schema.eventRollups.bucketStart),
 			asc(schema.eventRollups.siteId),
 			asc(schema.eventRollups.hostname),
 			asc(schema.eventRollups.interval),
 		);
-	const logged = new Set(
-		(await client.select({ k: schema.mmrLeaves.rollupKey }).from(schema.mmrLeaves)).map(
-			(r) => r.k,
-		),
-	);
 
 	const finalized: { key: string; leaf: Uint8Array }[] = [];
-	for (const r of rollups) {
-		const intervalMs = r.interval === 'day' ? 24 * HOUR_MS : HOUR_MS;
-		if (r.bucketStart + intervalMs > hourFloor) continue; // not finalized yet
-		const key = rollupKey(r);
-		if (logged.has(key)) continue;
-		finalized.push({ key, leaf: await leafHash(rollupLeafBytes(r)) });
+	for (const r of candidates) {
+		finalized.push({ key: rollupKey(r), leaf: await leafHash(rollupLeafBytes(r)) });
 	}
 	if (finalized.length === 0) return 0;
 
@@ -124,8 +153,7 @@ export async function appendFinalizedRollups(env: Env, now: number): Promise<num
 		startCount,
 		finalized.map((f) => f.leaf),
 	);
-	const priorLeaves = (await client.select({ k: schema.mmrLeaves.leafNo }).from(schema.mmrLeaves))
-		.length;
+	const priorLeaves = await mmrLeafCount(env);
 
 	// Nodes and leaves must land together. As two separate inserts, a crash in between would leave
 	// orphaned nodes — counted by peakIndices but referenced by no leaf — silently corrupting every
