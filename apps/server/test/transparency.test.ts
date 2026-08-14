@@ -22,12 +22,16 @@ const H = 3_600_000;
 let apiKey: string;
 let signingEnv: typeof env & { FACET_SIGNING_JWK: string };
 
-/** Insert a finalized hourly rollup directly (bucket well in the past). */
-async function seedRollup(bucketStart: number, pageviews: number): Promise<void> {
+/** Insert a rollup directly. `bucketStart` well in the past + default 'hour' interval is finalized. */
+async function seedRollup(
+	bucketStart: number,
+	pageviews: number,
+	interval: 'hour' | 'day' = 'hour',
+): Promise<void> {
 	await env.DB.prepare(
 		'INSERT INTO event_rollups (site_id, hostname, bucket_start, interval, pageviews, events, visitors) VALUES (?,?,?,?,?,?,?)',
 	)
-		.bind(SITE, 'x.example.com', bucketStart, 'hour', pageviews, 0, pageviews)
+		.bind(SITE, 'x.example.com', bucketStart, interval, pageviews, 0, pageviews)
 		.run();
 }
 
@@ -117,6 +121,19 @@ describe('transparency log', () => {
 		expect(
 			await verifyConsistencyReceipt(con.receipt, cpA.payload.root, cpB.payload.root),
 		).toBe(true);
+	});
+
+	it('excludes an unfinalized hourly bucket and a not-yet-finalized day bucket', async () => {
+		await seedRollup(NOW - H, 10); // finalized hour -> included
+		await seedRollup(NOW, 20); // unfinalized hour -> excluded
+		await seedRollup(NOW - 24 * H, 30, 'day'); // finalized day -> included
+		await seedRollup(NOW - H, 40, 'day'); // day bucket only 1h elapsed -> excluded
+		await runTransparency(signingEnv, NOW);
+
+		const row = await env.DB.prepare('SELECT COUNT(*) as n FROM mmr_leaves').first<{
+			n: number;
+		}>();
+		expect(row?.n).toBe(2);
 	});
 
 	it('is a no-op without a signing key (checkpoint 404)', async () => {
