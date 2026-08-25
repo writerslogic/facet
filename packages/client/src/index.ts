@@ -62,14 +62,36 @@ function viewport(): { screen?: string; orientation?: string; dpr?: string } {
 	};
 }
 
-/** Track a pageview (no name) or a named custom event. */
-export function track(_name?: string, _props?: EventProps): void {
+/** POST the payload and resolve on whether the SERVER accepted it. */
+function post(endpoint: string, body: string): Promise<boolean> {
+	if (typeof fetch === 'undefined') return Promise.resolve(false);
+	return fetch(endpoint, {
+		method: 'POST',
+		body,
+		headers: { 'content-type': 'application/json' },
+		keepalive: true,
+	})
+		.then((r) => r.ok)
+		.catch(() => false);
+}
+
+/**
+ * Send one event. Resolves false ONLY when the send demonstrably failed, so a caller holding
+ * uncommitted state can retry; suppressed (opted out) and pre-init-queued sends resolve true because
+ * there is nothing to retry.
+ *
+ * IMPORTANT: `ack` forces the fetch path because `navigator.sendBeacon` reports only that the request
+ * was QUEUED by the browser, never that the server accepted it — a caller that commits dedupe state on
+ * a beacon can suppress the retry that would have fixed a drop.
+ */
+export function sendEvent(_name?: string, _props?: EventProps, ack = false): Promise<boolean> {
 	// Only a DELIBERATE opt-out suppresses the anonymous, cookieless pageview/event — a passive GPC/DNT
 	// signal does not, so total traffic stays accurately counted (see isExplicitlyOptedOut).
-	if (isExplicitlyOptedOut()) return;
+	if (isExplicitlyOptedOut()) return Promise.resolve(true);
 	if (!Config) {
+		if (ack) return Promise.resolve(false);
 		preInitQueue.push({ name: _name, props: _props });
-		return;
+		return Promise.resolve(true);
 	}
 	const { host, siteId } = Config;
 	const hostname = typeof location !== 'undefined' ? location.hostname : '';
@@ -91,16 +113,16 @@ export function track(_name?: string, _props?: EventProps): void {
 
 	const endpoint = `${host}/api/collect`;
 	const body = JSON.stringify(payload);
-	if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
-		navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' }));
-	} else {
-		fetch(endpoint, {
-			method: 'POST',
-			body,
-			headers: { 'content-type': 'application/json' },
-			keepalive: true,
-		}).catch(() => undefined);
+	if (!ack && typeof navigator !== 'undefined' && navigator.sendBeacon) {
+		if (navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' })))
+			return Promise.resolve(true);
 	}
+	return post(endpoint, body);
+}
+
+/** Track a pageview (no name) or a named custom event. */
+export function track(_name?: string, _props?: EventProps): void {
+	void sendEvent(_name, _props);
 }
 
 /** Track an ecommerce purchase: a `purchase` event carrying revenue + currency (and any extra props).

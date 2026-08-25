@@ -48,10 +48,12 @@ describe('variant', () => {
 		const sent: Array<Record<string, unknown>> = [];
 		vi.stubGlobal(
 			'fetch',
-			vi.fn((url: string) => {
+			vi.fn((url: string, opts?: RequestInit) => {
 				if (String(url).includes('/api/experiments/active')) {
 					return Promise.resolve(new Response(JSON.stringify(FLAGS)));
 				}
+				// Exposures take the ackable fetch path, never sendBeacon.
+				sent.push(JSON.parse(String(opts?.body ?? '{}')));
 				return Promise.resolve(new Response(null, { status: 202 }));
 			}),
 		);
