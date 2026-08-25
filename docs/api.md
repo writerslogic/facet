@@ -1277,6 +1277,40 @@ have no user-management surface at all today — they cannot list their members,
 them — so a route reaching across to another person's sessions would be the first of its kind,
 arriving without any of the structure that should come with it.
 
+### `GET /api/bots/ruleset` (admin token)
+
+Reports the operator-refreshable crawler ruleset: one entry per stored source with its
+`pattern_count`, `updated_at` and upstream `etag`, plus `active_patterns` — how many are compiled and
+live in the isolate answering the request. Returns `501 bot_ruleset_unconfigured` when
+`FACET_BOT_RULESET_URL` is unset, which is distinct from a refresh that failed.
+
+```json
+{
+  "rulesets": [{ "source": "remote", "pattern_count": 412, "updated_at": 1756000000000, "etag": "W/\"a1b2\"" }],
+  "active_patterns": 412
+}
+```
+
+`active_patterns` can lag `pattern_count` briefly: each isolate re-reads the stored ruleset at most
+once a minute, so a just-refreshed set reaches the rest of them within that window.
+
+### `POST /api/bots/refresh` (admin token)
+
+Re-fetches `FACET_BOT_RULESET_URL` immediately instead of waiting for the daily cron, and returns the
+same body as the status route. The fetch is conditional on the stored `etag`, so an unchanged
+upstream writes nothing.
+
+Fetched patterns are **additive only** — they can add crawlers to drop, never prevent the compiled-in
+list from dropping one — so no upstream response can make the deployment start recording bot traffic.
+Payloads are bounded (2000 patterns, 200 chars each, 512 KB body) and individual patterns are dropped
+if they fail to compile, match a catastrophic-backtracking shape, or match an ordinary desktop
+browser.
+
+Errors: `501 bot_ruleset_unconfigured` when the var is unset, `400 bot_ruleset_misconfigured` when it
+is set but unusable (not absolute, or not `https:`), and `502 bot_ruleset_refresh_failed` for every
+upstream failure. The upstream URL, status and body are never echoed, so an admin-facing error cannot
+be turned into a report on an arbitrary host.
+
 ---
 
 ## Admin: alert destinations

@@ -46,13 +46,16 @@ function stubEnv(store: Record<string, string> = {}, nav: Record<string, unknown
 	});
 }
 
+// Exposures take the ackable fetch path (sendBeacon cannot report server acceptance), so collect
+// bodies are recorded here rather than from the sendBeacon stub.
 function stubFetchOk(): void {
 	vi.stubGlobal(
 		'fetch',
-		vi.fn((url: string) => {
+		vi.fn((url: string, opts?: RequestInit) => {
 			if (String(url).includes('/api/experiments/active')) {
 				return Promise.resolve(new Response(JSON.stringify(FLAGS)));
 			}
+			sent.push(JSON.parse(String(opts?.body ?? '{}')));
 			return Promise.resolve(new Response(null, { status: 202 }));
 		}),
 	);
@@ -144,9 +147,9 @@ describe('whenReady + assignment', () => {
 		const a = assignment('cta');
 		expect(a.status).toBe('opted-out');
 		expect(a.participating).toBe(false);
-		expect(fetchMock).not.toHaveBeenCalled();
 		await new Promise((r) => setTimeout(r, 0));
-		expect(sent.filter((e) => e.name === '$exposure')).toHaveLength(0);
+		// Neither the /active fetch nor an /api/collect exposure is issued.
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it('fires exactly one $exposure per flag for a genuine assignment', async () => {

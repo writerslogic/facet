@@ -4,7 +4,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { runDoctor } from '../src/commands/doctor.js';
+import { diagnoseDeployment, diagnoseJob, runDoctor } from '../src/commands/doctor.js';
 import {
 	type CloudState,
 	type Repo,
@@ -161,5 +161,78 @@ describe('facet doctor', () => {
 		const h = await doctor({ repo });
 		expect(h.code).toBe(1);
 		expect(h.stderr).toContain('No apps/server/wrangler.jsonc found');
+	});
+});
+
+// The point of the ladders: a broken install trips several rungs at once, and the report is only
+// useful if it names the one that explains the others.
+describe('cause ordering', () => {
+	it('names the fundamental cause rather than the symptoms stacked on top of it', () => {
+		const broken = {
+			name: 'rollups',
+			databaseReachable: false,
+			migrationsApplied: false,
+			cronConfigured: false,
+			cadenceError: 'every 5 fortnights',
+			lastSuccessAt: null,
+			lastFailureAt: 1,
+			lastError: 'boom',
+		};
+		expect(diagnoseJob(broken)?.cause).toContain('D1 binding');
+
+		expect(diagnoseJob({ ...broken, databaseReachable: true })?.cause).toContain('migrations');
+		expect(
+			diagnoseJob({ ...broken, databaseReachable: true, migrationsApplied: true })?.cause,
+		).toContain('triggers.crons');
+		// A malformed cadence outranks "never run" and "last run failed", which it causes.
+		expect(
+			diagnoseJob({
+				...broken,
+				databaseReachable: true,
+				migrationsApplied: true,
+				cronConfigured: true,
+			})?.cause,
+		).toContain('every 5 fortnights');
+		expect(
+			diagnoseJob({
+				...broken,
+				databaseReachable: true,
+				migrationsApplied: true,
+				cronConfigured: true,
+				cadenceError: null,
+			})?.cause,
+		).toContain('last failed: boom');
+	});
+
+	// doctor output is meant to be pasted into public issues, and a job's last_error is an arbitrary
+	// exception string. Length bounding alone does not cover this: a UUID fits under every limit.
+	it('redacts an identifier carried in a job error', () => {
+		const cause = diagnoseJob({
+			name: 'rollups',
+			databaseReachable: true,
+			migrationsApplied: true,
+			cronConfigured: true,
+			cadenceError: null,
+			lastSuccessAt: null,
+			lastFailureAt: 1,
+			lastError: `D1_ERROR: no such table on database ${DB_ID}`,
+		})?.cause;
+		expect(cause).not.toContain(DB_ID);
+		expect(cause).toContain('<redacted>');
+	});
+
+	it('names the fundamental deployment cause rather than the symptoms stacked on top of it', () => {
+		// An install that was never created is unreachable and has no sites; only the first is a cause.
+		expect(
+			diagnoseDeployment({
+				hostError: null,
+				dbConfigured: false,
+				host: 'https://facet.example.workers.dev',
+				health: 'unreachable',
+				tokenAvailable: false,
+				adminError: null,
+				siteCount: 0,
+			})?.cause,
+		).toContain('placeholder');
 	});
 });

@@ -12,11 +12,14 @@ import {
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
 import { insertSite, listSites, setSiteTeam, teamExists, upsertSiteConfig } from '../db/admin.js';
+import { listBotRulesets } from '../db/bots.js';
 import { siteExists } from '../db/catalog.js';
 import type { AppEnv } from '../env.js';
 import { revokeSessions } from '../lib/accounts.js';
 import { issueKey, listKeys, revokeKey } from '../lib/apikeys.js';
 import { requireAdmin } from '../lib/auth.js';
+import { BotRulesetConfigError, refreshBotRulesets } from '../lib/bots-refresh.js';
+import { botPatternCount, ensureBotPatterns } from '../lib/bots.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
 import { getSigningKey } from '../lib/signing.js';
 
@@ -129,6 +132,51 @@ adminRoutes.post('/users/:id/revoke-sessions', requireAdmin, async (c) => {
 		return c.json({ error: 'not_found' }, 404);
 	}
 	return c.json({ user_id: userId, sessions_revoked: true });
+});
+
+async function botRulesetStatus(env: AppEnv['Bindings']) {
+	// `active_patterns` is the only thing this endpoint can report that D1 cannot: how many stored
+	// patterns actually survived the ReDoS screen and compiled. Priming first keeps it from reading 0
+	// on a cold isolate.
+	await ensureBotPatterns(env);
+	const rows = await listBotRulesets(env);
+	return {
+		rulesets: rows.map((r) => ({
+			source: r.source,
+			pattern_count: r.patternCount,
+			updated_at: r.updatedAt,
+			etag: r.etag,
+		})),
+		active_patterns: botPatternCount(),
+	};
+}
+
+// Operator-refreshable crawler list. Status is read-only; the refresh is a POST because it makes an
+// outbound request and writes. Both are 501 when FACET_BOT_RULESET_URL is unset, matching the
+// `identity_signing_unconfigured` precedent above: not-configured is distinct from failed.
+adminRoutes.get('/bots/ruleset', requireAdmin, async (c) => {
+	if (!c.env.FACET_BOT_RULESET_URL?.trim()) {
+		return c.json({ error: 'bot_ruleset_unconfigured' }, 501);
+	}
+	return c.json(await botRulesetStatus(c.env));
+});
+
+adminRoutes.post('/bots/refresh', requireAdmin, async (c) => {
+	if (!c.env.FACET_BOT_RULESET_URL?.trim()) {
+		return c.json({ error: 'bot_ruleset_unconfigured' }, 501);
+	}
+	try {
+		await refreshBotRulesets(c.env, Date.now());
+	} catch (err) {
+		// IMPORTANT: two codes and no detail. The upstream URL, its status and its body all stay
+		// server-side; echoing them would let an admin-facing error report on an arbitrary host. The
+		// split only separates "your config is wrong" from "the upstream failed".
+		if (err instanceof BotRulesetConfigError) {
+			throw new ApiError('bot_ruleset_misconfigured', 400);
+		}
+		throw new ApiError('bot_ruleset_refresh_failed', 502);
+	}
+	return c.json(await botRulesetStatus(c.env));
 });
 
 adminRoutes.post(

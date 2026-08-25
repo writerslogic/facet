@@ -6,9 +6,13 @@ import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
 
-// 2.25 KiB: raised from 2 KiB to absorb the revenue + segmentation tracking features while keeping the
-// drop-in script tiny. Trim toward 2 KiB again if it approaches this ceiling.
-const BUDGET_BYTES = 2304;
+// 2.375 KiB: 2 KiB → 2.25 KiB for revenue + segmentation tracking, then to here for ack-deferred
+// exposure commits. That last one buys a correctness property the bytes cannot be had without: an
+// `$exposure` must go over fetch rather than sendBeacon to learn whether the SERVER accepted it,
+// because committing the dedupe marker on a queued-but-dropped beacon silently under-counts one
+// experiment arm forever. Measured cost at the time of the raise: 2382 B.
+// Trim toward 2 KiB again if it approaches this ceiling.
+const BUDGET_BYTES = 2432;
 const scriptPath = fileURLToPath(new URL('../dist/script.js', import.meta.url));
 const built = existsSync(scriptPath);
 

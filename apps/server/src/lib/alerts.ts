@@ -154,5 +154,6 @@ export async function runAlerts(env: Env, now: number, fetchImpl?: FetchLike): P
 /** The cron job. Registered onto the existing hourly trigger in src/index.ts. */
 export const alertsJob: ScheduledJob = {
 	name: 'alerts',
+	cadence: '1h',
 	run: (env, now) => runAlerts(env, now),
 };
