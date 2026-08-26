@@ -48,10 +48,10 @@
 		"@facet/shared": "workspace:*",
 		"@facet/trust": "workspace:*",
 		"@types/node": "22.20.1",
-		"publint": "0.3.23",
+		"publint": "0.3.24",
 		"tsup": "8.5.1",
-		"tsx": "4.23.11",
+		"tsx": "4.23.12",
 		"typescript": "5.9.3",
-		"vitest": "4.1.10"
+		"vitest": "4.1.11"
 	}
 }
