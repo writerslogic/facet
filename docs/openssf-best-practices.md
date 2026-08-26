@@ -1,11 +1,16 @@
-<!-- Evidence map for the OpenSSF Best Practices Badge (bestpractices.dev). Register the project there,
-     then use this to answer the criteria. Keep in sync as the project evolves. -->
+<!-- Evidence map for the OpenSSF Best Practices Badge (bestpractices.dev). The badge is earned; the
+     answers themselves live in .bestpractices.json at the repo root, which the badge site reads to
+     pre-fill proposals. Keep BOTH in sync as the project evolves. -->
 
 # OpenSSF Best Practices — evidence map
 
-To earn the [OpenSSF Best Practices Badge](https://www.bestpractices.dev), a maintainer must register
-the project (requires a GitHub login) and self-attest against the criteria. This page maps the
-**passing**-level criteria to evidence already in this repo so the form can be filled quickly.
+Facet holds the [OpenSSF Best Practices Badge](https://www.bestpractices.dev/projects/14244) at the
+**passing** level (100%). This page maps the passing criteria to the evidence behind them.
+
+The answers are not filled in by hand: `.bestpractices.json` at the repo root carries all 67
+criteria with their status and justification, and the badge site reads it to pre-fill proposals.
+**Change that file, not the web form** — then press "Save (and continue) 🤖" on the project page to
+re-run the automation.
 
 | Criterion | Status | Evidence |
 | --- | --- | --- |
@@ -32,9 +37,9 @@ the project (requires a GitHub login) and self-attest against the criteria. This
 | Supply-chain provenance | ✅ | npm provenance + SLSA build provenance + SBOM (`release.yml`); `SECURITY.md` |
 | Automated supply-chain scoring | ✅ | OpenSSF Scorecard (`scorecard.yml`) |
 
-**To do (maintainer action):** register at bestpractices.dev, link this repo, and set the two project
-URLs. Most passing criteria above map directly; the only manual items are the project-site fields and
-confirming the change-control / reporting text.
+**Status:** 100% at passing level. Two criteria are honestly marked Unmet — `dynamic_analysis` and
+`dynamic_analysis_enable_assertions` — because there is no fuzzer or DAST. Both are SUGGESTED rather
+than required, so neither blocks the badge, and both track the same gap as Scorecard's `FuzzingID`.
 
 Reaching **silver/gold** additionally wants: signed releases (met — Sigstore provenance), a documented
 security-review, and ≥2 maintainers/bus-factor — track those as the project grows.

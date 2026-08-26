@@ -17,6 +17,7 @@ and no cross-session identity to leak.
   <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/writerslogic/facet"><img alt="Deploy to Cloudflare" src="https://img.shields.io/badge/Deploy%20to-Cloudflare-f38020.svg?logo=cloudflare&logoColor=white"></a>
   <a href="https://github.com/writerslogic/facet/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/writerslogic/facet/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/writerslogic/facet"><img alt="OpenSSF Scorecard" src="https://api.securityscorecards.dev/projects/github.com/writerslogic/facet/badge"></a>
+  <a href="https://www.bestpractices.dev/projects/14244"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/14244/badge"></a>
   <a href="https://slsa.dev"><img alt="SLSA Build Level 2" src="https://img.shields.io/badge/SLSA-Build%20L2-2ea44f.svg?logo=slsa&logoColor=white"></a>
   <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.7-blue.svg"></a>
   <a href="https://workers.cloudflare.com"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg"></a>
