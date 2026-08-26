@@ -35,11 +35,11 @@
 		"valibot": "1.4.2"
 	},
 	"devDependencies": {
-		"@cloudflare/vitest-pool-workers": "0.20.3",
+		"@cloudflare/vitest-pool-workers": "0.21.3",
 		"@cloudflare/workers-types": "4.20260702.1",
 		"drizzle-kit": "0.31.10",
 		"typescript": "5.9.3",
 		"vitest": "4.1.10",
-		"wrangler": "4.120.0"
+		"wrangler": "4.123.0"
 	}
 }
