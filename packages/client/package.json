@@ -24,7 +24,7 @@
 	"files": ["dist"],
 	"sideEffects": ["./dist/auto.js"],
 	"scripts": {
-		"build": "tsup",
+		"build": "rm -rf dist && tsup",
 		"lint": "biome check .",
 		"format": "biome format --write .",
 		"typecheck": "tsc --noEmit",
