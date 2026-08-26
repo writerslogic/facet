@@ -2,7 +2,7 @@
 // invalid key never consumes a bucket), a denied bucket returns 429 + Retry-After, and each site's
 // key maps to its own bucket so one customer cannot drain another's quota.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { Env } from '../src/env.js';

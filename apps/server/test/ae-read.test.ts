@@ -5,7 +5,7 @@
 // stores answer the same question. Sampling correction is asserted on the emitted SQL, because no
 // local runtime samples.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import type { BreakdownDimension, StatsFilter } from '@facet/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';

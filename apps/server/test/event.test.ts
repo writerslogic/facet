@@ -1,7 +1,7 @@
 // First-party server-to-server events: POST /api/event authenticated by API key writes an event
 // scoped to the key's site, drops bots, and rejects missing/invalid auth.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { issueKey } from '../src/lib/apikeys.js';

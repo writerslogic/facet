@@ -1,6 +1,6 @@
 // API-key + admin auth: key resolves to its site and bumps last_used; bogus keys/tokens get a 401.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { Hono } from 'hono';
 import type { MiddlewareHandler } from 'hono';
 import { describe, expect, it } from 'vitest';

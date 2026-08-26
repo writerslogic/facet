@@ -1,6 +1,6 @@
 // Stats helpers over a fixed seeded set: exact aggregates, hostname filtering, zero-fill.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';
 import {

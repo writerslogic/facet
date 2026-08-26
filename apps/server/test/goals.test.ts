@@ -1,6 +1,6 @@
 // Goals CRUD: admin create -> list -> delete round-trip via the mounted /api/goals router.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 

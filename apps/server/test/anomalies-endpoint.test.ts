@@ -1,7 +1,7 @@
 // GET /api/stats/anomalies: returns the detected anomaly for the owning key, 403s a wrong-site key,
 // and 400s an inverted range.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/queries.js';

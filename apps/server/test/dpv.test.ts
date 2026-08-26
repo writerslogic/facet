@@ -3,7 +3,7 @@
 // the deployment actually does is not a stale comment — it is a false statement under the deployment
 // key. These tests pin both shapes and, more importantly, pin the differences between them.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { Env } from '../src/env.js';

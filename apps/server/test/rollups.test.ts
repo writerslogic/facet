@@ -1,7 +1,7 @@
 // Rollup aggregation: one event_rollups row per (site, hostname) with exact counts, and
 // idempotence (a second run produces identical rows, no duplication or drift).
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';
 import { runRollups } from '../src/lib/rollups.js';

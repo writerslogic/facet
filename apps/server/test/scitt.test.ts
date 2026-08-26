@@ -3,7 +3,7 @@
 // MMR inclusion proof both verify. Admin-gated; 501 without a signing key. This exercises the FORMAT +
 // the local double; operating an external Transparency Service is a separate deployment concern.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import {
 	type ScittReceiptPayload,
 	type SignedStatement,

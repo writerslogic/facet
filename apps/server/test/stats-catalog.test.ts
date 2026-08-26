@@ -1,7 +1,7 @@
 // API-key-scoped catalog endpoints: the dashboard can list a site's goals + funnels with just an
 // API key (no admin token), and cross-site keys are rejected.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { issueKey } from '../src/lib/apikeys.js';

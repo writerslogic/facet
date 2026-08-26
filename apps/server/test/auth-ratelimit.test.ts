@@ -6,7 +6,7 @@
 // presence of a limit — sharing one bucket would let a /request flood from an office NAT lock every
 // operator behind it out of redeeming a link they legitimately received.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { Env } from '../src/env.js';

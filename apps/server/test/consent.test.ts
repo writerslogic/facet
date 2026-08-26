@@ -5,7 +5,7 @@
 //      because the SIGNED payload — not the DB columns — is bound to the enforcement context.
 // Also: a genuine statement in its correct context verifies; expiry and revocation drop elevation.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { generateSigningJwk, loadSigningKey } from '@facet/trust';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {

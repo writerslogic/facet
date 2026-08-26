@@ -1,7 +1,7 @@
 // Account auth: session-token crypto + role ranking (pure), the magic-link lifecycle + user/team
 // bootstrap (D1), and the request→verify→me route flow.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import {

@@ -1,7 +1,7 @@
 // Funnels CRUD: create -> list (steps parsed back to an array) -> delete; a 1-step funnel
 // fails validation with 400 validation_failed.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 

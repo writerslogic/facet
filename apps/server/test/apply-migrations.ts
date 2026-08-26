@@ -1,4 +1,5 @@
-import { applyD1Migrations, env, reset } from 'cloudflare:test';
+import { applyD1Migrations, reset } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach } from 'vitest';
 import { __resetIngestDedupForTests } from '../src/lib/ingest.js';
 

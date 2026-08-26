@@ -3,7 +3,7 @@
 // rather than in SQL. Merging is where an aggregate quietly stops being exact, so these tests pin the
 // two ways it could: totals that fail to add up, and a ranking assembled from per-chunk prefixes.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { contactActivity, contactEvents } from '../src/db/contact-analytics.js';
 import { D1_MAX_IN_PARAMS } from '../src/lib/constants.js';

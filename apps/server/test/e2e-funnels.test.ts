@@ -1,7 +1,7 @@
 // End-to-end conversions & funnels: seed sessions completing 0/1/2/3 steps, then assert
 // /stats/conversions rate and /funnels/:id/report counts + overall_rate.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/queries.js';

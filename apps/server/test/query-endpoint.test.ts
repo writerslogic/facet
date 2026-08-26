@@ -1,7 +1,7 @@
 // POST /api/stats/query route guards, exercised without an AI binding: the happy path returns
 // 503 ai_unavailable (no AI in the test env), and site/question validation reject before that.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 

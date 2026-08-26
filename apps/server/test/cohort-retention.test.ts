@@ -2,7 +2,7 @@
 // retained, week bucketing, and the salt-window reality (a rotated hash across days is a NEW visitor,
 // so at the daily grain cross-period retention is honestly ~0).
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db/queries.js';
 import * as schema from '../src/db/schema.js';

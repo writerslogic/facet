@@ -3,7 +3,7 @@
 // signing key is configured (the test env has none, so elevation must fail safe). getScopedSalt is
 // stable per scope and records window_end for retention.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { getScopedSalt, resolvePolicy, windowEndMs } from '../src/lib/identity.js';
 

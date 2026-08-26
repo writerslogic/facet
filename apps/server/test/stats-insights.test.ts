@@ -12,7 +12,7 @@
 // these are new public surface, and a read that forgot `requireSiteAccess` is the one bug that
 // cannot be caught by looking at its output.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import type {
 	ClockResponse,
 	DimensionSeriesResponse,

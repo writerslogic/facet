@@ -1,7 +1,7 @@
 // Tiered granularity: fine rollups fold into a `month` row that converges on re-run, leaves its
 // sources in place, and refuses to invent a monthly unique count.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { coarsenRollups } from '../src/lib/coarsen.js';
 

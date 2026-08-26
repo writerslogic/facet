@@ -1,7 +1,7 @@
 // Experiment significance + aggregation. Unit-tests the two-proportion p-value against a pinned
 // case, then seeds `$exposure` + goal events and asserts exact exposures/conversions/rate.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { experimentResult, twoProportionPValue } from '../src/db/experiments.js';
 import { db } from '../src/db/queries.js';

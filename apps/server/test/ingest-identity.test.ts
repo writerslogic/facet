@@ -3,7 +3,7 @@
 // elevated site with a valid consent record writes the windowed hash; and an elevated site WITHOUT
 // consent silently downgrades to the Tier-0 day hash (never dropped).
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { generateSigningJwk, loadSigningKey } from '@facet/trust';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { signConsent, storeConsentRecord } from '../src/lib/consent.js';

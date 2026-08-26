@@ -1,7 +1,7 @@
 // Privacy guarantees pinned as tests. If any of these fail, the hashing/ingest design is wrong
 // and must be fixed before shipping.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
 import { visitorHash } from '../src/lib/hash.js';

@@ -3,7 +3,7 @@
 // AnalyticsReportCredential over an aggregate snapshot. Both verify against the deployment key and
 // 501 when signing is unconfigured. The report subject is the dataset, never a person.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { type VerifiableCredential, generateSigningJwk, verifyCredential } from '@facet/trust';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';

@@ -1,6 +1,6 @@
 // API key issuance/hashing/listing/revocation: hashes only, plaintext shown once.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { hashKey, issueKey, listKeys, revokeKey } from '../src/lib/apikeys.js';
 

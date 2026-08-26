@@ -7,7 +7,7 @@
 // individually-consented, so the tests that matter are the ones where a contact at the company has
 // events sitting right there and is still excluded — revoked consent, and a forged statement.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { CRM_MAX_OFFSET } from '@facet/shared';
 import { generateSigningJwk } from '@facet/trust';
 import { beforeEach, describe, expect, it } from 'vitest';

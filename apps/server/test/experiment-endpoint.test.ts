@@ -1,7 +1,7 @@
 // Experiment CRUD + result endpoints: create an experiment (admin), read the public /active flag
 // config (no auth), enumerate via the API-key catalog, and assert the /stats/experiment result.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/queries.js';

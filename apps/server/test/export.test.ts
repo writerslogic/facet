@@ -1,7 +1,7 @@
 // F.21: GET /api/stats/export — authenticated, site-scoped CSV/JSON export of series and breakdowns
 // with bounded output, header/disposition correctness, and CSV formula-injection safety.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';

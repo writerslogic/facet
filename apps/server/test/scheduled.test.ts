@@ -1,7 +1,7 @@
 // The cron handler runs rollups + retention in one pass, and isolates job failures so a thrown
 // error in one job still lets the others run.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';
 import { enforceRetention } from '../src/lib/retention.js';

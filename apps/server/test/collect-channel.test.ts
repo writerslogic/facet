@@ -1,6 +1,6 @@
 // The collect handler classifies and persists the traffic channel + UTM columns.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 

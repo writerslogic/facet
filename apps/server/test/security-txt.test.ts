@@ -7,7 +7,7 @@
 // `FACET_SECURITY_CONTACT` publish the upstream maintainer's mailbox as their own disclosure
 // address. These tests pin that no such default exists: unconfigured means no document at all.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import type { Env } from '../src/env.js';

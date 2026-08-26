@@ -1,6 +1,6 @@
 // Event insert (props JSON round-trip, UUID id) and idempotent session upsert.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { type NewEvent, insertEvent, upsertSession } from '../src/db/queries.js';
 

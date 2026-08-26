@@ -1,7 +1,7 @@
 // Funnel report: seed sessions with known step completion and assert each steps[i].count and
 // overall_rate; verify out-of-order events do NOT count as progression.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/queries.js';

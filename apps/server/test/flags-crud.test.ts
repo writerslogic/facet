@@ -4,7 +4,7 @@
 //     high-severity leak) and turns its ETag over when a flag changes;
 //   • the PUBLIC /eval applies server-side rules, is sticky per stable id, and honors GPC.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 

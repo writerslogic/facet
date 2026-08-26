@@ -3,7 +3,7 @@
 // Events are inserted directly because POST /api/collect stamps Date.now(), which can't produce a
 // controlled session gap.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/queries.js';

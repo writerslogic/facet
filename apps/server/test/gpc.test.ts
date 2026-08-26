@@ -3,7 +3,7 @@
 // authenticated first-party endpoint (/api/event) still COUNT it (accurate total traffic). GPC forces
 // the anonymous Tier-0 hash downstream, so the visitor is never identity-elevated.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { issueKey } from '../src/lib/apikeys.js';
