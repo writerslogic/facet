@@ -38,9 +38,15 @@ registerJob({
 		await buildSessions(env, dayKey(now - HOUR_MS));
 	},
 });
+// IMPORTANT: hourly, not daily, and not for cost reasons. `enforceRetention` purges on a rolling
+// `now - RAW_RETENTION_DAYS` cutoff, so its cadence IS the worst-case overshoot of the window the
+// deployment advertises — and the salt/identity-salt deletes it ends with are what irreversibly
+// sever the hash-to-input mapping that window promises. A daily cadence would hold raw visitor data
+// up to 24h past the advertised window instead of up to 1h. `idx_events_created` (migration 0021)
+// is what makes the hourly no-op delete cheap; spend that rather than the guarantee.
 registerJob({
 	name: 'retention',
-	cadence: '24h',
+	cadence: '1h',
 	run: (env, now) => enforceRetention(env, now),
 });
 // Optional: age out the CRM audit log on its own, longer window. No-op unless CRM_DB is bound.

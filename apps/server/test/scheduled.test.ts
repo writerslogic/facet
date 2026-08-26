@@ -5,7 +5,7 @@ import { env } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';
 import { enforceRetention } from '../src/lib/retention.js';
-import { type ScheduledJob, runScheduled } from '../src/lib/scheduled.js';
+import { JOBS, type ScheduledJob, runScheduled } from '../src/lib/scheduled.js';
 
 const S = '11111111-1111-4111-8111-111111111111';
 const DAY = 86_400_000;
@@ -181,5 +181,15 @@ describe('runScheduled', () => {
 		await runScheduled(fakeEvent(NOW), env, jobs);
 
 		expect((await ledger('fixed'))?.cadence_error).toBeNull();
+	});
+});
+
+// The cadence of the purge job is a privacy guarantee, not a tuning knob: enforceRetention() purges
+// on a rolling cutoff, so how often it runs is the worst-case overshoot of the advertised
+// RAW_RETENTION_DAYS window. Moving it to a slower cadence to save queries silently retains raw
+// visitor data past what the deployment claims, which is why this is pinned rather than reviewed.
+describe('retention cadence', () => {
+	it('purges on the trigger interval, not a slower one', () => {
+		expect(JOBS.find((j) => j.name === 'retention')?.cadence).toBe('1h');
 	});
 });
