@@ -49,7 +49,9 @@ readinessRoute.get('/', requireAdmin, async (c) => {
 	if (checks.database) {
 		try {
 			const jobs = await c.env.DB.prepare(
-				'SELECT name, last_success_at, last_failure_at, last_error FROM scheduled_job_runs ORDER BY name',
+				// IMPORTANT: cadence_error must be selected — a job disabled by a malformed cadence never
+				// runs and so never records a failure, making it invisible on every other column here.
+				'SELECT name, last_success_at, last_failure_at, last_error, last_occurrence, cadence_error FROM scheduled_job_runs ORDER BY name',
 			).all();
 			jobResults = jobs.results;
 			const integrity = await c.env.DB.prepare(`

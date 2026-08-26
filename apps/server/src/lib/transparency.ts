@@ -25,7 +25,7 @@ import {
 	signCheckpoint,
 	toHex,
 } from '@facet/trust';
-import { and, asc, count, desc, eq, inArray, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNull, lte, or, sql } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -127,8 +127,11 @@ export async function appendFinalizedRollups(env: Env, now: number): Promise<num
 						eq(schema.eventRollups.interval, 'day'),
 						lte(schema.eventRollups.bucketStart, hourFloor - 24 * HOUR_MS),
 					),
+					// IMPORTANT: an explicit allowlist, never `interval != 'day'`. `lib/coarsen.ts` writes
+					// `month`/`year` rows whose `visitors` is deliberately 0, and an exclusion filter would
+					// hash that 0 into a permanent signed leaf, attesting "this month had no visitors".
 					and(
-						ne(schema.eventRollups.interval, 'day'),
+						eq(schema.eventRollups.interval, 'hour'),
 						lte(schema.eventRollups.bucketStart, hourFloor - HOUR_MS),
 					),
 				),

@@ -296,6 +296,41 @@ Setting this **below 90 disables the Analytics Engine mirror**. Cloudflare keeps
 three months with no delete API, so a mirrored copy cannot be purged on your schedule — a shorter
 window means the deployment stays D1-only rather than retaining data past what it advertises.
 
+### Rollup granularity
+
+Rollups stay durable, but a long-lived install does not need hourly detail forever. A daily
+`rollup-coarsening` job additionally summarises aged history into coarser rows:
+
+| Var | Default | Effect |
+| --- | --- | --- |
+| `ROLLUP_DETAIL_MONTHS` | `36` | Months of `hour`/`day` detail kept before a month is also written as one `month` row. |
+| `ROLLUP_MONTHLY_MONTHS` | `120` | Months after which a whole year is also written as one `year` row. Never lower than `ROLLUP_DETAIL_MONTHS`. |
+
+Coarsening is **additive**: nothing is deleted, and the fine rows it read remain in place. Coarse
+rows carry `pageviews` and `events` only — their `visitors` is `0` by design, because unique visitors
+cannot be re-derived once raw events age past `RAW_RETENTION_DAYS` and summing daily uniques is not a
+monthly unique count. For the same reason coarse rows are excluded from the transparency log.
+
+## Crawler list (optional)
+
+Bot filtering ships with a compiled-in list. To update it without redeploying, point
+`FACET_BOT_RULESET_URL` (a `vars` entry) at an **https** URL serving a JSON array of regex source
+strings. Fetched patterns are **additive only**: they can add crawlers to drop, never stop the
+built-in list from dropping one, so a bad or empty upstream cannot start recording bot traffic.
+
+Payloads are bounded at 2000 patterns, 200 characters each, and 512 KB of body; patterns that fail
+to compile, match a catastrophic-backtracking shape, or match a normal desktop browser are dropped.
+A daily cron refresh uses `If-None-Match`, so an unchanged upstream costs no write. Unset, the whole
+feature is inert.
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/bots/ruleset` | Current sources, pattern counts, and last refresh time. |
+| `POST /api/bots/refresh` | Refresh now. |
+
+Both require the admin token and return `501` when `FACET_BOT_RULESET_URL` is unset. The CLI wraps
+them as `npx @writerslogic/facet-cli bots status` and `bots refresh`.
+
 ## Analytics Engine reads (optional)
 
 The mirror is best-effort and explicitly opt-in: set `AE_BEST_EFFORT_ENABLED = "true"` under

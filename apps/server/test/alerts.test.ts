@@ -650,6 +650,7 @@ describe('cron alerting', () => {
 					alertsJob,
 					{
 						name: 'after',
+						cadence: '1h',
 						run: async () => {
 							ran = true;
 						},

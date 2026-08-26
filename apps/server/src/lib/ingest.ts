@@ -7,7 +7,7 @@ import type { EventProps } from '@facet/shared';
 import { type NewEvent, type NewSession, persistEvents } from '../db/queries.js';
 import type { Env } from '../env.js';
 import { writeEvent } from './ae.js';
-import { isBot } from './bots.js';
+import { ensureBotPatterns, isBot } from './bots.js';
 import { classifyChannel } from './channel.js';
 import { findActiveConsent } from './consent.js';
 import { visitorHash } from './hash.js';
@@ -156,10 +156,14 @@ export interface DerivedEvent {
 }
 
 /** Derive a complete event row + session from a request-time input — bot drop, privacy-safe visitor
- * hash, channel classification, segmentation — WITHOUT touching D1, so the result is safe to enqueue
- * and persist later. Returns null for bots (dropped). This is the CPU/derivation half of ingest; the
- * D1 writes live in `persistDerived`, which the beacon hot path defers to the queue consumer. */
+ * hash, channel classification, segmentation — performing no D1 WRITE, so the result is safe to
+ * enqueue and persist later. Returns null for bots (dropped). This is the CPU/derivation half of
+ * ingest; the D1 writes live in `persistDerived`, which the beacon hot path defers to the queue
+ * consumer. The reads it does make (policy, bot ruleset) are each isolate-cached or single-row. */
 export async function deriveEvent(env: Env, input: IngestInput): Promise<DerivedEvent | null> {
+	// PERF: TTL-guarded to one D1 read per isolate per minute. Skipping it would confine the refreshed
+	// ruleset to whichever isolate ran the cron, which is never the one serving this request.
+	await ensureBotPatterns(env, input.now);
 	if (isBot(input.ua)) {
 		return null;
 	}

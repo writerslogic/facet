@@ -13,6 +13,7 @@ const EXPECTED_TABLES = [
 	'api_key_scopes',
 	'api_keys',
 	'auth_tokens',
+	'bot_rulesets',
 	'consent_records',
 	'event_rollups',
 	'event_sessions',

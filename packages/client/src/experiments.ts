@@ -3,7 +3,7 @@
 // receives an aggregate `$exposure` event carrying { flag, variant }. Zero dependencies.
 
 import { localId } from './id.js';
-import { getConfig, track } from './index.js';
+import { getConfig, sendEvent } from './index.js';
 import { isOptedOut } from './optout.js';
 
 interface FlagDef {
@@ -24,7 +24,44 @@ const CONTROL = 'control';
 
 let flags: FlagDef[] | null = null;
 let fetching = false;
+
+// Exposure dedupe is committed only once the server acknowledges the `$exposure` beacon. Committing on
+// send instead means a dropped exposure suppresses the retry that would have recorded it, and the
+// experiment silently under-counts one arm.
 const exposed = new Set<string>();
+const inflight = new Set<string>();
+const retryAt = new Map<string, number>();
+
+// IMPORTANT: bounds concurrent in-flight exposures, so an unreachable collector cannot fan out one
+// request per known flag at once. Flags past the cap are picked up by a later assignment() call.
+const MAX_INFLIGHT_EXPOSURES = 32;
+
+// IMPORTANT: the cap bounds concurrency, not RATE — recordExposure runs on every assignment()/variant()
+// call, so against a dead collector a component resolving a variant each render would re-send per
+// render. A failed send is held for this long; a first send is never delayed.
+const EXPOSURE_RETRY_MS = 5_000;
+
+/**
+ * Send an `$exposure` once per flag, committing the dedupe marker only on a server ack.
+ *
+ * KISS: no retry queue. `assignment()` supplies `chosen` on every call and is the only caller, so a
+ * failed exposure is retried by the next call that asks for the same flag — holding a copy of the
+ * variant to replay later would buy nothing and cost the snippet bytes it has a budget for.
+ */
+function recordExposure(flagKey: string, chosen: string): void {
+	if (exposed.has(flagKey) || inflight.has(flagKey)) return;
+	const held = retryAt.get(flagKey);
+	if (held !== undefined && held > Date.now()) return;
+	if (inflight.size >= MAX_INFLIGHT_EXPOSURES) return;
+	inflight.add(flagKey);
+	void sendEvent('$exposure', { flag: flagKey, variant: chosen }, true).then((ok) => {
+		inflight.delete(flagKey);
+		if (ok) {
+			exposed.add(flagKey);
+			retryAt.delete(flagKey);
+		} else retryAt.set(flagKey, Date.now() + EXPOSURE_RETRY_MS);
+	});
+}
 
 // Readiness: a single promise that resolves once init has happened and the /active fetch settles
 // (success OR failure). It never rejects. whenReady() hands out this stable promise; loadFlags()
@@ -150,10 +187,7 @@ export function assignment(flagKey: string): Assignment {
 		};
 	}
 	const chosen = pick(def, localId());
-	if (!exposed.has(flagKey)) {
-		exposed.add(flagKey);
-		track('$exposure', { flag: flagKey, variant: chosen });
-	}
+	recordExposure(flagKey, chosen);
 	return { variant: chosen, participating: true, status: 'assigned' };
 }
 
