@@ -239,6 +239,26 @@ export const scheduledJobRuns = sqliteTable('scheduled_job_runs', {
 	lastSuccessAt: integer('last_success_at'),
 	lastFailureAt: integer('last_failure_at'),
 	lastError: text('last_error'),
+	// The scheduled occurrence a run satisfied, not the wall-clock time it ran. A Worker cron that
+	// was unavailable for a day must run a daily job ONCE on return, not once per missed tick, and
+	// only a record of which occurrence was covered can tell those apart.
+	lastOccurrence: integer('last_occurrence'),
+	// Set when a job's cadence expression is unparseable. IMPORTANT: a bad cadence disables that one
+	// job and is never defaulted — running something on a cadence nobody chose is worse than not
+	// running it. Null means the cadence is valid.
+	cadenceError: text('cadence_error'),
+});
+
+/** Operator-refreshable bot user-agent patterns, keyed by source. `patterns` is a JSON TEXT array of
+ * regex sources; `etag` is the upstream validator so a refresh that changed nothing costs no write.
+ * The compiled-in `isbot` list stays the floor — these are additive, never subtractive, so a bad
+ * refresh can never make the deployment start recording crawlers it already dropped. */
+export const botRulesets = sqliteTable('bot_rulesets', {
+	source: text('source').primaryKey(),
+	patterns: text('patterns').notNull(),
+	etag: text('etag'),
+	patternCount: integer('pattern_count').notNull().default(0),
+	updatedAt: integer('updated_at').notNull(),
 });
 
 // goals/funnels use snake_case JS keys for the columns crudRouter and its POST body touch (`id`,

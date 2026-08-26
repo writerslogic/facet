@@ -27,6 +27,11 @@ export interface Env {
 	 * default in `constants.ts`, which is deliberately longer than the raw-event window because the log
 	 * records what OPERATORS did rather than what visitors did. Only read when `CRM_DB` is bound. */
 	CRM_AUDIT_RETENTION_DAYS?: string;
+	/** Months of hour/day rollup detail kept before `lib/coarsen.ts` folds a month into one `month`
+	 * row (string var). Nothing is deleted — coarsening is additive. */
+	ROLLUP_DETAIL_MONTHS?: string;
+	/** Months after which a `month` rollup row is additionally folded into a `year` row (string var). */
+	ROLLUP_MONTHLY_MONTHS?: string;
 	/** Cloudflare account id (var), used for Analytics Engine SQL-over-HTTP reads. */
 	CF_ACCOUNT_ID: string;
 	/** Cloudflare API token (Worker secret) for Analytics Engine SQL-over-HTTP reads. */
@@ -60,6 +65,10 @@ export interface Env {
 	FACET_GIT_COMMIT?: string;
 	/** Optional SHA-256 (hex) of the wrangler config (var), surfaced in RATS process evidence. */
 	FACET_WRANGLER_HASH?: string;
+	/** Optional https URL (var) serving a JSON array of bot user-agent regex sources. Unset means the
+	 * refresh is inert and compiled-in `isbot` is the only source; fetched patterns are ADDITIVE (see
+	 * `lib/bots.ts`). https is required because the response becomes regexes that gate what is recorded. */
+	FACET_BOT_RULESET_URL?: string;
 	/** Optional external SCITT Transparency Service URL (var). When unset, external registration is a no-op. */
 	SCITT_URL?: string;
 	/** Optional bearer token (Worker secret) for the external SCITT service. */

@@ -568,10 +568,13 @@ const PREDICATE_CLAIMS: PredicateClaim[] = [
 	{
 		claim: 'an $exposure fires at most once per flag per page load',
 		shownIn: `${DOCS_TSX} › "Experiments vs feature flags"`,
-		decidedBy: 'packages/client/src/experiments.ts › assignment (exposed set)',
+		// The at-most-once decision moved out of `assignment` when exposure commits became
+		// ack-deferred: `recordExposure` is now the gate, and it must consult BOTH the acknowledged set
+		// and the in-flight set — dropping the latter would re-send while a request is still open.
+		decidedBy: 'packages/client/src/experiments.ts › recordExposure (exposed + inflight sets)',
 		docSays: ['fired at most once per flag per page load'],
-		implementation: () => blockAfter('clientExperiments', 'export function assignment('),
-		requires: ['if (!exposed.has(flagKey))', "track('$exposure'"],
+		implementation: () => blockAfter('clientExperiments', 'function recordExposure('),
+		requires: ['exposed.has(flagKey)', 'inflight.has(flagKey)'],
 	},
 	// ---------------------------------------------------------------------------------------------
 	// DNT / GPC. This claim has been wrong in five separate places (privacy.md, usage.md,

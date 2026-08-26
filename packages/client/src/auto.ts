@@ -43,6 +43,8 @@ function trackPageview(): void {
 	if (path === lastPath && now - lastSentAt < REPEAT_PAGEVIEW_MS) return;
 	lastPath = path;
 	lastSentAt = now;
+	// YAGNI: no ack-release here. Pageviews go out via sendBeacon, which reports only that the browser
+	// queued the request, so there is no acceptance signal to release this gate on.
 	track();
 }
 

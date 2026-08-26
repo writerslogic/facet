@@ -148,6 +148,25 @@ export function setRoutePattern(source: string, pattern: string | null): EditRes
 }
 
 /** True when an active (uncommented) `queues` block is present. */
+const CRONS_RE = /"crons"\s*:\s*\[([^\]]*)\]/;
+
+/**
+ * Cron expressions declared in the config, or `[]` when the block is absent.
+ *
+ * IMPORTANT: comment-stripped first, unlike the single-key readers above. The shipped config
+ * documents the post-v1 schedule in commented-out `"crons"` lines, and a bare match would report a
+ * schedule the deployed Worker does not actually run.
+ */
+export function getCronTriggers(source: string): string[] {
+	const active = source
+		.split('\n')
+		.filter((line) => !line.trimStart().startsWith('//'))
+		.join('\n');
+	const body = active.match(CRONS_RE)?.[1];
+	if (body === undefined) return [];
+	return [...body.matchAll(/"([^"]*)"/g)].map((m) => m[1] ?? '').filter((v) => v !== '');
+}
+
 export function hasQueues(source: string): boolean {
 	return findKeyLine(source.split('\n'), 'queues') >= 0;
 }

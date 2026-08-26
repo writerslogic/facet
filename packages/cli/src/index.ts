@@ -1,5 +1,6 @@
 // facet-cli entrypoint: dispatches setup subcommands and the admin-API resource groups.
 
+import { runBots } from './commands/bots.js';
 import { runConfig } from './commands/config.js';
 import { runDoctor } from './commands/doctor.js';
 import { runInit } from './commands/init.js';
@@ -34,6 +35,10 @@ Setup:
 
 Reporting:
   stats --host <url> --key <k> --site <uuid>   Print summary stats
+
+Bot ruleset (admin API — needs --host + --admin-token, or FACET_HOST/FACET_ADMIN_TOKEN):
+  bots status                  Show the stored crawler ruleset (source, pattern count, updated, etag)
+  bots refresh                 Re-fetch FACET_BOT_RULESET_URL now, without a redeploy
 
 Verify (offline):
   verify export <file>                          Verify a signed stats export envelope
@@ -88,6 +93,8 @@ export async function main(argv: string[]): Promise<number> {
 				return await runMigrate(argv.slice(1));
 			case 'stats':
 				return await runStats(argv.slice(1));
+			case 'bots':
+				return await runBots(argv.slice(1));
 			case 'config':
 				return await runConfig(argv.slice(1));
 			case 'keys':
