@@ -30,3 +30,5 @@ each metric definition is checked against the SQL that computes it, and every ro
 `apps/server/src/routes/registry.ts` must appear in [api.md](./api.md). Changing a constant or a
 predicate without updating the prose fails the build, with a message naming the claim and its source
 of truth. When you add a checkable claim to the in-app docs or to `api.md`, add its guard there.
+
+<!-- probe: required-status-check behaviour test, not for merge -->
