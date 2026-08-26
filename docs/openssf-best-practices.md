@@ -20,14 +20,14 @@ the project (requires a GitHub login) and self-attest against the criteria. This
 | Bug-reporting process | ✅ | GitHub Issues; `CONTRIBUTING.md` |
 | Vulnerability-reporting process (private) | ✅ | `SECURITY.md` — GitHub private security advisories, plus the maintainer contact listed there |
 | Working build system | ✅ | pnpm workspaces; `pnpm build` |
-| Automated test suite | ✅ | Vitest (`@cloudflare/vitest-pool-workers`), 500+ tests; `pnpm test` in CI |
+| Automated test suite | ✅ | Vitest (`@cloudflare/vitest-pool-workers`); the full suite runs on every PR via `pnpm test` in `ci.yml` |
 | Tests added with new functionality (policy) | ✅ | Enforced in review; every feature/fix ships regression tests |
 | Compiler/linter warning flags | ✅ | `tsc` strict typecheck + Biome lint in CI (`ci.yml`) |
 | Secure development knowledge (crypto) | ✅ | Standards-based crypto via Web Crypto + `jose`; see `docs/trust.md`, `docs/standards.md` |
 | Uses standard crypto (no bespoke) | ✅ | Ed25519 / ECDSA P-256, SHA-256, JWS/COSE, RFC 8785 — `@facet/trust` |
 | Delivered over HTTPS | ✅ | Cloudflare Workers (TLS); npm/registry over HTTPS |
 | No leaked credentials | ✅ | Secrets are Worker secrets; API keys stored as SHA-256 hashes; `.dev.vars` gitignored |
-| Static analysis | ✅ | CodeQL (`codeql.yml`) + Biome |
+| Static analysis | ✅ | CodeQL via GitHub default setup (`extended` query suite, JS/TS + Actions) + Biome lint |
 | Dynamic analysis / dependency review | ✅ | Dependency Review (`dependency-review.yml`), Dependabot |
 | Supply-chain provenance | ✅ | npm provenance + SLSA build provenance + SBOM (`release.yml`); `SECURITY.md` |
 | Automated supply-chain scoring | ✅ | OpenSSF Scorecard (`scorecard.yml`) |
