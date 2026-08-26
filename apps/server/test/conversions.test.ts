@@ -1,6 +1,6 @@
 // Goal conversions over the authed /api/stats/conversions endpoint, for event-type and path-type goals.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/queries.js';

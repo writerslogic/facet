@@ -1,6 +1,6 @@
 // Retention cleanup: only rows older than the cutoff are deleted; event_rollups untouched.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import type { Env } from '../src/env.js';
 import { DEFAULT_RAW_RETENTION_DAYS } from '../src/lib/constants.js';

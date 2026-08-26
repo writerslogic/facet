@@ -1,7 +1,7 @@
 // Phase 2 privacy review: UTM values live only in their declared columns, and derived sessions
 // carry no raw IP/UA and a non-reversible id.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { dayKey } from '../src/lib/salt.js';

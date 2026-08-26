@@ -1,7 +1,7 @@
 // GET /stats/retention: authed cohort-retention read over seeded `sessions`. Site-scope enforcement,
 // range validation, period validation, and the salt-window note in the response.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/queries.js';

@@ -3,7 +3,7 @@
 // site_id is taken from the API key (not the body), grant→revoke works, and the admin identity PATCH
 // is guarded (its own admin auth, site must exist, 501 for elevation without a key).
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { generateSigningJwk } from '@facet/trust';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';

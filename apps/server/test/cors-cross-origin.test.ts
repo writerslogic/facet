@@ -9,7 +9,7 @@
 //                         request against a wildcard is rejected by the browser.
 //   /api/experiments/active carried no CORS headers whatsoever, so the response was blocked.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 

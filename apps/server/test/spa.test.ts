@@ -1,7 +1,7 @@
 // The Worker serves the built dashboard for non-API routes (with SPA fallback), while API
 // routes keep returning JSON.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 

@@ -3,7 +3,7 @@
 // without ingesting the whole JSON API, so the properties worth pinning are the boundaries: what is
 // public, what needs a key, and that a key can never reach another site.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';

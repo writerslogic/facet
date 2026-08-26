@@ -3,7 +3,7 @@
 // the server total) while visitors is COUNT(DISTINCT) per cell and is NOT additive (summing over-counts
 // a visitor who spans cells). Both are asserted against a fixed seed.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';
 import { cube, summary } from '../src/db/stats.js';

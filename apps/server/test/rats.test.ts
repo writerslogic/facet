@@ -3,7 +3,7 @@
 // nonce; the PrivacyAttestationCredential references the evidence's content-ref digest. 501 without a
 // signing key.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import {
 	type EatClaims,
 	type SignedStatement,

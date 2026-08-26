@@ -2,7 +2,7 @@
 // in the range but no sessions are materialized yet; false for empty ranges and materialized ones.
 // The stats endpoints expose it as a backward-compatible optional `meta` field.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';

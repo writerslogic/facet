@@ -3,7 +3,7 @@
 // baseline, so partial current-hour data can't fabricate a "drop". A flat baseline followed by a
 // sharp completed-hour drop is flagged with a device/country root cause.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { detectAnomalies } from '../src/db/anomaly.js';
 import { db } from '../src/db/queries.js';

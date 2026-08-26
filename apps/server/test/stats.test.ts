@@ -1,7 +1,7 @@
 // GET /api/stats: authed read returns the assembled response; enforces site scope, range
 // validity, and the max range.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';

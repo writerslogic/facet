@@ -2,7 +2,7 @@
 // from marketer-facing custom-event metrics (summary.events, topEvents) but remain queryable via
 // topInteractions.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';
 import { summary, topEvents, topInteractions } from '../src/db/stats.js';

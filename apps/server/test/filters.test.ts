@@ -1,6 +1,6 @@
 // buildEventWhere: the canonical site/hostname/[start,end) predicate over `events`.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { sql } from 'drizzle-orm';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { buildEventWhere } from '../src/db/filters.js';

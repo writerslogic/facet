@@ -7,7 +7,7 @@
 // is given a role but no audited action cannot compile, and an action added to the set with no route
 // behind it fails here.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { CRM_AUDIT_ACTIONS } from '@facet/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';

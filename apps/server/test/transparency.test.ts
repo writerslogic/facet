@@ -3,7 +3,7 @@
 // consistency proof between two tree states. Verified end-to-end with @facet/trust. No-op without a
 // signing key. Leaves commit aggregate rollups, never raw events.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import {
 	generateSigningJwk,
 	verifyCheckpoint,

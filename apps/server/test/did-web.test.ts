@@ -3,7 +3,7 @@
 // Domain Linkage Credential binding the origin to the DID. Both require an Ed25519 signing key and
 // 404 when unconfigured; the linkage verifies against the served DID document.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import {
 	type DidConfiguration,
 	type DidDocument,

@@ -1,7 +1,7 @@
 // Engagement + channels helpers over seeded event_sessions: exact metrics, channel
 // grouping/sorting, and `internal` exclusion.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db/queries.js';
 import * as schema from '../src/db/schema.js';

@@ -1,7 +1,7 @@
 // GET /stats/sessions + /stats/channels and the extended /stats: authed reads over seeded
 // event_sessions; site-scope enforcement.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/queries.js';

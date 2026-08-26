@@ -6,7 +6,7 @@
 // that was alerted on is never alerted on again, a severity threshold is honoured, and a dead
 // endpoint degrades to a recorded failure instead of taking the cron down.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import type { AnomalyAlertPayload } from '@facet/shared';
 import { generateSigningJwk, verifyDetachedJws } from '@facet/trust';
 import { describe, expect, it, vi } from 'vitest';

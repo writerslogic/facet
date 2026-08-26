@@ -1,6 +1,6 @@
 // Daily salt: stable per UTC day (one row, race-safe), distinct across days.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { dayKey, getDailySalt } from '../src/lib/salt.js';
 

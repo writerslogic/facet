@@ -2,7 +2,7 @@
 // client-shaped beacons across two hostnames (a bot dropped), runs the scheduled handler, and
 // asserts exact stats, the per-hostname split, and that the dashboard is served.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { HOUR_MS } from '../src/lib/constants.js';

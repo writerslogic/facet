@@ -3,7 +3,7 @@
 // self-contained, offline-verifiable envelope. /.well-known/jwks.json publishes the verification key.
 // With no key configured, nothing is signed (the deployment behaves exactly as before).
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import {
 	generateSigningJwk,
 	verifyDetachedJws,

@@ -1,6 +1,6 @@
 // App shell: canonical error envelope, JSON 404, scoped CORS on the beacon, oversized-body rejection.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 

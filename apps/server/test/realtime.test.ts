@@ -1,7 +1,7 @@
 // C.15: realtime snapshot — distinct active visitors + pageviews over the trailing window, from raw
 // events. Privacy-safe (daily hash, no ids). Site-scoped and windowed.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { type NewEvent, insertEvent } from '../src/db/queries.js';

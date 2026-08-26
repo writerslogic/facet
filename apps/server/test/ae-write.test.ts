@@ -3,7 +3,7 @@
 // limits, that an unbound binding is a no-op, and that ingest writes exactly one data point per
 // accepted event — and none for a bot.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it, vi } from 'vitest';
 import type { NewEvent } from '../src/db/queries.js';
 import type { Env } from '../src/env.js';

@@ -1,7 +1,7 @@
 // NL analytics pipeline over real D1: runQueryIntent scalar/breakdown exactness, the full
 // answerQuestion pipeline driven by a stub LlmRunner (no AI binding), and translateQuery fallback.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import type { QueryIntent } from '@facet/shared';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { runQueryIntent } from '../src/db/nlquery.js';

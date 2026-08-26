@@ -1,7 +1,7 @@
 // crudRouter factory: generic insert-with-uuid / list-by-site / delete, behind requireAdmin.
 // Exercised against an ephemeral `widgets` table so it stands alone from later resource migrations.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import { Hono } from 'hono';
 import * as v from 'valibot';

@@ -1,6 +1,6 @@
 // Admin sites & keys endpoints: create/list sites, issue/list(no hash)/revoke keys, behind requireAdmin.
 
-import { env } from 'cloudflare:test';
+import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { siteRole, upsertUserByEmail, userMemberships } from '../src/lib/accounts.js';
