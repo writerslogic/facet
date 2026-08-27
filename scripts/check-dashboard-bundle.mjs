@@ -14,9 +14,14 @@ const totalJs = sizes.filter(({ name }) => name.endsWith('.js')).reduce((sum, fi
 const totalCss = sizes.filter(({ name }) => name.endsWith('.css')).reduce((sum, file) => sum + file.bytes, 0);
 const entryBytes = sizes.find(({ name }) => name === entry)?.bytes ?? Number.POSITIVE_INFINITY;
 
+// `entry JavaScript` is the budget that protects users: it is what every visitor downloads before
+// the dashboard is interactive, and it does NOT move. `total JavaScript` covers the code-split tab
+// chunks too — no session ever fetches all of them — so it guards unbounded growth rather than first
+// paint. Raised from 1,000,000 once, for the Explore tab: the app had 3.3 KB of headroom left, which
+// is less than any real tab costs. Trim before raising it again.
 const budgets = [
 	['entry JavaScript', entryBytes, 300_000],
-	['total JavaScript', totalJs, 1_000_000],
+	['total JavaScript', totalJs, 1_050_000],
 	['total CSS', totalCss, 100_000],
 ];
 for (const [label, actual, maximum] of budgets) {

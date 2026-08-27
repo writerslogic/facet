@@ -9,7 +9,6 @@
 // as a measurement would be the one failure the whole source/sampled contract exists to prevent.
 
 import type { BreakdownDimension, BreakdownRow } from '@facet/shared';
-import { Database, Layers } from 'lucide-react';
 import { type ReactElement, useMemo, useState } from 'react';
 import { useBreakdown } from '../hooks/breakdown.js';
 import { useSegment } from '../hooks/segment.js';
@@ -84,7 +83,6 @@ export function SourceBadge({
 	sampled: boolean;
 }): ReactElement {
 	const columnar = source === 'analytics_engine';
-	const Icon = columnar ? Layers : Database;
 	return (
 		<span
 			className={cn(
@@ -93,13 +91,10 @@ export function SourceBadge({
 			)}
 			title={
 				sampled
-					? 'Analytics Engine sampled this range. Events and pageviews are sampling-corrected estimates, and visitors is a lower bound — a distinct count cannot be corrected for the rows sampling dropped.'
-					: columnar
-						? 'Answered by Analytics Engine, the columnar store. This range was not sampled, so the figures are exact.'
-						: 'Answered by D1, which scans every row. The figures are exact.'
+					? 'Sampled: events and pageviews are corrected estimates, and visitors is a lower bound — a distinct count cannot be corrected for the rows sampling dropped.'
+					: 'Exact: every matching row was counted.'
 			}
 		>
-			<Icon className="h-3 w-3" aria-hidden="true" />
 			{columnar ? 'Analytics Engine' : 'D1'}
 			{sampled ? ' · sampled' : ' · exact'}
 		</span>
