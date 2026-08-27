@@ -66,4 +66,9 @@ describe('main dispatcher', () => {
 		expect(stderr).toContain('unknown keys op');
 	});
 
+	it('routes import and surfaces its failure exit code on missing options', async () => {
+		const code = await main(['import']);
+		expect(code).toBe(1);
+		expect(stderr).toContain('host');
+	});
 });

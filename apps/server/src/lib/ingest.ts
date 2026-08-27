@@ -10,6 +10,7 @@ import { writeEvent } from './ae.js';
 import { ensureBotPatterns, isBot } from './bots.js';
 import { classifyChannel } from './channel.js';
 import { findActiveConsent } from './consent.js';
+import { sha256Hex } from './crypto.js';
 import { visitorHash } from './hash.js';
 import {
 	type IdentityPolicy,
@@ -89,6 +90,13 @@ export interface IngestInput {
 	 * `ip`, `uid` never leaves the derivation — never stored, logged, or returned. */
 	uid?: string | null;
 	consent?: boolean;
+	/** Set ONLY by the admin historical-import route, never by a request-time path. Its presence makes
+	 * `now` a backdated timestamp, which changes three things: the hash derives from the source tool's
+	 * opaque visitor id under the pre-resolved salt for that day (no `ip`/`ua` to derive from, and no
+	 * tier elevation — imported history is anonymous by construction), the in-isolate double-boot
+	 * dedup is bypassed, and the row is NOT mirrored to Analytics Engine. Like `ip` and `uid`,
+	 * `visitorId` is consumed by the derivation and never stored, logged, or returned. */
+	historical?: { visitorId: string; salt: string };
 }
 
 /** The anonymous Tier-0 day hash — the fallback for a GPC visitor, a zero-config site, and any
@@ -147,6 +155,17 @@ async function deriveForIngest(
 	return anonymousFallback(env, input, dk);
 }
 
+/** A uuid-shaped id derived from an imported row's own content rather than randomly, so re-running
+ * an import that partially succeeded re-inserts the same ids and `persistEvents`' `onConflictDoNothing`
+ * makes the repeat a no-op instead of duplicating history. Not a v4 uuid — the shape is only kept so
+ * `events.id` stays uniform. */
+async function importEventId(row: NewEvent): Promise<string> {
+	const d = await sha256Hex(
+		[row.siteId, row.visitorHash, row.path, row.name ?? '', row.createdAt].join('|'),
+	);
+	return `${d.slice(0, 8)}-${d.slice(8, 12)}-${d.slice(12, 16)}-${d.slice(16, 20)}-${d.slice(20, 32)}`;
+}
+
 /** A fully-derived, IP-free event ready to persist — the queue message shape. The raw IP is consumed
  * into `row.visitorHash` during derivation and never appears here, so it is never queued. */
 export interface DerivedEvent {
@@ -161,19 +180,40 @@ export interface DerivedEvent {
  * ingest; the D1 writes live in `persistDerived`, which the beacon hot path defers to the queue
  * consumer. The reads it does make (policy, bot ruleset) are each isolate-cached or single-row. */
 export async function deriveEvent(env: Env, input: IngestInput): Promise<DerivedEvent | null> {
-	// PERF: TTL-guarded to one D1 read per isolate per minute. Skipping it would confine the refreshed
-	// ruleset to whichever isolate ran the cron, which is never the one serving this request.
-	await ensureBotPatterns(env, input.now);
-	if (isBot(input.ua)) {
-		return null;
+	const historical = input.historical;
+	// IMPORTANT: `isBot('')` is true, and an imported row usually carries no user-agent — running the
+	// gate unconditionally would drop every such row and report a successful import of nothing. The
+	// exporting tool already applied its own bot filter, so the gate runs only when a UA came along.
+	if (!historical || input.ua !== '') {
+		// PERF: TTL-guarded to one D1 read per isolate per minute. Skipping it would confine the refreshed
+		// ruleset to whichever isolate ran the cron, which is never the one serving this request. The
+		// TTL is wall-clock, so an import passes the real time here rather than its backdated `now` —
+		// feeding it a walking historical clock would defeat the TTL and re-read D1 for every row.
+		await ensureBotPatterns(env, historical ? Date.now() : input.now);
+		if (isBot(input.ua)) {
+			return null;
+		}
 	}
 	// Sessions always dedup on the calendar day, INDEPENDENT of the hash's salt window, so a wider
 	// window never collides the (site, hash, day) session key or freezes first_seen.
 	const dk = dayKey(input.now);
-	const policy = await resolvePolicy(env, input.siteId);
-	const vh = await deriveForIngest(env, input, policy, dk);
-	if (isDuplicateContent(input, vh)) {
-		return null;
+	let vh: string;
+	if (historical) {
+		vh = await deriveVisitorHash(
+			'anonymous',
+			{ ip: '', ua: '', importId: historical.visitorId },
+			historical.salt,
+			input.siteId,
+		);
+	} else {
+		const policy = await resolvePolicy(env, input.siteId);
+		vh = await deriveForIngest(env, input, policy, dk);
+		// The dedup guard buckets on `now`, so it is meaningless against backdated rows and would drop
+		// two genuinely distinct imported hits that share a 5s bucket. Re-import safety comes from the
+		// content-addressed id below instead.
+		if (isDuplicateContent(input, vh)) {
+			return null;
+		}
 	}
 	const utm = {
 		source: input.utm?.source ?? null,
@@ -227,11 +267,14 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 	// has no idempotent insert — writing on the persist path would inflate every retried batch. This is
 	// a fire-and-forget, non-blocking sink that no-ops when the binding is absent, so `deriveEvent`
 	// still touches no database and its result is still safe to enqueue.
-	writeEvent(env, row);
+	// Skipped for an import: Analytics Engine stamps its own `timestamp` at write time and offers no
+	// way to backdate one, so a mirrored backfill would land in the columnar store as today's traffic
+	// and disagree with the `created_at` beside it. D1 stays the only store that holds imported rows.
+	if (!historical) writeEvent(env, row);
 	// The id is minted HERE (not at insert) so an at-least-once queue redelivery re-inserts the same id
 	// as a no-op — the persist path is idempotent, so a queue retry can never duplicate the event.
 	return {
-		id: crypto.randomUUID(),
+		id: historical ? await importEventId(row) : crypto.randomUUID(),
 		row,
 		session: {
 			siteId: input.siteId,
