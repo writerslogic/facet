@@ -128,6 +128,35 @@ describe('runImport', () => {
 		expect(stdout).toContain('Dry run');
 	});
 
+	// A file larger than one request lands batch by batch; a mid-file failure must say what already
+	// landed, or a partial import reads as a corrupt one and the operator has no idea it can be re-run.
+	it('reports how much landed when a later batch fails', async () => {
+		const many = Array.from({ length: IMPORT_MAX_EVENTS + 1 }, (_, i) =>
+			JSON.stringify({ ...ev(T0 + i), visitor_id: `v${i}` }),
+		).join('\n');
+		const file = write('big.ndjson', many);
+		let call = 0;
+		const code = await runImport(args(file), async () => {
+			call++;
+			if (call === 1) {
+				return {
+					imported: IMPORT_MAX_EVENTS,
+					skipped: 0,
+					days: ['2026-01-01'],
+					note: 'n',
+				} as never;
+			}
+			throw new Error('out_of_retention: batch reaches 2026-05-01');
+		});
+		expect(code).toBe(1);
+		expect(stderr).toContain('batch 2/2 failed');
+		expect(stderr).toContain('out_of_retention');
+		expect(stderr).toContain(
+			`1 earlier batch(es) already landed (${IMPORT_MAX_EVENTS} event(s))`,
+		);
+		expect(stderr).toContain('Re-running this file is safe');
+	});
+
 	it('names the offending record when a required field is missing', async () => {
 		const file = write(
 			'export.csv',

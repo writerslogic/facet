@@ -229,17 +229,33 @@ export async function runImport(args: string[], fetchImpl: FetchJson = fetchJson
 		const batches = batchEvents(events);
 
 		const api = adminClient(host, token, fetchImpl);
+		let landed = 0;
 		let imported = 0;
 		let skipped = 0;
 		let duplicates = 0;
 		const days = new Set<string>();
 		let note = '';
 		for (const [i, batch] of batches.entries()) {
-			const res = await api.post<ImportResponse>('/api/import', {
-				site_id: site,
-				events: batch,
-				dry_run: values['dry-run'] === true,
-			});
+			// A file larger than one request lands batch by batch, so a failure part-way through leaves
+			// earlier batches written. Event ids are content-addressed, so re-running the same file is a
+			// no-op over what already landed — but the operator has to be told that, or a partial import
+			// reads as a corrupt one.
+			let res: ImportResponse;
+			try {
+				res = await api.post<ImportResponse>('/api/import', {
+					site_id: site,
+					events: batch,
+					dry_run: values['dry-run'] === true,
+				});
+			} catch (err) {
+				const detail = err instanceof Error ? err.message : String(err);
+				throw new UsageError(
+					landed === 0
+						? `batch ${i + 1}/${batches.length} failed: ${detail}`
+						: `batch ${i + 1}/${batches.length} failed: ${detail}\n  ${landed} earlier batch(es) already landed (${imported} event(s)). Re-running this file is safe — rows that landed are skipped.`,
+				);
+			}
+			landed++;
 			imported += res.imported;
 			skipped += res.skipped;
 			duplicates += res.duplicates ?? 0;
