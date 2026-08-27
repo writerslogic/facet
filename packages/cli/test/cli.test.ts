@@ -54,4 +54,16 @@ describe('main dispatcher', () => {
 		expect(code).toBe(1);
 		expect(stderr).toContain('required');
 	});
+
+	// `keys` names two commands: the local signing-keypair generator and the admin-API key resource
+	// group. Routing the whole group to the generator made `keys list|issue|revoke` — all three of them
+	// in USAGE — answer "unknown keys op".
+	it('splits keys between the signing generator and the admin-API resource group', async () => {
+		expect(await main(['keys', 'issue'])).toBe(1);
+		expect(stderr).not.toContain('unknown keys op');
+		stderr = '';
+		expect(await main(['keys', 'bogus'])).toBe(1);
+		expect(stderr).toContain('unknown keys op');
+	});
+
 });

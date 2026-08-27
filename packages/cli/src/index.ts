@@ -97,8 +97,13 @@ export async function main(argv: string[]): Promise<number> {
 				return await runBots(argv.slice(1));
 			case 'config':
 				return await runConfig(argv.slice(1));
+			// `keys` is two commands sharing a name: the local signing-keypair generator and the admin-API
+			// key resource group that USAGE advertises as `keys list|issue|revoke`. Dispatching the whole
+			// group to runKeys made every one of those unreachable ("unknown keys op: issue").
 			case 'keys':
-				return await runKeys(argv.slice(1));
+				return argv[1] === 'list' || argv[1] === 'issue' || argv[1] === 'revoke'
+					? await runResource('keys', argv.slice(1))
+					: await runKeys(argv.slice(1));
 			case 'verify':
 				return await runVerify(argv.slice(1));
 			case 'sd':
