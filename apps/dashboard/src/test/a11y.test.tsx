@@ -72,7 +72,7 @@ describe('document structure', () => {
 	it('gives every view exactly one h1, naming the view', async () => {
 		seedProfiles();
 		wrap(<App />);
-		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(10));
+		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(11));
 
 		const h1s = () => document.querySelectorAll('h1');
 		expect(h1s()).toHaveLength(1);
@@ -118,7 +118,7 @@ describe('view tablist', () => {
 	it('wires each tab to the panel it selects', async () => {
 		seedProfiles();
 		wrap(<App />);
-		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(10));
+		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(11));
 
 		const selected = screen.getByRole('tab', { selected: true });
 		const panel = screen.getByRole('tabpanel');
@@ -126,30 +126,30 @@ describe('view tablist', () => {
 		expect(panel).toHaveAttribute('aria-labelledby', selected.id);
 	});
 
-	it('is a single tab stop with roving tabindex, not ten', async () => {
+	it('is a single tab stop with roving tabindex, not eleven', async () => {
 		seedProfiles();
 		wrap(<App />);
-		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(10));
+		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(11));
 
 		const tabs = screen.getAllByRole('tab');
 		expect(tabs.filter((t) => t.tabIndex === 0)).toHaveLength(1);
-		expect(tabs.filter((t) => t.tabIndex === -1)).toHaveLength(9);
+		expect(tabs.filter((t) => t.tabIndex === -1)).toHaveLength(10);
 	});
 
 	it('moves selection with Left/Right/Home/End, as role=tablist promises', async () => {
 		seedProfiles();
 		wrap(<App />);
-		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(10));
+		await waitFor(() => expect(screen.getAllByRole('tab').length).toBe(11));
 
 		fireEvent.keyDown(screen.getByRole('tab', { name: 'Overview' }), { key: 'ArrowRight' });
 		await waitFor(() =>
-			expect(screen.getByRole('tab', { name: 'All sites' })).toHaveAttribute(
+			expect(screen.getByRole('tab', { name: 'Explore' })).toHaveAttribute(
 				'aria-selected',
 				'true',
 			),
 		);
 
-		fireEvent.keyDown(screen.getByRole('tab', { name: 'All sites' }), { key: 'End' });
+		fireEvent.keyDown(screen.getByRole('tab', { name: 'Explore' }), { key: 'End' });
 		await waitFor(() =>
 			expect(screen.getByRole('tab', { name: 'Documentation' })).toHaveAttribute(
 				'aria-selected',

@@ -9,6 +9,8 @@ import type {
 	ApiKeyRecord,
 	AttributionModel,
 	AttributionResult,
+	BreakdownDimension,
+	BreakdownResponse,
 	ClockCell,
 	ClockResponse,
 	CohortPeriod,
@@ -876,6 +878,96 @@ export function buildDistribution(
  * buckets on the site-wide traffic shape with a per-key wobble — so the lines differ from each other
  * AND from one window to the next. `total` is the sum of the line's own points, exactly as upstream.
  */
+/**
+ * `/api/stats/breakdown`. Eleven of the nineteen dimensions are already in the stats response; the
+ * other eight are columns the real `events` table carries and no other endpoint surfaces, so the
+ * demo synthesizes plausible values for them rather than leaving most of the Explore picker dead.
+ *
+ * `source` is always `d1`: the demo has no Analytics Engine binding, and a fabricated
+ * `analytics_engine` label would be the one thing on that panel a reader is entitled to trust.
+ */
+export function buildBreakdown(
+	start: number,
+	end: number,
+	interval: Interval,
+	dimension: BreakdownDimension,
+	limit: number,
+	filter: DemoStatsFilter = {},
+): BreakdownResponse {
+	const stats = buildStats(start, end, interval, filter);
+	const pv = stats.summary.pageviews;
+	const visitors = stats.summary.visitors;
+	const lists: Record<BreakdownDimension, CountRow[]> = {
+		path: stats.top_paths,
+		referrer: stats.top_referrers,
+		event: stats.top_events,
+		country: stats.top_countries,
+		device: stats.top_devices,
+		channel: stats.channels,
+		browser: stats.top_browsers ?? [],
+		os: stats.top_os ?? [],
+		language: stats.top_languages ?? [],
+		region: stats.top_regions ?? [],
+		network: stats.top_networks ?? [],
+		hostname: scaled(
+			['aperture.example', 'blog.aperture.example', 'docs.aperture.example'],
+			pv,
+			0.3,
+		),
+		city: scaled(
+			[
+				'San Francisco',
+				'Mumbai',
+				'Berlin',
+				'London',
+				'Toronto',
+				'São Paulo',
+				'Paris',
+				'Austin',
+			],
+			visitors,
+			0.42,
+		),
+		timezone: scaled(
+			[
+				'America/Los_Angeles',
+				'Asia/Kolkata',
+				'Europe/Berlin',
+				'Europe/London',
+				'America/New_York',
+				'America/Sao_Paulo',
+			],
+			visitors,
+			0.44,
+		),
+		form_factor: scaled(['desktop', 'phone', 'tablet'], visitors, 0.42),
+		utm_source: scaled(
+			['newsletter', 'twitter', 'producthunt', 'partner', 'conference'],
+			Math.round(pv * 0.22),
+			0.45,
+		),
+		utm_medium: scaled(['email', 'social', 'cpc', 'referral'], Math.round(pv * 0.22), 0.4),
+		utm_campaign: scaled(
+			['launch-2026', 'spring-sale', 'docs-refresh', 'webinar'],
+			Math.round(pv * 0.22),
+			0.38,
+		),
+		currency: scaled(['USD', 'EUR', 'GBP', 'INR'], Math.round(visitors * 0.031), 0.35),
+	};
+	const rows = (lists[dimension] ?? [])
+		.map((row) => ({
+			key: row.key,
+			events: row.count,
+			// Pageviews are a subset of events, and distinct visitors are fewer still — the same two
+			// ratios the rest of this dataset is built on, so the panel agrees with the KPI tiles.
+			pageviews: Math.round(row.count * 0.86),
+			visitors: Math.max(1, Math.round(row.count * 0.41)),
+		}))
+		.filter((row) => row.visitors >= DEMO_K_ANON)
+		.slice(0, limit);
+	return { dimension, source: 'd1', sampled: false, rows };
+}
+
 export function buildDimensionSeries(
 	start: number,
 	end: number,
