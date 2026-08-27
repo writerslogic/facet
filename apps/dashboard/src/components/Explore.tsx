@@ -18,7 +18,7 @@ import { formatNumber } from '../lib/format.js';
 import { type SegmentKey, segmentParams } from '../lib/segment.js';
 import { isAuthError } from '../lib/status.js';
 import type { Range } from '../state.js';
-import { Card, CardHeading } from './Card.js';
+import { Card } from './Card.js';
 import { SegmentNotice } from './CubeFilterBar.js';
 import { AuthErrorBanner, CardSkeletons, EmptyState, ErrorState } from './StatusStates.js';
 
@@ -202,12 +202,14 @@ export function Explore({
 				</EmptyState>
 			) : (
 				<Card>
-					<CardHeading level={2}>{LABELS[dimension]}</CardHeading>
 					<div className="overflow-x-auto">
-						<table className="w-full text-sm">
+						<table
+							className="w-full text-sm"
+							aria-label={`${LABELS[dimension]} breakdown`}
+						>
 							<thead>
 								<tr>
-									<th className="px-2 py-1.5 text-left font-semibold text-[10px] text-[color:var(--faint)] uppercase tracking-[0.06em]">
+									<th className="w-1/2 px-2 py-1.5 text-left font-semibold text-[10px] text-[color:var(--faint)] uppercase tracking-[0.06em]">
 										{LABELS[dimension]}
 									</th>
 									{['Events', 'Pageviews', 'Visitors'].map((c) => (
