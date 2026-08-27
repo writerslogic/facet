@@ -3,6 +3,7 @@
 import { runBots } from './commands/bots.js';
 import { runConfig } from './commands/config.js';
 import { runDoctor } from './commands/doctor.js';
+import { IMPORT_CSV_HEADER, runImport } from './commands/import.js';
 import { runInit } from './commands/init.js';
 import { runKeyattest } from './commands/keyattest.js';
 import { runKeys } from './commands/keys.js';
@@ -35,6 +36,14 @@ Setup:
 
 Reporting:
   stats --host <url> --key <k> --site <uuid>   Print summary stats
+
+Historical import (admin API — needs --host + --admin-token, or FACET_HOST/FACET_ADMIN_TOKEN):
+  import --site <uuid> --file <path> [--format json|ndjson|csv] [--dry-run] [--json]
+      Backfill event-level history exported from another analytics tool. Format is inferred from
+      the file extension. CSV header: ${IMPORT_CSV_HEADER}
+      timestamp is epoch ms, epoch seconds, or ISO 8601; visitor_id is the source tool's own
+      visitor identifier (hashed on arrival, never stored). Pre-aggregated exports (Plausible and
+      GA4 defaults) have no per-visitor rows and cannot be imported.
 
 Bot ruleset (admin API — needs --host + --admin-token, or FACET_HOST/FACET_ADMIN_TOKEN):
   bots status                  Show the stored crawler ruleset (source, pattern count, updated, etag)
@@ -93,12 +102,19 @@ export async function main(argv: string[]): Promise<number> {
 				return await runMigrate(argv.slice(1));
 			case 'stats':
 				return await runStats(argv.slice(1));
+			case 'import':
+				return await runImport(argv.slice(1));
 			case 'bots':
 				return await runBots(argv.slice(1));
 			case 'config':
 				return await runConfig(argv.slice(1));
+			// `keys` is two commands sharing a name: the local signing-keypair generator and the admin-API
+			// key resource group that USAGE advertises as `keys list|issue|revoke`. Dispatching the whole
+			// group to runKeys made every one of those unreachable ("unknown keys op: issue").
 			case 'keys':
-				return await runKeys(argv.slice(1));
+				return argv[1] === 'list' || argv[1] === 'issue' || argv[1] === 'revoke'
+					? await runResource('keys', argv.slice(1))
+					: await runKeys(argv.slice(1));
 			case 'verify':
 				return await runVerify(argv.slice(1));
 			case 'sd':

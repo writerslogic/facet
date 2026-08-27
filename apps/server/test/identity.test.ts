@@ -76,6 +76,35 @@ describe('deriveVisitorHash', () => {
 		expect(ident.startsWith('uid:bob')).toBe(true);
 	});
 
+	// The import namespace is the whole reason backfilled history cannot be joined to live traffic, and
+	// it is one branch reorder away from collapsing, so the three-way separation is pinned here.
+	it('import: is a third namespace, distinct from uid: and from an anonymous pre-image', async () => {
+		const imported = await deriveVisitorHash(
+			'anonymous',
+			{ ip: '', ua: '', importId: 'v1' },
+			SALT,
+			SITE,
+		);
+		const anon = await deriveVisitorHash('anonymous', { ip: 'import:v1', ua: '' }, SALT, SITE);
+		const ident = await deriveVisitorHash(
+			'identified',
+			{ ip: '', ua: '', uid: 'v1' },
+			SALT,
+			SITE,
+		);
+		expect(new Set([imported, anon, ident]).size).toBe(3);
+		expect(buildPreimage('anonymous', { ip: '', ua: '', importId: 'v1' }, SALT, SITE)).toBe(
+			`import:v1|${SALT}|${SITE}`,
+		);
+	});
+
+	// An importId must never be a route around the identified-requires-uid throw above it.
+	it('still throws for identified with no uid even when an importId is supplied', () => {
+		expect(() =>
+			buildPreimage('identified', { ip: '', ua: '', importId: 'v1' }, SALT, SITE),
+		).toThrow(/requires a uid/);
+	});
+
 	it('identified is isolated per site: same uid on two sites yields unrelated hashes', async () => {
 		const s1 = await deriveVisitorHash(
 			'identified',

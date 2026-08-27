@@ -184,6 +184,25 @@ async function buildSessionsForSite(
 	return written;
 }
 
+/** Sessionize ONE site's UTC day. The historical-import route uses this rather than `buildSessions`:
+ * an import touches exactly one site, and scanning every tenant per imported day would multiply the
+ * request's D1 round-trips by the number of sites on the deployment for no gain. Same idempotent
+ * upsert, so it composes with the cron's own run over the same day. */
+export async function buildSessionsForSiteDay(
+	env: Env,
+	siteId: string,
+	dayKey: string,
+): Promise<number> {
+	const dayStart = Date.parse(`${dayKey}T00:00:00.000Z`);
+	return buildSessionsForSite(
+		env,
+		siteId,
+		dayStart,
+		dayStart + DAY_MS,
+		dayStart - SESSION_TIMEOUT_MS,
+	);
+}
+
 /** Build (upsert) `event_sessions` for the UTC day identified by `dayKey`, one site at a time so a
  * single high-volume or misbehaving tenant can't fail sessionization for every other tenant in the
  * same cron tick. Mirrors `enforceRetention`'s per-statement failure isolation: every site's own run

@@ -92,6 +92,46 @@ window.facet.track('signup', { plan: 'pro' });
 `window.umami.track(name, props)` and `window.facet.track(name, props)` both call
 the same `track()`.
 
+## Historical import
+
+Switching from another tool does not have to mean abandoning your history. `facet import` backfills
+event-level exports through the admin API:
+
+```sh
+facet import --site <uuid> --file umami-export.csv --dry-run   # parse and bound-check, write nothing
+facet import --site <uuid> --file umami-export.csv
+```
+
+Host and admin token come from `--host`/`--admin-token` or `FACET_HOST`/`FACET_ADMIN_TOKEN`. The
+format is inferred from the extension (`.csv`, `.ndjson`/`.jsonl`, otherwise JSON) and can be forced
+with `--format`. The CSV header is:
+
+```
+timestamp,visitor_id,hostname,path,referrer,name,country,user_agent,utm_source,utm_medium,utm_campaign
+```
+
+Only `timestamp`, `visitor_id`, `hostname` and `path` are required. `timestamp` accepts epoch
+milliseconds, epoch seconds, or ISO 8601. `visitor_id` is your old tool's visitor identifier — Facet
+hashes it on arrival and never stores it, so imported history is anonymous in the same way live
+traffic is. Large files are split into request-sized batches automatically.
+
+Two limits are worth knowing before you start:
+
+- **Nothing older than `RAW_RETENTION_DAYS`** (default 90) can be imported. Raw events outside the
+  retention window are deleted by the nightly job, so Facet refuses the range instead of accepting
+  rows it is about to purge.
+- **Cross-day unique visitors are not recoverable.** The daily salt rotation that makes Facet
+  cookieless applies to imported rows too, so each imported day counts its own uniques.
+
+A high `bot-filtered` count is usually the export, not a failure: rows that carry a **truncated or
+synthetic** `user_agent` are classified as bots, because an incomplete UA is exactly what a crawler
+looks like. Rows with no `user_agent` at all are kept — the bot filter only runs on rows that supply
+one, since your old tool already applied its own.
+
+Pre-aggregated exports — the Plausible and GA4 defaults, which give you sessions per day and top
+pages rather than per-visitor rows — carry no events and cannot be imported. Export at the event
+level, or map what you have onto the CSV columns above.
+
 ## Custom events with props
 
 Pass an event `name` and an optional `props` object. Props are validated server-side:

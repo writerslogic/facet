@@ -16,6 +16,7 @@ import { experimentsRoutes } from './experiments.js';
 import { flagsRoutes } from './flags.js';
 import { funnelsRoutes } from './funnels.js';
 import { goalsRoutes } from './goals.js';
+import { importRoutes } from './import.js';
 import { llmsRoutes } from './llms.js';
 import { mcpRoutes } from './mcp.js';
 import { scittRoutes } from './scitt.js';
@@ -93,6 +94,7 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/api', router: statsRoutes },
 	{ path: '/api', router: adminRoutes },
 	{ path: '/api/goals', router: goalsRoutes },
+	{ path: '/api/import', router: importRoutes },
 	{ path: '/api/funnels', router: funnelsRoutes },
 	{ path: '/api/experiments', router: experimentsRoutes },
 	{ path: '/api/flags', router: flagsRoutes },

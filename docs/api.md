@@ -24,7 +24,8 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   `DELETE /api/keys/:id`, goal/funnel CRUD (`POST`/`GET`/`DELETE /api/goals`,
   `POST`/`GET`/`DELETE /api/funnels`), identity config (`PATCH /api/sites/:id/identity`),
   flag CRUD (`POST`/`GET /api/flags`, `PATCH`/`DELETE /api/flags/:id`), alert destinations
-  (`POST`/`GET /api/alerts`, `DELETE /api/alerts/:id`), and `POST /api/auth/admin-link` —
+  (`POST`/`GET /api/alerts`, `DELETE /api/alerts/:id`), historical import (`POST /api/import`),
+  and `POST /api/auth/admin-link` —
   **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
 - `POST /api/auth/request`, `POST /api/auth/verify` — **public**, rate-limited (dashboard sign-in);
   `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/logout-everywhere` — **session
@@ -155,6 +156,58 @@ curl -X POST https://your-deployment.example.com/api/event \
 ```
 
 ---
+
+## `POST /api/import`
+
+Admin token. Backfills event-level history exported from another analytics tool. This is deliberately
+**not** a timestamp field on `POST /api/event`: backdating rewrites history, so it is gated on the
+admin token rather than on a write-scoped API key.
+
+```json
+{
+  "site_id": "<uuid>",
+  "dry_run": false,
+  "events": [
+    {
+      "timestamp": 1767225600000,
+      "visitor_id": "the-source-tool-s-own-visitor-id",
+      "hostname": "legacy.example.com",
+      "path": "/pricing",
+      "referrer": "https://news.ycombinator.com/",
+      "name": "signup",
+      "props": { "plan": "pro" },
+      "utm": { "source": "hn" },
+      "country": "US",
+      "user_agent": "Mozilla/5.0 ..."
+    }
+  ]
+}
+```
+
+`timestamp` is unix epoch **milliseconds**. `visitor_id` is required and is the source tool's own
+opaque visitor identifier: it is hashed under an `import:` pre-image with that UTC day's salt and is
+never stored, so imported history cannot be linked back to a person, to a live visitor's hash, or
+across days. Rows are not mirrored to Analytics Engine (which cannot backdate a data point).
+
+Bounds, all enforced per request: at most **500 events** spanning at most **31 distinct UTC days**.
+A batch reaching before `RAW_RETENTION_DAYS` is rejected with `400 out_of_retention` rather than
+written and deleted by the next retention run; a future timestamp is rejected with
+`400 future_timestamp`; an unknown `site_id` is `404 site_not_found`. Event ids are derived from row
+content, so re-running an import that partially succeeded is a no-op, not a duplicate.
+
+```json
+{
+  "imported": 4,
+  "skipped": 0,
+  "duplicates": 0,
+  "days": ["2026-08-20"],
+  "note": "Imported visitors are hashed under the destination site's per-day salt, ..."
+}
+```
+
+`skipped` counts rows dropped by the bot filter (applied only to rows that carried a `user_agent`);
+`duplicates` counts rows that collapsed onto an id already in the same batch.
+Daily rollups and sessions are rebuilt for every imported day; hourly rollups are not backfilled.
 
 ## `GET /api/stats`
 

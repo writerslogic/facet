@@ -80,11 +80,13 @@ export function windowEndMs(window: SaltWindow, nowMs: number): number {
 	}
 }
 
-/** Transient, never-stored inputs to a visitor-hash derivation. `uid` is honored only at Tier 2. */
+/** Transient, never-stored inputs to a visitor-hash derivation. `uid` is honored only at Tier 2;
+ * `importId` only on the admin historical-import path. */
 export interface DeriveInputs {
 	ip: string;
 	ua: string;
 	uid?: string | null;
+	importId?: string | null;
 }
 
 /** Build the hash pre-image for a tier. Tier < identified is the legacy `ip|ua|salt|siteId`; the
@@ -98,9 +100,19 @@ export function buildPreimage(
 	salt: string,
 	siteId: string,
 ): string {
+	// The identified check stays FIRST: an `importId` ahead of it would be a way for an identified
+	// event with no uid to reach a pre-image instead of the throw below, which is exactly the silent
+	// downgrade this function exists to make impossible.
 	if (tier === 'identified') {
 		if (!inputs.uid) throw new Error('buildPreimage: identified tier requires a uid');
 		return [`uid:${inputs.uid}`, salt, siteId].join(HASH_DELIMITER);
+	}
+	// A backfilled row has no `ip`/`ua` to derive from, so it derives from the source tool's visitor id
+	// instead. Like `uid:`, the prefix makes a forged collision with an anonymous pre-image (or with an
+	// identified one) impossible, so imported history can never be mistaken for, or linked to, a live
+	// visitor. The salt is still the day's, so linkage stays bounded by retention.
+	if (inputs.importId) {
+		return [`import:${inputs.importId}`, salt, siteId].join(HASH_DELIMITER);
 	}
 	return [inputs.ip, inputs.ua, salt, siteId].join(HASH_DELIMITER);
 }

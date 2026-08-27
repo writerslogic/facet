@@ -74,6 +74,47 @@ export const ServerEventSchema = v.object({
 	consent: v.optional(v.boolean()),
 });
 
+/** Per-request caps on `POST /api/import`. A batch is bounded on both axes because the route does
+ * bounded post-work per distinct day (a daily rollup + one site-day sessionization), so an unbounded
+ * range would exhaust the Worker's subrequest budget mid-import and leave a half-backfilled range. */
+export const IMPORT_MAX_EVENTS = 500;
+export const IMPORT_MAX_DAYS = 31;
+
+// Historical import (admin-only). `timestamp` deliberately lives HERE and not on ServerEventSchema:
+// a write-scoped API key must never be able to backfill or rewrite history, so backdating is gated
+// on the admin token instead. `visitor_id` is the SOURCE tool's opaque visitor identifier — hashed
+// under the `import:` pre-image with that day's salt and never stored, so it can neither be recovered
+// nor collide with a live visitor's hash.
+export const ImportEventSchema = v.object({
+	timestamp: v.pipe(v.number(), v.integer(), v.minValue(0)),
+	visitor_id: v.pipe(v.string(), v.minLength(1), v.maxLength(256)),
+	hostname: v.pipe(v.string(), v.minLength(1), v.maxLength(253)),
+	path: v.pipe(
+		v.string(),
+		v.minLength(1),
+		v.maxLength(2048),
+		v.regex(/^\//, 'path_must_be_absolute'),
+	),
+	referrer: v.optional(v.pipe(v.string(), v.maxLength(2048))),
+	name: v.optional(v.pipe(v.string(), v.minLength(1), v.maxLength(128))),
+	props: v.optional(PropsSchema),
+	utm: v.optional(
+		v.object({
+			source: v.optional(v.pipe(v.string(), v.maxLength(200))),
+			medium: v.optional(v.pipe(v.string(), v.maxLength(200))),
+			campaign: v.optional(v.pipe(v.string(), v.maxLength(200))),
+		}),
+	),
+	country: v.optional(v.pipe(v.string(), v.length(2))),
+	user_agent: v.optional(v.pipe(v.string(), v.maxLength(512))),
+});
+
+export const ImportSchema = v.object({
+	site_id: v.pipe(v.string(), v.uuid()),
+	events: v.pipe(v.array(ImportEventSchema), v.minLength(1), v.maxLength(IMPORT_MAX_EVENTS)),
+	dry_run: v.optional(v.boolean()),
+});
+
 // Identity spectrum (U2). `salt_window` widens the pseudonym's linkage lifetime; `never` is
 // intentionally absent — every window is bounded by retention, so cross-window linkage is always
 // finite. Tiers are monotonic: an elevated site still emits the Tier-0 anonymous aggregates.
@@ -355,6 +396,8 @@ export const FlagEvalSchema = v.object({
 export type QueryIntent = v.InferOutput<typeof QueryIntentSchema>;
 export type CollectInput = v.InferOutput<typeof CollectPayloadSchema>;
 export type ServerEventInput = v.InferOutput<typeof ServerEventSchema>;
+export type ImportEventInput = v.InferOutput<typeof ImportEventSchema>;
+export type ImportInput = v.InferOutput<typeof ImportSchema>;
 export type StatsQueryInput = v.InferOutput<typeof StatsQuerySchema>;
 export type DimensionSeriesQueryInput = v.InferOutput<typeof DimensionSeriesQuerySchema>;
 export type BreakdownQueryInput = v.InferOutput<typeof BreakdownQuerySchema>;

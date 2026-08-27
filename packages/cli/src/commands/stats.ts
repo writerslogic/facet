@@ -3,7 +3,7 @@
 import { parseArgs } from 'node:util';
 import type { StatsResponse } from '@facet/shared';
 import pc from 'picocolors';
-import { normalizeHost } from '../admin.js';
+import { resolveHost } from '../admin.js';
 import { fetchJson, printError } from '../util.js';
 
 type FetchJson = <T>(url: string, init?: RequestInit) => Promise<T>;
@@ -28,17 +28,18 @@ export async function runStats(args: string[], fetchImpl: FetchJson = fetchJson)
 		allowPositionals: false,
 	});
 
-	const host = values.host;
 	const key = values.key;
 	const site = values.site;
-	if (!host || !key || !site) {
-		printError('Missing required option: --host, --key, and --site are all required.');
+	if (!key || !site) {
+		printError('Missing required option: --key and --site are both required.');
 		return 1;
 	}
 
+	// Same host resolution as every other remote command (flag, else FACET_HOST): `stats` read the
+	// flag directly, so the env var every other command honors silently did nothing here.
 	let origin: string;
 	try {
-		origin = normalizeHost(host);
+		origin = resolveHost(values.host);
 	} catch (err) {
 		printError(err instanceof Error ? err.message : String(err));
 		return 1;
