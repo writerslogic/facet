@@ -438,7 +438,7 @@ export const consentRecords = sqliteTable(
 	],
 );
 
-// Alerting. Both tables are additive: a deployment with no rows behaves exactly as before, and the
+// Alerting. All three tables are additive: a deployment with no rows behaves exactly as before, and the
 // alert cron job short-circuits on an empty `alert_destinations`. snake_case JS keys match the
 // goals/funnels convention so a validated admin body inserts without a per-field remap.
 
@@ -462,8 +462,27 @@ export const alertDestinations = sqliteTable(
 	(t) => [index('idx_alert_destinations_site').on(t.site_id)],
 );
 
-/** One row per (destination, anomaly) — the persisted fact that an alert was claimed, so the same
- * anomaly can never be alerted twice. The UNIQUE (destination_id, dedupe_key) index is the dedupe:
+/** User-defined thresholds over the last completed UTC hour. Rules are immutable through the API:
+ * changing a condition means replacing it, so its id (and therefore its delivery dedupe key) never
+ * changes meaning after an alert has been recorded. */
+export const metricAlertRules = sqliteTable(
+	'metric_alert_rules',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		name: text('name').notNull(),
+		metric: text('metric').notNull(), // pageviews | visitors | events
+		operator: text('operator').notNull(), // at_least | at_most
+		threshold: integer('threshold').notNull(),
+		severity: text('severity').notNull().default('warning'), // info | warning | critical
+		enabled: integer('enabled').notNull().default(1),
+		created_at: integer('created_at').notNull(),
+	},
+	(t) => [index('idx_metric_alert_rules_site').on(t.site_id, t.enabled)],
+);
+
+/** One row per (destination, alert fact) — the persisted claim that stops the same anomaly or metric
+ * observation being alerted twice. The UNIQUE (destination_id, dedupe_key) index is the dedupe:
  * a row is claimed by an INSERT ... ON CONFLICT DO NOTHING *before* delivery is attempted, so a
  * crash mid-delivery, an overlapping cron, or a re-detection of the same hour next run all collide
  * on it. `attempts` bounds retries of a delivery that never confirmed; `status` records the outcome

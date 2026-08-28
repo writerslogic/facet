@@ -21,6 +21,8 @@ interface Call {
 
 let calls: Call[] = [];
 let sites: { id: string; name: string; domain: string; created_at: number }[] = [];
+let alertDestinations: Record<string, unknown>[] = [];
+let metricAlertRules: Record<string, unknown>[] = [];
 /** Flip to make every admin call fail auth, as a rotated ADMIN_TOKEN would. */
 let adminAuthFails = false;
 /** Plaintext returned by POST /api/keys. Only ever shown once; never persisted by the panel. */
@@ -86,7 +88,10 @@ function mockFetch() {
 				: null;
 		calls.push({ url, auth });
 
-		if (adminAuthFails && /^\/api\/(sites|keys|goals|funnels|experiments|flags)/.test(url)) {
+		if (
+			adminAuthFails &&
+			/^\/api\/(sites|keys|goals|funnels|experiments|flags|alerts)/.test(url)
+		) {
 			return {
 				ok: false,
 				status: 401,
@@ -119,6 +124,49 @@ function mockFetch() {
 		if (url.startsWith('/api/experiments'))
 			return { ok: true, json: async () => ({ experiments: [] }) };
 		if (url.startsWith('/api/flags')) return { ok: true, json: async () => ({ flags: [] }) };
+		if (url.startsWith('/api/alerts/rules')) {
+			if (init?.method === 'POST') {
+				const body = JSON.parse(String(init.body));
+				const rule = {
+					id: 'rule-1',
+					...body,
+					severity: body.severity ?? 'warning',
+					enabled: true,
+					window_minutes: 60,
+					created_at: 1,
+				};
+				metricAlertRules.push(rule);
+				return { ok: true, json: async () => ({ metric_alert_rule: rule }) };
+			}
+			return {
+				ok: true,
+				json: async () => ({ metric_alert_rules: metricAlertRules }),
+			};
+		}
+		if (url.startsWith('/api/alerts')) {
+			if (init?.method === 'POST') {
+				const body = JSON.parse(String(init.body));
+				const destination = {
+					id: 'destination-1',
+					...body,
+					min_severity: body.min_severity ?? 'warning',
+					enabled: true,
+					created_at: 1,
+				};
+				alertDestinations.push(destination);
+				return {
+					ok: true,
+					json: async () => ({
+						alert_destination: destination,
+						secret: 'metric-webhook-secret',
+					}),
+				};
+			}
+			return {
+				ok: true,
+				json: async () => ({ alert_destinations: alertDestinations }),
+			};
+		}
 		return { ok: true, json: async () => emptyStats };
 	});
 }
@@ -156,6 +204,8 @@ beforeEach(() => {
 	window.history.replaceState(null, '', '/');
 	calls = [];
 	sites = [];
+	alertDestinations = [];
+	metricAlertRules = [];
 	adminAuthFails = false;
 	seedProfile();
 	vi.stubGlobal('fetch', mockFetch());
@@ -200,9 +250,8 @@ describe('Settings admin area', () => {
 		await waitFor(() => expect(calls.some((c) => c.url.startsWith('/api/sites'))).toBe(true));
 		for (const call of calls) {
 			// Mirrors ADMIN_PATHS in admin.ts. `users` covers /api/users/:id/revoke-sessions.
-			const isAdmin = /^\/api\/(sites|keys|goals|funnels|experiments|flags|users)/.test(
-				call.url,
-			);
+			const isAdmin =
+				/^\/api\/(sites|keys|goals|funnels|experiments|flags|alerts|users)/.test(call.url);
 			if (!isAdmin) {
 				// Coalesced because the session routes (`/api/auth/me`) send NO Authorization header
 				// at all, which is the strongest possible pass and the shape this used to throw on.
@@ -270,6 +319,45 @@ describe('Settings admin area', () => {
 		expect(screen.queryByRole('heading', { name: 'API keys' })).not.toBeInTheDocument();
 		// Sites stays pinned above the tabs so the managed site is never out of reach.
 		expect(screen.getByRole('heading', { name: 'Sites' })).toBeInTheDocument();
+	});
+
+	it('configures a signed destination and an hourly metric rule from the Alerts section', async () => {
+		await openSettingsWithToken();
+		fireEvent.click(screen.getByRole('tab', { name: 'Alerts' }));
+
+		const destinations = (
+			await screen.findByRole('heading', {
+				name: 'Alert destinations',
+			})
+		).closest('section');
+		if (!destinations) throw new Error('alert destinations panel missing');
+		const destinationPanel = within(destinations);
+		fireEvent.change(destinationPanel.getByLabelText('Name'), {
+			target: { value: 'Operations' },
+		});
+		fireEvent.change(destinationPanel.getByLabelText('HTTPS webhook URL'), {
+			target: { value: 'https://hooks.example.com/facet' },
+		});
+		fireEvent.click(destinationPanel.getByRole('button', { name: 'Add destination' }));
+		await waitFor(() =>
+			expect(destinationPanel.getByText('metric-webhook-secret')).toBeInTheDocument(),
+		);
+		// Like issued API keys, the one-time HMAC secret is rendered but never persisted.
+		expect(allStoredValues()).not.toContain('metric-webhook-secret');
+
+		const rules = screen
+			.getByRole('heading', { name: 'Metric alert rules' })
+			.closest('section');
+		if (!rules) throw new Error('metric alert rules panel missing');
+		const rulePanel = within(rules);
+		fireEvent.change(rulePanel.getByLabelText('Rule name'), {
+			target: { value: 'Traffic disappeared' },
+		});
+		fireEvent.change(rulePanel.getByLabelText('Threshold'), { target: { value: '0' } });
+		fireEvent.change(rulePanel.getByLabelText('Condition'), { target: { value: 'at_most' } });
+		fireEvent.click(rulePanel.getByRole('button', { name: 'Add rule' }));
+		await waitFor(() => expect(rulePanel.getByText('Traffic disappeared')).toBeInTheDocument());
+		expect(rulePanel.getByText(/Pageviews at most 0 per completed hour/)).toBeInTheDocument();
 	});
 
 	it('drops the one-time key when the managed site changes, and never persists it', async () => {

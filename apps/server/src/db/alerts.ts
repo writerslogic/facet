@@ -1,10 +1,10 @@
-// Alert-destination reads and the delivery-claim protocol that makes alerting exactly-once-ish.
+// Alert configuration reads and the delivery-claim protocol that makes alerting exactly-once-ish.
 //
 // The dedupe contract lives here, in SQL, not in application logic: a delivery is CLAIMED before it
 // is attempted, and the claim is a single atomic statement. That is what survives the three ways
 // this can go wrong — the cron running twice, the isolate dying mid-POST, and the same anomalous
-// hour being re-detected on the next run (the trailing 24h window still ends at the same completed
-// hour, so `detectAnomalies` legitimately returns it again).
+// alert fact being re-detected on the next run (anomaly and threshold evaluation both deliberately
+// revisit the same completed hour when a cron trigger is delayed or duplicated).
 
 import { and, eq, lt, ne, or, sql } from 'drizzle-orm';
 import type { Env } from '../env.js';
@@ -35,12 +35,34 @@ export interface StoredDestination {
 	created_at: number;
 }
 
+/** A metric rule as stored. Only enabled rules enter the cron evaluation path. */
+export interface StoredMetricAlertRule {
+	id: string;
+	site_id: string;
+	name: string;
+	metric: string;
+	operator: string;
+	threshold: number;
+	severity: string;
+	enabled: number;
+	created_at: number;
+}
+
 /** Every enabled destination across all sites, in one query — the cron's entry point. */
 export async function enabledDestinations(env: Env): Promise<StoredDestination[]> {
 	return db(env)
 		.select()
 		.from(schema.alertDestinations)
 		.where(eq(schema.alertDestinations.enabled, 1))
+		.all();
+}
+
+/** Every enabled threshold rule across all sites, in one indexed query. */
+export async function enabledMetricAlertRules(env: Env): Promise<StoredMetricAlertRule[]> {
+	return db(env)
+		.select()
+		.from(schema.metricAlertRules)
+		.where(eq(schema.metricAlertRules.enabled, 1))
 		.all();
 }
 

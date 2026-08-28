@@ -9,7 +9,7 @@ import { registerJob, runScheduled } from './lib/scheduled.js';
 
 const app = createApp();
 
-// Anomaly alerting rides the EXISTING hourly cron — no second schedule. Registered here through the
+// Anomaly + metric alerting rides the EXISTING hourly cron — no second schedule. Registered here through the
 // job registry's own extension point, so it gets the same per-job try/catch isolation as rollups and
 // retention: a broken webhook endpoint can never stop aggregation from running.
 registerJob(alertsJob);

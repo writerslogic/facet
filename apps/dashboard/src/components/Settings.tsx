@@ -15,6 +15,7 @@ import { useSites } from '../hooks/admin.js';
 import { cn } from '../lib/cn.js';
 import { useDashboard } from '../state.js';
 import { AdminTokenGate } from './settings/AdminTokenGate.js';
+import { AlertsPanel } from './settings/AlertsPanel.js';
 import { AppearancePanel } from './settings/AppearancePanel.js';
 import { ExperimentsPanel } from './settings/ExperimentsPanel.js';
 import { FlagsPanel } from './settings/FlagsPanel.js';
@@ -26,7 +27,7 @@ import { OperatorSessionsPanel } from './settings/OperatorSessionsPanel.js';
 import { SessionPanel } from './settings/SessionPanel.js';
 import { SitesPanel } from './settings/SitesPanel.js';
 
-type SectionId = 'keys' | 'goals' | 'funnels' | 'experiments' | 'flags' | 'identity';
+type SectionId = 'keys' | 'goals' | 'funnels' | 'experiments' | 'flags' | 'alerts' | 'identity';
 
 const SECTIONS: { id: SectionId; label: string }[] = [
 	{ id: 'keys', label: 'API keys' },
@@ -34,6 +35,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
 	{ id: 'funnels', label: 'Funnels' },
 	{ id: 'experiments', label: 'Experiments' },
 	{ id: 'flags', label: 'Feature flags' },
+	{ id: 'alerts', label: 'Alerts' },
 	{ id: 'identity', label: 'Identity' },
 ];
 
@@ -216,6 +218,9 @@ export function Settings(): ReactElement {
 							<ExperimentsPanel token={token} siteId={siteId} />
 						) : null}
 						{section === 'flags' ? <FlagsPanel token={token} siteId={siteId} /> : null}
+						{section === 'alerts' ? (
+							<AlertsPanel token={token} siteId={siteId} />
+						) : null}
 						{section === 'identity' ? (
 							<IdentityPanel token={token} siteId={siteId} />
 						) : null}
@@ -224,7 +229,7 @@ export function Settings(): ReactElement {
 			) : (
 				<p className="surface rounded-xl p-5 text-center text-[color:var(--muted)] text-sm">
 					Pick a site above with <strong>Manage</strong> to set up its API keys, goals,
-					funnels, experiments, flags and identity tier.
+					funnels, experiments, flags, alerts and identity tier.
 				</p>
 			)}
 		</div>

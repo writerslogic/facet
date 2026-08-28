@@ -4,6 +4,8 @@
 // `adminQueryRetry`, which refuses to re-send a token the deployment has already rejected.
 
 import type {
+	AlertDestination,
+	AlertDestinationInput,
 	ApiKeyRecord,
 	Experiment,
 	ExperimentInput,
@@ -12,6 +14,8 @@ import type {
 	Goal,
 	GoalInput,
 	IdentityTier,
+	MetricAlertRule,
+	MetricAlertRuleInput,
 	SaltWindow,
 	SetIdentityInput,
 	Site,
@@ -157,6 +161,80 @@ export function useDeleteExperiment(token: string, siteId: string) {
 			qc.invalidateQueries({
 				queryKey: ['admin', 'experiments', siteId],
 			}),
+	});
+}
+
+export function useAlertDestinations(token: string, siteId: string) {
+	return useQuery({
+		queryKey: siteQueryKey(['admin', 'alert-destinations'], siteId),
+		queryFn: () =>
+			adminFetch<{ alert_destinations: AlertDestination[] }>(
+				`/api/alerts?site_id=${siteId}`,
+				token,
+			),
+		retry: adminQueryRetry,
+		enabled: Boolean(token && siteId),
+	});
+}
+
+export function useCreateAlertDestination(token: string, siteId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (body: AlertDestinationInput) =>
+			adminPost<{ alert_destination: AlertDestination; secret?: string }>(
+				'/api/alerts',
+				token,
+				body,
+			),
+		onSuccess: () =>
+			qc.invalidateQueries({ queryKey: ['admin', 'alert-destinations', siteId] }),
+	});
+}
+
+export function useDeleteAlertDestination(token: string, siteId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (id: string) =>
+			adminFetch<{ deleted: boolean }>(`/api/alerts/${id}?site_id=${siteId}`, token, {
+				method: 'DELETE',
+			}),
+		onSuccess: () =>
+			qc.invalidateQueries({ queryKey: ['admin', 'alert-destinations', siteId] }),
+	});
+}
+
+export function useMetricAlertRules(token: string, siteId: string) {
+	return useQuery({
+		queryKey: siteQueryKey(['admin', 'metric-alert-rules'], siteId),
+		queryFn: () =>
+			adminFetch<{ metric_alert_rules: MetricAlertRule[] }>(
+				`/api/alerts/rules?site_id=${siteId}`,
+				token,
+			),
+		retry: adminQueryRetry,
+		enabled: Boolean(token && siteId),
+	});
+}
+
+export function useCreateMetricAlertRule(token: string, siteId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (body: MetricAlertRuleInput) =>
+			adminPost<{ metric_alert_rule: MetricAlertRule }>('/api/alerts/rules', token, body),
+		onSuccess: () =>
+			qc.invalidateQueries({ queryKey: ['admin', 'metric-alert-rules', siteId] }),
+	});
+}
+
+export function useDeleteMetricAlertRule(token: string, siteId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: (id: string) =>
+			adminFetch<{ deleted: boolean }>(`/api/alerts/rules/${id}?site_id=${siteId}`, token, {
+				method: 'DELETE',
+			}),
+		onSuccess: () =>
+			qc.invalidateQueries({ queryKey: ['admin', 'metric-alert-rules', siteId] }),
 	});
 }
 

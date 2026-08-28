@@ -475,7 +475,9 @@ curl -X POST https://your-deployment.example.com/api/keys \\
 					</Def>
 					<Def term="Anomalies">
 						Automatically flagged unusual movements in the series, with the segment
-						responsible. "Investigate" pivots the Overview onto that segment.
+						responsible. "Investigate" pivots the Overview onto that segment. Settings →
+						Alerts adds signed webhook/email destinations and inclusive thresholds over
+						exact pageviews, visitors or custom events in the last completed UTC hour.
 					</Def>
 					<Def term="Ask">
 						Natural-language questions over this site and range. The question becomes a

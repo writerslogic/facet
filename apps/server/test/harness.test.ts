@@ -24,6 +24,7 @@ const EXPECTED_TABLES = [
 	'goals',
 	'identity_salts',
 	'memberships',
+	'metric_alert_rules',
 	'mmr_checkpoints',
 	'mmr_leaves',
 	'mmr_nodes',
