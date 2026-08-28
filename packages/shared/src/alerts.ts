@@ -95,3 +95,78 @@ export interface AnomalyAlertPayload {
 	severity: AlertSeverity;
 	anomaly: Anomaly;
 }
+
+// Metric-threshold rules deliberately start with the three exact, currency-free counters available
+// from one `summary()` query. Revenue needs a currency on the rule (and a policy for mixed-currency
+// sites); session metrics materialize on a separate job. Pretending either is just another number
+// would make a threshold look more general while making its meaning unstable.
+export const METRIC_ALERT_METRICS = ['pageviews', 'visitors', 'events'] as const;
+export type MetricAlertMetric = (typeof METRIC_ALERT_METRICS)[number];
+
+/** Inclusive operators: "at least 0" and "at most 0" have useful, unsurprising meanings. */
+export const METRIC_ALERT_OPERATORS = ['at_least', 'at_most'] as const;
+export type MetricAlertOperator = (typeof METRIC_ALERT_OPERATORS)[number];
+
+/** Create body for `POST /api/alerts/rules` (admin-only). Rules are immutable; replace a rule to
+ * change its meaning so a delivery dedupe key can always refer to one stable condition. */
+export const MetricAlertRuleSchema = v.object({
+	site_id: v.pipe(v.string(), v.uuid()),
+	name: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
+	metric: v.picklist(METRIC_ALERT_METRICS),
+	operator: v.picklist(METRIC_ALERT_OPERATORS),
+	threshold: v.pipe(
+		v.number(),
+		v.finite(),
+		v.integer(),
+		v.minValue(0),
+		v.maxValue(Number.MAX_SAFE_INTEGER),
+	),
+	severity: v.optional(v.picklist(ALERT_SEVERITIES)),
+	enabled: v.optional(v.boolean()),
+});
+
+export type MetricAlertRuleInput = v.InferOutput<typeof MetricAlertRuleSchema>;
+
+/** A stored metric threshold as returned by the admin API. Evaluation always covers the last
+ * completed UTC hour; that fixed window is part of the wire contract rather than hidden config. */
+export interface MetricAlertRule {
+	id: string;
+	site_id: string;
+	name: string;
+	metric: MetricAlertMetric;
+	operator: MetricAlertOperator;
+	threshold: number;
+	severity: AlertSeverity;
+	enabled: boolean;
+	window_minutes: 60;
+	created_at: number;
+}
+
+export const METRIC_ALERT_TYPE = 'facet.metric.alert/1' as const;
+
+/** Exact counter observed for one rule over one completed UTC-hour window. */
+export interface MetricAlertObservation {
+	metric: MetricAlertMetric;
+	operator: MetricAlertOperator;
+	threshold: number;
+	value: number;
+	window_start: number;
+	window_end: number;
+}
+
+/** Signed webhook/email payload for a user-defined metric threshold breach. */
+export interface MetricAlertPayload {
+	type: typeof METRIC_ALERT_TYPE;
+	delivery_id: string;
+	dedupe_key: string;
+	attempt: number;
+	issued_at: number;
+	destination_id: string;
+	site_id: string;
+	severity: AlertSeverity;
+	rule: Pick<MetricAlertRule, 'id' | 'name'>;
+	observation: MetricAlertObservation;
+}
+
+/** Every payload the shared signed transport can deliver. */
+export type AlertPayload = AnomalyAlertPayload | MetricAlertPayload;

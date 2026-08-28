@@ -24,7 +24,8 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   `DELETE /api/keys/:id`, goal/funnel CRUD (`POST`/`GET`/`DELETE /api/goals`,
   `POST`/`GET`/`DELETE /api/funnels`), identity config (`PATCH /api/sites/:id/identity`),
   flag CRUD (`POST`/`GET /api/flags`, `PATCH`/`DELETE /api/flags/:id`), alert destinations
-  (`POST`/`GET /api/alerts`, `DELETE /api/alerts/:id`), historical import (`POST /api/import`),
+  (`POST`/`GET /api/alerts`, `DELETE /api/alerts/:id`) and metric alert rules
+  (`POST`/`GET /api/alerts/rules`, `DELETE /api/alerts/rules/:id`), historical import (`POST /api/import`),
   and `POST /api/auth/admin-link` —
   **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
 - `POST /api/auth/request`, `POST /api/auth/verify` — **public**, rate-limited (dashboard sign-in);
@@ -1376,10 +1377,11 @@ be turned into a report on an arbitrary host.
 
 ---
 
-## Admin: alert destinations
+## Admin: alert destinations and metric thresholds
 
-Where anomaly alerts are delivered. **Admin token only** for every route — alert configuration
-decides where a deployment's data is sent, so a site API key must never reach it.
+Where anomaly and metric-threshold alerts are delivered, plus the conditions operators define.
+**Admin token only** for every route — alert configuration decides where a deployment's data is
+sent, so a site API key must never reach it.
 
 ### `POST /api/alerts`
 
@@ -1418,6 +1420,51 @@ column is never included.
 
 Deletes a destination scoped to its site. Returns `{ "deleted": true }`, or `404 not_found`.
 Delivery history is intentionally retained — it is the audit trail of what was sent.
+
+### `POST /api/alerts/rules`
+
+Creates an immutable threshold rule. Body:
+`{ "site_id": UUID, "name": string (1–100), "metric": "pageviews"|"visitors"|"events",
+"operator": "at_least"|"at_most", "threshold": non-negative integer,
+"severity"?: "info"|"warning"|"critical", "enabled"?: boolean }`. Severity defaults to
+`warning`; enabled defaults to `true`. Returns `201` with `{ "metric_alert_rule": ... }`.
+
+Rules are checked by the existing hourly cron against the exact D1 summary for the last **completed
+UTC hour**. Operators are inclusive. A matched rule is sent once per `(destination, rule, hour)` to
+every enabled destination whose `min_severity` accepts the rule's severity. A delayed or duplicate
+cron trigger therefore cannot send the same observation twice; a rule that remains breached in the
+next hour is a new observation and may alert again.
+
+The initial metric set is deliberately currency-free and available from one exact query. Revenue is
+not accepted because a threshold without a currency is ambiguous on mixed-currency sites; session
+metrics are not accepted because they materialize in a separate scheduled job.
+
+```json
+{
+  "metric_alert_rule": {
+    "id": "44444444-4444-4444-8444-444444444444",
+    "site_id": "11111111-1111-4111-8111-111111111111",
+    "name": "traffic disappeared",
+    "metric": "pageviews",
+    "operator": "at_most",
+    "threshold": 0,
+    "severity": "critical",
+    "enabled": true,
+    "window_minutes": 60,
+    "created_at": 1704067200000
+  }
+}
+```
+
+### `GET /api/alerts/rules?site_id=<uuid>`
+
+Lists a site's metric rules, newest first, as `{ "metric_alert_rules": [...] }`.
+
+### `DELETE /api/alerts/rules/:id?site_id=<uuid>`
+
+Deletes a rule scoped to its site. Returns `{ "deleted": true }`, or `404 not_found`. Prior
+delivery rows remain as the audit trail. Rules are immutable so a rule id and its dedupe keys never
+change meaning; replace a rule to change its condition.
 
 ---
 

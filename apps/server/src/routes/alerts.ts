@@ -1,11 +1,19 @@
-// Alert destinations: admin CRUD, following the goals/funnels contract (POST / GET ?site_id= /
-// DELETE /:id?site_id=, valibot-validated body, canonical ApiError envelope).
+// Alert destinations + metric rules: admin CRUD following the goals/funnels site-scoping contract,
+// with valibot-validated bodies and the canonical ApiError envelope.
 //
 // Not built on crudRouter because two things here are not a verbatim insert of the validated body:
 // the webhook target is re-validated against the SSRF policy, and a webhook destination is issued a
 // signing secret that is returned exactly once and never again.
 
-import { type AlertDestination, AlertDestinationSchema, type AlertSeverity } from '@facet/shared';
+import {
+	type AlertDestination,
+	AlertDestinationSchema,
+	type AlertSeverity,
+	type MetricAlertMetric,
+	type MetricAlertOperator,
+	type MetricAlertRule,
+	MetricAlertRuleSchema,
+} from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { and, desc, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
@@ -39,6 +47,23 @@ function toPublic(row: typeof schema.alertDestinations.$inferSelect): AlertDesti
 		target: row.target,
 		min_severity: row.min_severity as AlertSeverity,
 		enabled: row.enabled === 1,
+		created_at: row.created_at,
+	};
+}
+
+/** Public view of an immutable threshold rule. The fixed one-hour window is explicit even though it
+ * is not stored: a caller should never have to infer what period the threshold applies to. */
+function toPublicRule(row: typeof schema.metricAlertRules.$inferSelect): MetricAlertRule {
+	return {
+		id: row.id,
+		site_id: row.site_id,
+		name: row.name,
+		metric: row.metric as MetricAlertMetric,
+		operator: row.operator as MetricAlertOperator,
+		threshold: row.threshold,
+		severity: row.severity as AlertSeverity,
+		enabled: row.enabled === 1,
+		window_minutes: 60,
 		created_at: row.created_at,
 	};
 }
@@ -91,6 +116,55 @@ alertsRoutes.get('/', async (c) => {
 		.where(eq(schema.alertDestinations.site_id, siteId))
 		.orderBy(desc(schema.alertDestinations.created_at));
 	return c.json({ alert_destinations: rows.map(toPublic) });
+});
+
+alertsRoutes.post(
+	'/rules',
+	vValidator('json', MetricAlertRuleSchema, validationErrorHook),
+	async (c) => {
+		const body = c.req.valid('json');
+		const row = {
+			id: crypto.randomUUID(),
+			site_id: body.site_id,
+			name: body.name,
+			metric: body.metric,
+			operator: body.operator,
+			threshold: body.threshold,
+			severity: body.severity ?? 'warning',
+			enabled: body.enabled === false ? 0 : 1,
+			created_at: Date.now(),
+		};
+		await db(c.env).insert(schema.metricAlertRules).values(row);
+		return c.json({ metric_alert_rule: toPublicRule(row) }, 201);
+	},
+);
+
+alertsRoutes.get('/rules', async (c) => {
+	const siteId = c.req.query('site_id') ?? '';
+	const rows = await db(c.env)
+		.select()
+		.from(schema.metricAlertRules)
+		.where(eq(schema.metricAlertRules.site_id, siteId))
+		.orderBy(desc(schema.metricAlertRules.created_at));
+	return c.json({ metric_alert_rules: rows.map(toPublicRule) });
+});
+
+alertsRoutes.delete('/rules/:id', async (c) => {
+	const siteId = c.req.query('site_id') ?? '';
+	const deleted = await db(c.env)
+		.delete(schema.metricAlertRules)
+		.where(
+			and(
+				eq(schema.metricAlertRules.id, c.req.param('id')),
+				eq(schema.metricAlertRules.site_id, siteId),
+			),
+		)
+		.returning({ id: schema.metricAlertRules.id });
+	if (deleted.length === 0) {
+		return c.json({ error: 'not_found' }, 404);
+	}
+	// Delivery rows are an audit trail and intentionally outlive the rule that caused them.
+	return c.json({ deleted: true });
 });
 
 alertsRoutes.delete('/:id', async (c) => {

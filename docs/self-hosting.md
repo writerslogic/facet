@@ -392,7 +392,7 @@ stripped, and Cloudflare **Workers observability** is enabled in `wrangler.jsonc
 (`observability.enabled = true`). View and query logs in the Cloudflare dashboard or with
 `wrangler tail`.
 
-## Anomaly alerting
+## Anomaly and metric alerting
 
 Anomalies are scored on the hourly cron. To be told about them rather than having to open the
 dashboard, register a destination per site. These are admin endpoints, so they use `ADMIN_TOKEN`.
@@ -409,7 +409,7 @@ dashboard, register a destination per site. These are admin endpoints, so they u
 curl -X POST https://your-deployment.example.com/api/alerts \
   -H "Authorization: Bearer $ADMIN_TOKEN" \
   -H "content-type: application/json" \
-  -d '{"site_id":"YOUR_SITE_ID","kind":"webhook",
+  -d '{"site_id":"YOUR_SITE_ID","name":"operations","type":"webhook",
        "target":"https://hooks.example.com/facet","min_severity":"critical"}'
 ```
 
@@ -421,7 +421,23 @@ Every webhook delivery is signed twice. `facet-alert-signature: v1=<hmac>` is an
 JWS over the RFC 8785 canonical bytes and appears only when `FACET_SIGNING_JWK` is configured (see
 below). Verify the HMAC before trusting a payload. The timestamp is bound *into* the MAC, so a
 captured delivery cannot be replayed under a new date, and the body carries a `delivery_id` unique
-per attempt plus a `dedupe_key` stable per anomaly.
+per attempt plus a `dedupe_key` stable per anomaly or metric-rule observation.
+
+The same destinations can receive user-defined thresholds over exact hourly pageviews, visitors or
+custom events. This example sends a critical alert when the last completed UTC hour had no
+pageviews:
+
+```sh
+curl -X POST https://your-deployment.example.com/api/alerts/rules \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "content-type: application/json" \
+  -d '{"site_id":"YOUR_SITE_ID","name":"traffic disappeared",
+       "metric":"pageviews","operator":"at_most","threshold":0,"severity":"critical"}'
+```
+
+Rules run on the existing hourly cron. A duplicate or delayed trigger cannot resend the same
+rule/hour to the same destination; a threshold still breached in the next completed hour may alert
+again. The dashboard exposes both destinations and rules under Settings → Alerts.
 
 Webhook targets are restricted to prevent the admin API becoming an SSRF primitive: HTTPS only,
 port 443 only, no credentials in the URL, and no private, loopback, link-local, CGNAT or

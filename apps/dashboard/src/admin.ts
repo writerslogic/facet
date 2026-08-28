@@ -1,6 +1,6 @@
 // Admin-token store: the ADMIN_TOKEN grants deployment-wide admin access, so it is kept OUT of the
 // site-credential profile store and out of localStorage. It lives in memory + sessionStorage only,
-// is never placed in a URL/log, and is only ever attached to /api/{sites,keys,goals,funnels,experiments,flags}
+// is never placed in a URL/log, and is only ever attached to the explicit admin endpoint allowlist
 // via adminFetch. "Forget admin token" clears both memory and sessionStorage.
 
 import {
@@ -23,6 +23,7 @@ const ADMIN_PATHS = [
 	'/api/funnels',
 	'/api/experiments',
 	'/api/flags',
+	'/api/alerts',
 	// Only `/api/users/:id/revoke-sessions` exists under this prefix and it is behind `requireAdmin`.
 	// Listed because the allowlist is what stops the token reaching a route that never asked for it —
 	// a genuine admin route missing from here fails closed with `non_admin_path`, which is the right

@@ -6,13 +6,21 @@ All notable changes to Facet are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- **Metric alert rules.** Settings → Alerts now manages the existing signed webhook/email
+  destinations and user-defined inclusive thresholds over exact pageviews, visitors, or custom
+  events in the last completed UTC hour. Rules reuse the anomaly delivery path (severity gates,
+  persisted dedupe/retries, SSRF checks, HMAC and optional detached-JWS signing), so duplicate cron
+  triggers cannot resend the same rule/hour observation.
+
 ### Removed
 
 - **`WEBHOOK_URL`/`WEBHOOK_SECRET` anomaly webhook.** This legacy single-URL webhook ran its own
   hourly anomaly-detection pass, uncoordinated with the destination-based alerting added later — a
   deployment with both configured double-evaluated and double-alerted on the same anomaly, and the
   legacy path had no SSRF hardening on the configured target. Register an equivalent `webhook`
-  destination per site instead (see `docs/self-hosting.md`'s Anomaly alerting section); the payload
+  destination per site instead (see `docs/self-hosting.md`'s alerting section); the payload
   shape and signature header differ from the removed path.
 
 ## [0.6.0] - 2026-07-23

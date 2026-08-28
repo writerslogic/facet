@@ -11,7 +11,7 @@
 // take the cron down with it.
 
 import { EmailMessage } from 'cloudflare:email';
-import type { AnomalyAlertPayload } from '@facet/shared';
+import { ANOMALY_ALERT_TYPE, type AlertPayload } from '@facet/shared';
 import { canonicalizeJson, signDetachedJws } from '@facet/trust';
 import type { StoredDestination } from '../db/alerts.js';
 import type { Env } from '../env.js';
@@ -242,7 +242,7 @@ async function hmacSha256Hex(secret: string, message: string): Promise<string> {
 async function signingHeaders(
 	env: Env,
 	dest: StoredDestination,
-	payload: AnomalyAlertPayload,
+	payload: AlertPayload,
 	body: string,
 ): Promise<Record<string, string>> {
 	const headers: Record<string, string> = {
@@ -268,7 +268,7 @@ async function signingHeaders(
 export async function deliverWebhook(
 	env: Env,
 	dest: StoredDestination,
-	payload: AnomalyAlertPayload,
+	payload: AlertPayload,
 	fetchImpl: FetchLike = fetch as unknown as FetchLike,
 ): Promise<DeliveryOutcome> {
 	// Re-check at delivery time, not just at creation: the stored row may predate this policy.
@@ -324,24 +324,47 @@ function base64Body(text: string): string {
 	return (b64.match(/.{1,76}/g) ?? []).join('\r\n');
 }
 
+/** One safe, human-readable headline for either alert family. */
+function alertSummary(payload: AlertPayload): string {
+	if (payload.type === ANOMALY_ALERT_TYPE) return payload.anomaly.summary;
+	const o = payload.observation;
+	const operator = o.operator === 'at_least' ? 'at least' : 'at most';
+	return `${payload.rule.name}: ${o.metric} was ${o.value} (threshold ${operator} ${o.threshold})`;
+}
+
 /** Plain-text body of an alert email. */
-function emailBody(payload: AnomalyAlertPayload): string {
-	const a = payload.anomaly;
+function emailBody(payload: AlertPayload): string {
 	const lines = [
-		a.summary,
+		alertSummary(payload),
 		'',
 		`severity:      ${payload.severity}`,
 		`site:          ${payload.site_id}`,
-		`metric:        ${a.metric}`,
-		`direction:     ${a.direction}`,
-		`hour (UTC):    ${new Date(a.bucket).toISOString()}`,
-		`value:         ${a.value}`,
-		`baseline mean: ${a.baseline_mean}`,
-		`z-score:       ${a.z}`,
 	];
-	if (a.diagnosis) {
+	if (payload.type === ANOMALY_ALERT_TYPE) {
+		const a = payload.anomaly;
 		lines.push(
-			`contributor:   ${a.diagnosis.dimension}=${a.diagnosis.value} (${a.diagnosis.current} vs ~${Math.round(a.diagnosis.baseline_avg)} typical)`,
+			`metric:        ${a.metric}`,
+			`direction:     ${a.direction}`,
+			`hour (UTC):    ${new Date(a.bucket).toISOString()}`,
+			`value:         ${a.value}`,
+			`baseline mean: ${a.baseline_mean}`,
+			`z-score:       ${a.z}`,
+		);
+		if (a.diagnosis) {
+			lines.push(
+				`contributor:   ${a.diagnosis.dimension}=${a.diagnosis.value} (${a.diagnosis.current} vs ~${Math.round(a.diagnosis.baseline_avg)} typical)`,
+			);
+		}
+	} else {
+		const o = payload.observation;
+		lines.push(
+			`rule:          ${payload.rule.name}`,
+			`metric:        ${o.metric}`,
+			`operator:      ${o.operator}`,
+			`threshold:     ${o.threshold}`,
+			`value:         ${o.value}`,
+			`window start:  ${new Date(o.window_start).toISOString()}`,
+			`window end:    ${new Date(o.window_end).toISOString()}`,
 		);
 	}
 	lines.push('', `delivery id:   ${payload.delivery_id}`, `dedupe key:    ${payload.dedupe_key}`);
@@ -356,9 +379,9 @@ function emailBody(payload: AnomalyAlertPayload): string {
  * summary embeds a country/device/channel value straight out of the events table, so an ingested
  * `desktop\r\nBcc: …` would otherwise be a header-injection primitive.
  */
-export function buildAlertMime(payload: AnomalyAlertPayload, from: string, to: string): string {
+export function buildAlertMime(payload: AlertPayload, from: string, to: string): string {
 	const domain = from.split('@')[1] ?? 'facet.invalid';
-	const subject = headerSafe(`[facet] ${payload.severity}: ${payload.anomaly.summary}`, 160);
+	const subject = headerSafe(`[facet] ${payload.severity}: ${alertSummary(payload)}`, 160);
 	return [
 		`From: Facet Alerts <${headerSafe(from, 254)}>`,
 		`To: ${headerSafe(to, 254)}`,
@@ -385,7 +408,7 @@ export function buildAlertMime(payload: AnomalyAlertPayload, from: string, to: s
 export async function deliverEmail(
 	env: Env,
 	dest: StoredDestination,
-	payload: AnomalyAlertPayload,
+	payload: AlertPayload,
 ): Promise<DeliveryOutcome> {
 	const { SEND_EMAIL: sender, ALERT_EMAIL_FROM: from } = env as Env & AlertEmailEnv;
 	if (!sender || !from) {
@@ -408,7 +431,7 @@ export async function deliverEmail(
 export async function deliverAlert(
 	env: Env,
 	dest: StoredDestination,
-	payload: AnomalyAlertPayload,
+	payload: AlertPayload,
 	fetchImpl?: FetchLike,
 ): Promise<DeliveryOutcome> {
 	try {

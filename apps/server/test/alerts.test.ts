@@ -7,7 +7,7 @@
 // endpoint degrades to a recorded failure instead of taking the cron down.
 
 import { env } from 'cloudflare:workers';
-import type { AnomalyAlertPayload } from '@facet/shared';
+import type { AnomalyAlertPayload, MetricAlertPayload } from '@facet/shared';
 import { generateSigningJwk, verifyDetachedJws } from '@facet/trust';
 import { describe, expect, it, vi } from 'vitest';
 import { createApp } from '../src/app.js';
@@ -78,12 +78,36 @@ async function seedSite(last: number, siteId = SITE): Promise<void> {
 	await seedHour(base + 23 * HOUR, last);
 }
 
+/** Seed only the last completed hour. With no 23-hour baseline this cannot produce an anomaly, so
+ * metric-rule tests prove their own path rather than accidentally inspecting an anomaly payload. */
+async function seedCompletedHourPageviews(count: number): Promise<void> {
+	await db(env)
+		.insert(schema.sites)
+		.values({ id: SITE, name: 'S', domain: 's.example', createdAt: NOW - HOUR })
+		.onConflictDoNothing();
+	for (let i = 0; i < count; i++) {
+		await insertEvent(env, {
+			siteId: SITE,
+			hostname: 's.example',
+			path: '/',
+			referrer: '',
+			name: null,
+			props: null,
+			visitorHash: `metric-v-${i}`,
+			country: 'US',
+			device: 'desktop',
+			createdAt: NOW - HOUR + i * 60_000,
+		});
+	}
+}
+
 async function createDestination(
 	body: Record<string, unknown>,
 	auth: string = ADMIN,
+	path = '/api/alerts',
 ): Promise<Response> {
 	return app.request(
-		'/api/alerts',
+		path,
 		{
 			method: 'POST',
 			headers: { Authorization: auth, 'content-type': 'application/json' },
@@ -112,6 +136,27 @@ async function webhookDestination(
 	return { id: body.alert_destination.id, secret: body.secret };
 }
 
+/** Register one metric rule through the admin API and return its public row. */
+async function metricRule(
+	overrides: Record<string, unknown> = {},
+): Promise<{ id: string; name: string }> {
+	const res = await createDestination(
+		{
+			site_id: SITE,
+			name: 'Traffic floor',
+			metric: 'pageviews',
+			operator: 'at_least',
+			threshold: 3,
+			...overrides,
+		},
+		ADMIN,
+		'/api/alerts/rules',
+	);
+	expect(res.status).toBe(201);
+	const body = (await res.json()) as { metric_alert_rule: { id: string; name: string } };
+	return body.metric_alert_rule;
+}
+
 async function deliveryRows(): Promise<
 	{ status: string; attempts: number; last_error: string | null; dedupe_key: string }[]
 > {
@@ -125,6 +170,7 @@ describe('alert destinations: auth', () => {
 	it('refuses every method without a bearer token', async () => {
 		for (const res of [
 			await app.request(`/api/alerts?site_id=${SITE}`, {}, env),
+			await app.request(`/api/alerts/rules?site_id=${SITE}`, {}, env),
 			await createDestination(
 				{ site_id: SITE, name: 'x', type: 'webhook', target: HOOK },
 				'',
@@ -287,6 +333,82 @@ describe('alert destinations: CRUD', () => {
 	});
 });
 
+describe('metric alert rules: CRUD', () => {
+	it('round-trips an immutable hourly rule and scopes deletion to its site', async () => {
+		const rule = await metricRule({
+			name: 'No traffic',
+			operator: 'at_most',
+			threshold: 0,
+			severity: 'critical',
+		});
+
+		const list = await app.request(
+			`/api/alerts/rules?site_id=${SITE}`,
+			{
+				headers: { Authorization: ADMIN },
+			},
+			env,
+		);
+		expect(list.status).toBe(200);
+		const body = (await list.json()) as { metric_alert_rules: Record<string, unknown>[] };
+		expect(body.metric_alert_rules).toHaveLength(1);
+		expect(body.metric_alert_rules[0]).toMatchObject({
+			id: rule.id,
+			name: 'No traffic',
+			metric: 'pageviews',
+			operator: 'at_most',
+			threshold: 0,
+			severity: 'critical',
+			enabled: true,
+			window_minutes: 60,
+		});
+
+		const otherSite = '88888888-8888-4888-8888-888888888888';
+		const refused = await app.request(
+			`/api/alerts/rules/${rule.id}?site_id=${otherSite}`,
+			{
+				method: 'DELETE',
+				headers: { Authorization: ADMIN },
+			},
+			env,
+		);
+		expect(refused.status).toBe(404);
+
+		const deleted = await app.request(
+			`/api/alerts/rules/${rule.id}?site_id=${SITE}`,
+			{
+				method: 'DELETE',
+				headers: { Authorization: ADMIN },
+			},
+			env,
+		);
+		expect(deleted.status).toBe(200);
+	});
+
+	it('rejects fractional, negative and unknown threshold conditions', async () => {
+		for (const patch of [
+			{ threshold: -1 },
+			{ threshold: 1.5 },
+			{ metric: 'revenue' },
+			{ operator: 'approximately' },
+		]) {
+			const res = await createDestination(
+				{
+					site_id: SITE,
+					name: 'bad',
+					metric: 'pageviews',
+					operator: 'at_least',
+					threshold: 1,
+					...patch,
+				},
+				ADMIN,
+				'/api/alerts/rules',
+			);
+			expect(res.status).toBe(400);
+		}
+	});
+});
+
 describe('SSRF policy', () => {
 	const blocked: [string, string][] = [
 		['http://hooks.example.com/x', 'scheme_not_https'],
@@ -388,6 +510,49 @@ describe('cron alerting', () => {
 
 	it('does nothing at all when no destination is configured', async () => {
 		await seedSite(1);
+		const { calls, fetchImpl } = recorder();
+		await runAlerts(env as Env, NOW, fetchImpl);
+		expect(calls).toHaveLength(0);
+		expect(await deliveryRows()).toHaveLength(0);
+	});
+
+	it('delivers a matched metric rule once for the last completed UTC hour', async () => {
+		const { id: destinationId } = await webhookDestination();
+		const rule = await metricRule({ threshold: 3, severity: 'critical' });
+		await seedCompletedHourPageviews(3);
+		const first = recorder();
+		await runAlerts(env as Env, NOW + 3 * 60_000, first.fetchImpl);
+
+		expect(first.calls).toHaveLength(1);
+		const payload = JSON.parse(String(first.calls[0]?.init.body)) as MetricAlertPayload;
+		expect(payload).toMatchObject({
+			type: 'facet.metric.alert/1',
+			destination_id: destinationId,
+			site_id: SITE,
+			severity: 'critical',
+			rule: { id: rule.id, name: 'Traffic floor' },
+			observation: {
+				metric: 'pageviews',
+				operator: 'at_least',
+				threshold: 3,
+				value: 3,
+				window_start: NOW - HOUR,
+				window_end: NOW,
+			},
+		});
+		expect(payload.dedupe_key).toBe(`${SITE}:metric_rule:${rule.id}:${NOW - HOUR}`);
+
+		// Same completed hour, delayed duplicate trigger: one observation, one delivery.
+		const duplicate = recorder();
+		await runAlerts(env as Env, NOW + 10 * 60_000, duplicate.fetchImpl);
+		expect(duplicate.calls).toHaveLength(0);
+		expect(await deliveryRows()).toHaveLength(1);
+	});
+
+	it('does not claim or deliver an unmatched metric rule', async () => {
+		await webhookDestination();
+		await metricRule({ threshold: 4 });
+		await seedCompletedHourPageviews(3);
 		const { calls, fetchImpl } = recorder();
 		await runAlerts(env as Env, NOW, fetchImpl);
 		expect(calls).toHaveLength(0);
@@ -765,5 +930,35 @@ describe('alert email MIME', () => {
 		expect(headerLines.some((l) => l.startsWith('Bcc:'))).toBe(false);
 		expect(headerLines.filter((l) => l.startsWith('Subject:'))).toHaveLength(1);
 		expect(headerLines).toHaveLength(8);
+	});
+
+	it('renders a metric rule as its own readable subject and windowed body', () => {
+		const metric: MetricAlertPayload = {
+			type: 'facet.metric.alert/1',
+			delivery_id: 'd-2',
+			dedupe_key: `${SITE}:metric_rule:r-1:${NOW - HOUR}`,
+			attempt: 1,
+			issued_at: NOW,
+			destination_id: 'dest-1',
+			site_id: SITE,
+			severity: 'critical',
+			rule: { id: 'r-1', name: 'Traffic disappeared' },
+			observation: {
+				metric: 'pageviews',
+				operator: 'at_most',
+				threshold: 0,
+				value: 0,
+				window_start: NOW - HOUR,
+				window_end: NOW,
+			},
+		};
+		const raw = buildAlertMime(metric, 'alerts@zone.example', 'oncall@example.com');
+		expect(raw).toMatch(
+			/^Subject: \[facet\] critical: Traffic disappeared: pageviews was 0 \(threshold at most 0\)/m,
+		);
+		const body = raw.split('\r\n\r\n').slice(1).join('\r\n\r\n');
+		const decoded = atob(body.replace(/\r\n/g, ''));
+		expect(decoded).toContain('operator:      at_most');
+		expect(decoded).toContain(`window start:  ${new Date(NOW - HOUR).toISOString()}`);
 	});
 });
