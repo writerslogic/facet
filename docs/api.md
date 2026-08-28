@@ -725,6 +725,16 @@ SSE streaming, one request/response per POST.
 
 Tools: `get_digest`, `get_summary`, `top_dimension`, `get_realtime`.
 
+`top_dimension` is backed by the same code path as `GET /api/stats/breakdown`, so it groups by any
+of that endpoint's dimensions — including the long-tail ones no other tool reaches (`city`,
+`timezone`, `network`, `language`, `form_factor`, `utm_source`, `utm_medium`, `utm_campaign`,
+`currency`) — and inherits its two properties: every group is k-anonymised on 3 distinct visitors,
+and the first line of the result names which store answered (`source: d1` or
+`source: analytics_engine`, the latter marked `SAMPLED` when the columnar store sampled, which makes
+every count an estimate and `visitors` a lower bound). Rows are
+`key`/`events`/`pageviews`/`visitors`, tab-separated; an absent dimension value is reported as
+`(unset)`.
+
 Authentication is the **bearer API key only**. The dashboard session cookie is deliberately not
 accepted here: honouring a cookie on a cross-origin POST would make this a CSRF sink. Because a key
 is bound to one site, no tool takes a `site_id` and no caller can reach another site's data.
