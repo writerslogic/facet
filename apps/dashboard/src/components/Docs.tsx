@@ -447,6 +447,14 @@ curl -X POST https://your-deployment.example.com/api/keys \\
 						follows you to the other tabs — each one either applies it or says plainly
 						that it cannot. Drag tiles to rearrange; layout is remembered per site.
 					</Def>
+					<Def term="Explore">
+						One dimension at a time, ranked — including the columns no tile on the
+						Overview reaches: city, timezone, network, language, form factor, the three
+						UTM parameters and currency. Groups under three distinct visitors are
+						omitted, and the badge names which store answered: D1 scans every row and is
+						exact, while Analytics Engine samples under load, which makes every count an
+						estimate and visitors a lower bound.
+					</Def>
 					<Def term="Realtime">
 						Who is on the site in the last five minutes, refreshing every 15 seconds and
 						pausing while the browser tab is hidden.

@@ -29,6 +29,7 @@ const AskPanel = lazy(() =>
 	import('./components/AskPanel.js').then((m) => ({ default: m.AskPanel })),
 );
 const Docs = lazy(() => import('./components/Docs.js').then((m) => ({ default: m.Docs })));
+const Explore = lazy(() => import('./components/Explore.js').then((m) => ({ default: m.Explore })));
 const Experiments = lazy(() =>
 	import('./components/Experiments.js').then((m) => ({
 		default: m.Experiments,
@@ -88,6 +89,7 @@ import { useDashboard } from './state.js';
 
 type View =
 	| 'overview'
+	| 'explore'
 	| 'allsites'
 	| 'realtime'
 	| 'funnels'
@@ -152,6 +154,7 @@ const EMPTY_CELLS: CubeCell[] = [];
 
 const TABS: { id: View; label: string }[] = [
 	{ id: 'overview', label: 'Overview' },
+	{ id: 'explore', label: 'Explore' },
 	{ id: 'allsites', label: 'All sites' },
 	{ id: 'realtime', label: 'Realtime' },
 	{ id: 'funnels', label: 'Funnels' },
@@ -588,6 +591,8 @@ function Dashboard(): ReactElement {
 								<div className="flex min-h-0 flex-1 flex-col">
 									<Overview onOpenSettings={() => setShowSettings(true)} />
 								</div>
+							) : view === 'explore' ? (
+								<Explore apiKey={apiKey} siteId={siteId} range={range} />
 							) : view === 'allsites' ? (
 								<AllSites />
 							) : view === 'realtime' ? (

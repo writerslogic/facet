@@ -184,6 +184,7 @@ export function writeSegmentToUrl(segment: Segment): void {
 /** The tabs that render data (Documentation has none, so it makes no claim). */
 export type SegmentTab =
 	| 'overview'
+	| 'explore'
 	| 'realtime'
 	| 'funnels'
 	| 'retention'
@@ -211,6 +212,10 @@ export interface TabSegmentSupport {
  * these endpoints validate against while their SQL then ignores the dimension fields entirely:
  *
  *   /api/stats            → toStatsFilter → buildFilteredEventWhere: applies all five. FULL.
+ *   /api/stats/breakdown  → breakdown() applies all five on BOTH paths: `d1Breakdown` through
+ *                           buildFilteredEventWhere, and `aeWhere` through the mirrored blob column
+ *                           each key narrows — and the columnar path DECLINES to D1 rather than
+ *                           dropping a filter term it cannot express. FULL.
  *   /api/stats/cube       → cube() uses buildEventWhere on purpose; the client slices the result.
  *   /api/stats/realtime   → realtime(env, siteId, …): site + trailing window only. NO filter.
  *   /api/stats/retention  → cohortRetention() reads `sessions` by siteId + firstSeen only. It
@@ -230,6 +235,10 @@ export const TAB_SEGMENT_SUPPORT: Record<SegmentTab, TabSegmentSupport> = {
 	overview: {
 		level: 'full',
 		note: 'Every tile is scoped to this segment. Device, country and channel slice in the browser; path and referrer re-query the server.',
+	},
+	explore: {
+		level: 'full',
+		note: 'Every group below is scoped to this segment. The breakdown endpoint applies all five dimensions, and the columnar store falls back to D1 rather than answering with a filter dropped.',
 	},
 	realtime: {
 		level: 'partial',

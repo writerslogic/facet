@@ -154,6 +154,7 @@ describe('segment capability claims match the server', () => {
 			'ask',
 			'crm',
 			'experiments',
+			'explore',
 			'funnels',
 			'overview',
 			'realtime',

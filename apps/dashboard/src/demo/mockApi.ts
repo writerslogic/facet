@@ -3,7 +3,16 @@
 // boot, only in the demo build (see main.tsx). Patching window.fetch is the single choke point that
 // covers the typed helpers (api.ts) AND the raw fetch() calls (download.ts, transparency.ts).
 
-import type { CohortPeriod, CountRow, Interval, SeriesDimension } from '@facet/shared';
+import {
+	BREAKDOWN_DEFAULT_ROWS,
+	BREAKDOWN_DIMENSIONS,
+	BREAKDOWN_MAX_ROWS,
+	type BreakdownDimension,
+	type CohortPeriod,
+	type CountRow,
+	type Interval,
+	type SeriesDimension,
+} from '@facet/shared';
 import { DEMO_SITE_ID } from './constants.js';
 import {
 	DEMO_EXPERIMENTS,
@@ -15,6 +24,7 @@ import {
 	DEMO_SITE,
 	type DemoStatsFilter,
 	buildAnomalies,
+	buildBreakdown,
 	buildClock,
 	buildConversions,
 	buildCube,
@@ -270,6 +280,29 @@ function route(url: URL, method: string, body: unknown): Response | null {
 	switch (p) {
 		case '/api/stats':
 			return json(buildStats(start, end, interval, parseFilter(url)));
+		case '/api/stats/breakdown': {
+			const dimension = url.searchParams.get('dimension') ?? '';
+			// The real route validates `dimension` against the picklist and 400s on anything else,
+			// rather than defaulting to paths under whatever label the caller asked for.
+			if (!BREAKDOWN_DIMENSIONS.includes(dimension as BreakdownDimension)) {
+				return json({ error: 'bad_request' }, 400);
+			}
+			const limitRaw = url.searchParams.get('limit');
+			const limit = limitRaw === null ? BREAKDOWN_DEFAULT_ROWS : Number(limitRaw);
+			if (!Number.isInteger(limit) || limit < 1 || limit > BREAKDOWN_MAX_ROWS) {
+				return json({ error: 'bad_request' }, 400);
+			}
+			return json(
+				buildBreakdown(
+					start,
+					end,
+					interval,
+					dimension as BreakdownDimension,
+					limit,
+					parseFilter(url),
+				),
+			);
+		}
 		case '/api/stats/cube':
 			return json(buildCube(start, end, interval));
 		case '/api/stats/anomalies':
