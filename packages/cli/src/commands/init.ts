@@ -685,7 +685,7 @@ function printSummary(
 	ui.blank();
 	ui.out(`  Add this to the <head> of ${site.domain}:\n`);
 	ui.out(
-		`  ${pc.dim(`<script defer src="${host}/facet.js" data-site-id="${site.id}"></script>`)}\n`,
+		`  ${pc.dim(`<script defer src="${host}/script.js" data-site-id="${site.id}"></script>`)}\n`,
 	);
 	ui.blank();
 	ui.out(`  Admin token: ${devVarsPath} ${pc.dim('(mode 0600, never printed)')}\n`);

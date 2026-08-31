@@ -129,7 +129,7 @@ Every installer failure names the cause, the fix, and how to resume. The common 
 The installer prints this with your values filled in:
 
 ```html
-<script defer src="https://your-deployment.example.com/facet.js" data-site-id="YOUR_SITE_ID"></script>
+<script defer src="https://your-deployment.example.com/script.js" data-site-id="YOUR_SITE_ID"></script>
 ```
 
 See [Usage](./usage.md) for the npm client, custom events, and the compatibility globals.

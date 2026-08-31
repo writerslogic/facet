@@ -29,7 +29,7 @@
     "check:migrations": "node scripts/check-migration-upgrade.mjs",
     "format": "biome format --write .",
     "ci": "biome ci .",
-    "build": "pnpm --filter @facet/dashboard build && pnpm check:bundle && pnpm -r --filter '!@facet/dashboard' build",
+    "build": "pnpm --filter @writerslogic/facet build && pnpm --filter @facet/dashboard build && pnpm check:bundle && pnpm -r --filter '!@facet/dashboard' --filter '!@writerslogic/facet' build",
     "deploy": "pnpm --filter @facet/server deploy",
     "db:generate": "pnpm --filter @facet/server db:generate",
     "db:migrate": "pnpm --filter @facet/server migrate:local"

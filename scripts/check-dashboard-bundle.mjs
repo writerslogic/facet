@@ -6,6 +6,15 @@ const html = await readFile(new URL('index.html', dist), 'utf8');
 const entry = html.match(/<script[^>]+src="\/assets\/(index-[^"]+\.js)"/)?.[1];
 if (!entry) throw new Error('Dashboard entry script was not found in dist/index.html; run the build first.');
 
+// The drop-in tracker is copied in by the dashboard build (see vite.config.ts `tracker()`), because
+// the Worker serves it from this directory and the documented <script src=".../script.js"> tag 404s
+// without it. Asserted here so the copy cannot regress silently the way its absence originally did.
+const tracker = await stat(new URL('script.js', dist)).catch(() => null);
+if (!tracker) {
+	throw new Error('dist/script.js is missing; the drop-in tracker tag would 404. See apps/dashboard/vite.config.ts.');
+}
+console.log(`tracker script.js: ${tracker.size} bytes`);
+
 const files = await readdir(new URL('assets/', dist));
 const sizes = await Promise.all(
 	files.map(async (name) => ({ name, bytes: (await stat(join(new URL('assets/', dist).pathname, name))).size })),
