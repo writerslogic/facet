@@ -30,8 +30,8 @@
 		"@facet/trust": "workspace:*",
 		"@hono/valibot-validator": "0.6.1",
 		"drizzle-orm": "0.45.2",
-		"hono": "4.13.3",
-		"isbot": "5.2.1",
+		"hono": "4.13.5",
+		"isbot": "5.2.2",
 		"valibot": "1.4.2"
 	},
 	"devDependencies": {
