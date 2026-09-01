@@ -31,21 +31,32 @@ const DEFAULT_ROLLUP_MONTHLY_MONTHS = 120;
  */
 const MAX_PERIODS_PER_RUN = 12;
 
-/** Months of hour/day detail retained. Validated exactly as `retentionDays()` validates its own var:
- * a positive integer or the default, because zero or negative puts the cutoff at or after `now` and
- * would coarsen the current month on every run. */
+/** IMPORTANT: an upper bound is as load-bearing as the lower one. Past this, the `Date.UTC` month
+ * arithmetic below leaves its valid range and yields NaN, and every `>= cutoff` / `> cutoff`
+ * eligibility guard reads false against NaN, folding the current, incomplete period and freezing
+ * that partial total under the write-once rule. */
+const MAX_ROLLUP_MONTHS = 12_000;
+
+function boundedMonths(raw: string | undefined, fallback: number): number {
+	const months = Number.parseInt(raw ?? '', 10);
+	const ok = Number.isInteger(months) && months >= 1 && months <= MAX_ROLLUP_MONTHS;
+	return ok ? months : fallback;
+}
+
+/** Months of hour/day detail retained. Validated as `retentionDays()` validates its own var: zero or
+ * negative puts the cutoff at or after `now` and would coarsen the current month on every run. */
 function detailMonths(env: Env): number {
-	const months = Number.parseInt(env.ROLLUP_DETAIL_MONTHS ?? '', 10);
-	return Number.isInteger(months) && months >= 1 ? months : DEFAULT_ROLLUP_DETAIL_MONTHS;
+	return boundedMonths(env.ROLLUP_DETAIL_MONTHS, DEFAULT_ROLLUP_DETAIL_MONTHS);
 }
 
 /** Months after which a `month` row is folded into a `year` row. Never allowed below the detail
  * window: a year can only be summarised once every one of its months exists, and folding early would
  * write a partial year total that the write-once rule then freezes. */
 function monthlyMonths(env: Env): number {
-	const months = Number.parseInt(env.ROLLUP_MONTHLY_MONTHS ?? '', 10);
-	const value = Number.isInteger(months) && months >= 1 ? months : DEFAULT_ROLLUP_MONTHLY_MONTHS;
-	return Math.max(value, detailMonths(env));
+	return Math.max(
+		boundedMonths(env.ROLLUP_MONTHLY_MONTHS, DEFAULT_ROLLUP_MONTHLY_MONTHS),
+		detailMonths(env),
+	);
 }
 
 function utcMonthStart(ts: number): number {

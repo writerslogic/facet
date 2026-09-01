@@ -1,6 +1,6 @@
 // Anomaly detection + root-cause "autopsy" over the hourly pageview series. Runs entirely over
-// aggregate `events` data (no per-user identity), scores the most recent hour against a baseline of
-// earlier hours via a sample z-score, and picks the dimension value that most drove the deviation.
+// aggregate `events` data (no per-user identity), scores the most recent whole hour against a
+// baseline of earlier whole hours via a sample z-score, and picks the value that most drove it.
 // The plain-language summary is a deterministic template (no LLM) so it is fully testable.
 
 import type { Anomaly, StatsFilter } from '@facet/shared';
@@ -75,14 +75,15 @@ function meanStddev(xs: number[]): { mean: number; stddev: number } {
  * Detect a pageview anomaly in the most recent hour of [f.start, f.end). Returns a single-element
  * array when the last completed bucket deviates by at least ANOMALY_Z from the baseline, else [].
  *
- * The in-progress hour (any bucket whose full `HOUR_MS` has not elapsed as of `now`) is excluded
- * from both the candidate and the baseline, so partial current-hour data can't fabricate a "drop".
- * `now` is a deterministic UTC-ms clock, passed explicitly for testability; for purely historical
- * ranges (end already in the past) the filter is a no-op.
+ * IMPORTANT: only hours WHOLLY inside [f.start, min(f.end, now)) are scored. An hour clipped at
+ * either edge — an unaligned `start`, an unaligned past `end`, or the still-in-progress hour —
+ * holds a fraction of an hour's traffic, so as candidate it fabricates a "drop" and as a baseline
+ * member it depresses the mean. `now` is a deterministic UTC-ms clock, passed in for testability.
  */
 export async function detectAnomalies(env: Env, f: StatsFilter, now: number): Promise<Anomaly[]> {
 	const all = await hourlyPageviews(env, f);
-	const points = all.filter((p) => p.bucket + HOUR_MS <= now);
+	const cutoff = Math.min(f.end, now);
+	const points = all.filter((p) => p.bucket >= f.start && p.bucket + HOUR_MS <= cutoff);
 	if (points.length < 1) {
 		return [];
 	}
@@ -91,7 +92,8 @@ export async function detectAnomalies(env: Env, f: StatsFilter, now: number): Pr
 		return [];
 	}
 	const baseline = points.slice(0, -1);
-	if (baseline.length < ANOMALY_MIN_BASELINE) {
+	const baselineStart = baseline[0]?.bucket;
+	if (baseline.length < ANOMALY_MIN_BASELINE || baselineStart === undefined) {
 		return [];
 	}
 	const { mean, stddev } = meanStddev(baseline.map((p) => p.value));
@@ -105,7 +107,7 @@ export async function detectAnomalies(env: Env, f: StatsFilter, now: number): Pr
 	}
 	const direction: 'drop' | 'spike' = z < 0 ? 'drop' : 'spike';
 
-	const diagnosis = await diagnose(env, f, candidate.bucket, baseline.length, direction);
+	const diagnosis = await diagnose(env, f, candidate.bucket, baselineStart, direction);
 
 	const summary = buildSummary(direction, value, mean, z, diagnosis);
 
@@ -128,7 +130,7 @@ async function diagnose(
 	env: Env,
 	f: StatsFilter,
 	bucket: number,
-	baselineBuckets: number,
+	baselineStart: number,
 	direction: 'drop' | 'spike',
 ): Promise<Anomaly['diagnosis']> {
 	const currentWindow: StatsFilter = {
@@ -136,7 +138,10 @@ async function diagnose(
 		start: bucket,
 		end: bucket + HOUR_MS,
 	};
-	const baselineWindow: StatsFilter = { ...f, start: f.start, end: bucket };
+	const baselineWindow: StatsFilter = { ...f, start: baselineStart, end: bucket };
+	// The divisor MUST be the window's own length, or `baseline_avg` silently averages over hours
+	// the window never covered.
+	const baselineBuckets = (bucket - baselineStart) / HOUR_MS;
 
 	let best: NonNullable<Anomaly['diagnosis']> | null = null;
 	let bestDelta = 0;

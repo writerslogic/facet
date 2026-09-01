@@ -112,27 +112,6 @@ export const contacts = sqliteTable(
 	],
 );
 
-/**
- * Who touched the contact store, what they touched, and when. One row per authorized `/api/crm`
- * request, written BEFORE the handler runs.
- *
- * WHY IT IS HERE rather than in the analytics database. Every row names a `target_id`, which is a
- * pointer into this database's PII, and the analytics database is deliberately free of anything that
- * resolves to a named person. Keeping the log beside the data it describes also means an unbound
- * deployment has no audit table for the same reason it has no contacts — the extension does not
- * exist — and that the log and the row it records are one database apart rather than two, which is
- * the only reason the two writes can be reasoned about at all.
- *
- * WHAT IT DELIBERATELY DOES NOT HOLD is any contact FIELD. It records that contact `x` was read, not
- * what reading it returned, so the log is a record about the OPERATOR and only a pointer to the
- * subject. That is what makes it safe to outlive the contact: once the row is deleted the pointer
- * resolves to nothing, so an erasure request does not have to reach in here — and must not, since a
- * log an operator can clear by deleting the contact is not evidence of anything. Nothing in the API
- * updates or deletes these rows; only the retention cron does.
- *
- * `actor_role` is stored rather than resolved at read time because it is the role the request was
- * AUTHORIZED under. Roles change; "an admin exported this" has to stay true after they are demoted.
- */
 /** Deal lifecycle. `won`/`lost` are terminal — a pipeline aggregate excludes them from "open" by this
  * set, not by a separate flag, so the two can never disagree about which stages are still moving. */
 export const DEAL_STAGES = ['lead', 'qualified', 'proposal', 'negotiation', 'won', 'lost'] as const;
@@ -173,6 +152,27 @@ export const deals = sqliteTable(
 	],
 );
 
+/**
+ * Who touched the contact store, what they touched, and when. One row per authorized `/api/crm`
+ * request, written BEFORE the handler runs.
+ *
+ * WHY IT IS HERE rather than in the analytics database. Every row names a `target_id`, which is a
+ * pointer into this database's PII, and the analytics database is deliberately free of anything that
+ * resolves to a named person. Keeping the log beside the data it describes also means an unbound
+ * deployment has no audit table for the same reason it has no contacts — the extension does not
+ * exist — and that the log and the row it records are one database apart rather than two, which is
+ * the only reason the two writes can be reasoned about at all.
+ *
+ * WHAT IT DELIBERATELY DOES NOT HOLD is any contact FIELD. It records that contact `x` was read, not
+ * what reading it returned, so the log is a record about the OPERATOR and only a pointer to the
+ * subject. That is what makes it safe to outlive the contact: once the row is deleted the pointer
+ * resolves to nothing, so an erasure request does not have to reach in here — and must not, since a
+ * log an operator can clear by deleting the contact is not evidence of anything. Nothing in the API
+ * updates or deletes these rows; only the retention cron does.
+ *
+ * `actor_role` is stored rather than resolved at read time because it is the role the request was
+ * AUTHORIZED under. Roles change; "an admin exported this" has to stay true after they are demoted.
+ */
 export const crmAuditLog = sqliteTable(
 	'crm_audit_log',
 	{

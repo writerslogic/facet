@@ -22,6 +22,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as v from 'valibot';
 import { getEvalFlags, listActiveFlags, listFlags } from '../db/catalog.js';
+import { uniqueConstraintText } from '../db/crm.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
@@ -58,11 +59,23 @@ function validateFlagShape(f: FlagInput): string | null {
 	return null;
 }
 
-/** Weak ETag over the site's flag versions: changes whenever any flag is created, edited, toggled, or
- * deleted, so the public cache turns over on a kill-switch without shipping per-request timestamps. */
-function activeEtag(flags: { version: number }[]): string {
-	const sum = flags.reduce((a, x) => a + x.version, 0);
-	return `W/"flags-${flags.length}-${sum}"`;
+/** Weak ETag over the site's flags: changes whenever one is created, edited, toggled, or deleted, so
+ * the public cache turns over on a kill-switch without shipping per-request timestamps.
+ * IMPORTANT: keyed on the (key, version) pairs, not their count and version sum — under a bare
+ * count+sum, deleting a flag and creating another at the same version reproduced the previous ETag
+ * exactly, so every cached client revalidated to a 304 and kept bucketing on the deleted flag
+ * forever. Order-independent, so a `created_at` tie cannot churn the cache either. */
+function activeEtag(flags: { flag_key: string; version: number }[]): string {
+	let acc = 0;
+	for (const f of flags) {
+		const s = `${f.flag_key}:${f.version}`;
+		let h = 2166136261;
+		for (let i = 0; i < s.length; i++) {
+			h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+		}
+		acc = (acc + h) >>> 0;
+	}
+	return `W/"flags-${flags.length}-${acc.toString(36)}"`;
 }
 
 // --- Public: cacheable bucketing config (non-sensitive; no targeting rules) --------------------------
@@ -162,8 +175,10 @@ flagsRoutes.post(
 					created_at: now,
 					updated_at: now,
 				});
-		} catch {
-			// The only constraint that can fail is the (site_id, flag_key) uniqueness index.
+		} catch (err) {
+			// Only the (site_id, flag_key) unique index is the caller's fault. A bare catch reported a
+			// D1 outage or a schema drift as a duplicate key, and logged nothing at all.
+			if (!uniqueConstraintText(err)) throw err;
 			return c.json({ error: 'flag_key_already_exists' }, 409);
 		}
 		return c.json({ flag: { id, ...body, salt, version: 1 } }, 201);
@@ -189,26 +204,33 @@ flagsRoutes.patch(
 			return c.json({ error: shapeError }, 400);
 		}
 		// salt is intentionally NOT updated; version increments so /active caches invalidate.
-		const updated = await db(c.env)
-			.update(schema.flags)
-			.set({
-				flag_key: body.flag_key,
-				name: body.name,
-				type: body.type,
-				enabled: body.enabled === false ? 0 : 1,
-				default_variant: body.default_variant,
-				variants: JSON.stringify(body.variants),
-				rules: JSON.stringify(body.rules ?? []),
-				version: sql`${schema.flags.version} + 1`,
-				updated_at: Date.now(),
-			})
-			.where(
-				and(
-					eq(schema.flags.id, c.req.param('id') ?? ''),
-					eq(schema.flags.site_id, body.site_id),
-				),
-			)
-			.returning({ id: schema.flags.id, version: schema.flags.version });
+		let updated: { id: string; version: number }[];
+		try {
+			updated = await db(c.env)
+				.update(schema.flags)
+				.set({
+					flag_key: body.flag_key,
+					name: body.name,
+					type: body.type,
+					enabled: body.enabled === false ? 0 : 1,
+					default_variant: body.default_variant,
+					variants: JSON.stringify(body.variants),
+					rules: JSON.stringify(body.rules ?? []),
+					version: sql`${schema.flags.version} + 1`,
+					updated_at: Date.now(),
+				})
+				.where(
+					and(
+						eq(schema.flags.id, c.req.param('id') ?? ''),
+						eq(schema.flags.site_id, body.site_id),
+					),
+				)
+				.returning({ id: schema.flags.id, version: schema.flags.version });
+		} catch (err) {
+			// Renaming a flag onto a key the site already uses is a client error, not a 500.
+			if (!uniqueConstraintText(err)) throw err;
+			return c.json({ error: 'flag_key_already_exists' }, 409);
+		}
 		if (updated.length === 0) {
 			return c.json({ error: 'not_found' }, 404);
 		}

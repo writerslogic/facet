@@ -158,6 +158,10 @@ export const eventRollups = sqliteTable(
 		primaryKey({
 			columns: [t.siteId, t.hostname, t.bucketStart, t.interval],
 		}),
+		// coarsen.ts and transparency.ts both filter on (interval, bucket_start) with no site_id, and
+		// bucket_start is only the PK's third column, so every hourly tier walk and log append scanned
+		// the whole of a table retention.ts deliberately never deletes from.
+		index('idx_event_rollups_interval_bucket').on(t.interval, t.bucketStart),
 	],
 );
 
@@ -174,6 +178,9 @@ export const sessions = sqliteTable(
 		// cohortRetention (db/stats.ts) filters on siteId + firstSeen and orders by firstSeen; without
 		// this, D1 can only seek the PK prefix and must scan+sort every row for the site.
 		index('idx_sessions_site_first_seen').on(t.siteId, t.firstSeen),
+		// retention.ts purges on first_seen across every site; the index above leads with siteId and
+		// could only scan. Same shape and same reason as idx_events_created.
+		index('idx_sessions_first_seen').on(t.firstSeen),
 	],
 );
 
@@ -194,7 +201,11 @@ export const eventSessions = sqliteTable(
 		durationMs: integer('duration_ms').notNull().default(0),
 		isBounce: integer('is_bounce').notNull().default(0),
 	},
-	(t) => [index('idx_sessions_site_started').on(t.siteId, t.startedAt)],
+	(t) => [
+		index('idx_sessions_site_started').on(t.siteId, t.startedAt),
+		// The same purge, on the other session table: it deletes on started_at across all sites.
+		index('idx_event_sessions_started').on(t.startedAt),
+	],
 );
 
 export const salts = sqliteTable('salts', {
@@ -435,7 +446,26 @@ export const consentRecords = sqliteTable(
 	(t) => [
 		index('idx_consent_site_visitor').on(t.site_id, t.visitor_hash, t.tier),
 		index('idx_consent_site_extuser').on(t.site_id, t.external_user_id),
+		// IMPORTANT: the purge that drops external_user_id at rest deletes on granted_at across all
+		// sites; both indexes above lead with site_id, so the privacy-critical delete could only scan.
+		index('idx_consent_granted_at').on(t.granted_at),
 	],
+);
+
+// Operator-authored context for the analytics timeline. This is site configuration rather than
+// visitor data: no identity, request metadata, or tracked event properties enter the table. The
+// occurred-at index makes the dashboard's one bounded range read a site-local index scan.
+export const timelineAnnotations = sqliteTable(
+	'timeline_annotations',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		label: text('label').notNull(),
+		category: text('category').notNull().default('note'),
+		occurred_at: integer('occurred_at').notNull(),
+		created_at: integer('created_at').notNull(),
+	},
+	(t) => [index('idx_timeline_annotations_site_time').on(t.site_id, t.occurred_at)],
 );
 
 // Alerting. All three tables are additive: a deployment with no rows behaves exactly as before, and the

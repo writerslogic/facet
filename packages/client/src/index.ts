@@ -17,6 +17,7 @@ let Config: FacetConfig | undefined;
 // use) used to silently drop the event since Config was undefined. Buffer them here and replay in
 // call order once init() sets Config, instead of losing them.
 let preInitQueue: Array<{ name?: string; props?: EventProps }> = [];
+const MAX_PREINIT_QUEUE = 64;
 
 // Must match CollectPayloadSchema's utm.source/medium/campaign v.maxLength(200) in
 // packages/shared/src/schemas.ts. The server validates the WHOLE payload and rejects it outright
@@ -90,7 +91,10 @@ export function sendEvent(_name?: string, _props?: EventProps, ack = false): Pro
 	if (isExplicitlyOptedOut()) return Promise.resolve(true);
 	if (!Config) {
 		if (ack) return Promise.resolve(false);
-		preInitQueue.push({ name: _name, props: _props });
+		// IMPORTANT: bounded. A page that calls track() but never init() (a misconfigured host, or a
+		// bundle importing track without the auto shim) would otherwise grow this for the tab's life.
+		if (preInitQueue.length < MAX_PREINIT_QUEUE)
+			preInitQueue.push({ name: _name, props: _props });
 		return Promise.resolve(true);
 	}
 	const { host, siteId } = Config;
@@ -114,8 +118,13 @@ export function sendEvent(_name?: string, _props?: EventProps, ack = false): Pro
 	const endpoint = `${host}/api/collect`;
 	const body = JSON.stringify(payload);
 	if (!ack && typeof navigator !== 'undefined' && navigator.sendBeacon) {
-		if (navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' })))
-			return Promise.resolve(true);
+		// IMPORTANT: sendBeacon THROWS rather than returning false in some browsers when the request is
+		// blocked (CSP, tracking protection) or `host` is not an HTTP(S) origin. This runs inside the
+		// patched history.pushState, so an escaping throw breaks the host page's router.
+		try {
+			if (navigator.sendBeacon(endpoint, new Blob([body], { type: 'application/json' })))
+				return Promise.resolve(true);
+		} catch {}
 	}
 	return post(endpoint, body);
 }

@@ -7,10 +7,10 @@ import { isExplicitlyOptedOut, isOptedOut, optIn, optOut, setOptOutScript } from
 
 declare global {
 	interface Window {
-		/** Set by the first boot() to run on this page. A second, independently loaded script
-		 * instance (theme + plugin both embedding the tag) doesn't share module scope with the
-		 * first, so this has to live on window, not a module-local variable, to be visible across
-		 * the two instances and stop the page from double-counting every real event. */
+		/** Set by the first fully configured boot() to run on this page. A second, independently
+		 * loaded script instance (theme + plugin both embedding the tag) doesn't share module scope
+		 * with the first, so this has to live on window, not a module-local variable, to be visible
+		 * across the two instances and stop the page from double-counting every real event. */
 		__facetBooted?: boolean;
 		/** umami-compatible global: window.umami.track(name, props). */
 		umami?: { track: typeof track };
@@ -45,14 +45,17 @@ function trackPageview(): void {
 	lastSentAt = now;
 	// YAGNI: no ack-release here. Pageviews go out via sendBeacon, which reports only that the browser
 	// queued the request, so there is no acceptance signal to release this gate on.
-	track();
+	try {
+		track();
+	} catch {
+		// MUST NOT throw into the host page: the patched history methods below run inside the
+		// caller's own stack, and sendBeacon throws a TypeError on a malformed data-host, which
+		// would break the customer's router on every navigation. Degrade instead.
+	}
 }
 
 function boot(): void {
-	if (typeof window !== 'undefined') {
-		if (window.__facetBooted) return;
-		window.__facetBooted = true;
-	}
+	if (typeof window !== 'undefined' && window.__facetBooted) return;
 	if (typeof document === 'undefined') return;
 	const el = document.currentScript as HTMLScriptElement | null;
 	setOptOutScript(el);
@@ -73,6 +76,9 @@ function boot(): void {
 	// Expose the public API regardless of opt-out state so optIn()/optOut() remain callable, and so
 	// whenReady() always resolves. track() and the experiments module self-gate on opt-out.
 	if (typeof window !== 'undefined') {
+		// IMPORTANT: claimed only after the config validates, so a tag with no data-site-id can't
+		// lock out a correctly configured second tag on the same page.
+		window.__facetBooted = true;
 		window.umami = { track };
 		window.facet = {
 			track,

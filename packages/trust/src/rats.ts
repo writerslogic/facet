@@ -261,15 +261,35 @@ async function verifyEmbeddedHardwareRoot(
 	trustAnchors: JWK[] | undefined,
 ): Promise<boolean> {
 	const ref = claims['key-attestation'];
-	if (!ref || !trustAnchors || trustAnchors.length === 0) return false;
+	if (!ref?.attestation || !trustAnchors || trustAnchors.length === 0) return false;
 	const cnfJwk = claims.cnf?.jwk as JWK | undefined;
 	if (!cnfJwk) return false;
-	const expectedThumbprint = await calculateJwkThumbprint(cnfJwk);
-	const result = await verifyKeyAttestation(ref.attestation, {
-		trustAnchors,
-		expectedThumbprint,
-	});
-	return result.hardware;
+	try {
+		// MUST NOT throw: `ref.attestation` is attacker-controlled payload, and a non-object one throws
+		// where verifyStatement destructures it. An unparseable attestation is not a hardware root.
+		const expectedThumbprint = await calculateJwkThumbprint(cnfJwk);
+		const result = await verifyKeyAttestation(ref.attestation, {
+			trustAnchors,
+			expectedThumbprint,
+		});
+		return result.hardware;
+	} catch {
+		return false;
+	}
+}
+
+/** Whether `content-ref` commits to the EAT's own process-evidence. The whole claim set is
+ * attacker-controlled at a JSON boundary (`facet verify attestation` casts a parsed file straight into
+ * this path), and RFC 8785 canonicalization THROWS on a missing, non-JSON, or over-nested value — so a
+ * verify path that must never throw treats every such payload as a mismatch. */
+async function contentRefMatches(claims: EatClaims): Promise<boolean> {
+	const evidence = claims?.['process-evidence'];
+	if (!evidence || typeof evidence !== 'object') return false;
+	try {
+		return claims['content-ref']?.digest === (await canonicalDigestHex(evidence));
+	} catch {
+		return false;
+	}
 }
 
 /** True when the `cnf` subject key IS the key that actually signed the EAT — compared by RFC 7638
@@ -314,8 +334,7 @@ export async function verifyProcessEvidence(
 		};
 
 	const claims = stmt.payload;
-	const expectedDigest = await canonicalDigestHex(claims['process-evidence']);
-	if (claims['content-ref']?.digest !== expectedDigest) {
+	if (!(await contentRefMatches(claims))) {
 		return {
 			valid: false,
 			keyBound: false,
@@ -390,8 +409,7 @@ export async function verifyPopChallenge(
 		};
 	}
 	const claims = eat.payload;
-	const expectedDigest = await canonicalDigestHex(claims['process-evidence']);
-	if (claims['content-ref']?.digest !== expectedDigest) {
+	if (!(await contentRefMatches(claims))) {
 		return {
 			valid: false,
 			eatValid: false,

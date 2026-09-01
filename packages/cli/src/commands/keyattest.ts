@@ -75,9 +75,36 @@ async function readSpki(path: string): Promise<Buffer | null> {
 	}
 }
 
+/**
+ * A certificate subject rendered as one bounded line. Node returns it as newline-separated RDNs
+ * (control bytes already \XX-escaped) with no length bound, so interpolating it raw splits a single
+ * message across lines the untrusted cert chose, and can dump kilobytes of it.
+ */
+function label(cert: X509Certificate): string {
+	const parts = cert.subject
+		.split('\n')
+		.map((rdn) =>
+			[...rdn]
+				.filter((ch) => {
+					const c = ch.codePointAt(0) ?? 0;
+					return c > 0x1f && c !== 0x7f && (c < 0x80 || c > 0x9f);
+				})
+				.join('')
+				.trim(),
+		)
+		.filter((rdn) => rdn.length > 0);
+	if (parts.length === 0) return '(unnamed)';
+	const joined = parts.join(', ');
+	return joined.length > 200 ? `${joined.slice(0, 199)}…` : joined;
+}
+
 /** True iff `cert` is valid at `at` (validFrom <= at <= validTo). */
 function validAt(cert: X509Certificate, at: Date): boolean {
-	return at >= cert.validFromDate && at <= cert.validToDate;
+	// validFromDate/validToDate are Node >= 22.10; below that they are undefined, every comparison is
+	// false, and every chain fails with a bogus "not valid at". The string forms exist since v15.6.
+	const from = cert.validFromDate ?? new Date(cert.validFrom);
+	const to = cert.validToDate ?? new Date(cert.validTo);
+	return at >= from && at <= to;
 }
 
 /**
@@ -89,7 +116,7 @@ function validAt(cert: X509Certificate, at: Date): boolean {
 function verifyChain(chain: X509Certificate[], root: X509Certificate, at: Date): string | null {
 	for (const cert of [...chain, root]) {
 		if (!validAt(cert, at))
-			return `certificate "${cert.subject}" is not valid at ${at.toISOString()}`;
+			return `certificate "${label(cert)}" is not valid at ${at.toISOString()}`;
 	}
 	// Link each cert to the next in the ordered list (leaf..last intermediate), then last → root.
 	const ordered = [...chain, root];
@@ -97,20 +124,20 @@ function verifyChain(chain: X509Certificate[], root: X509Certificate, at: Date):
 		const cert = ordered[i] as X509Certificate;
 		const issuer = ordered[i + 1] as X509Certificate;
 		if (!cert.checkIssued(issuer))
-			return `"${cert.subject}" was not issued by "${issuer.subject}"`;
+			return `"${label(cert)}" was not issued by "${label(issuer)}"`;
 		if (!cert.verify(issuer.publicKey))
-			return `signature on "${cert.subject}" does not verify against "${issuer.subject}"`;
+			return `signature on "${label(cert)}" does not verify against "${label(issuer)}"`;
 		// checkIssued + verify only prove issuer signed cert, not that issuer was ever AUTHORIZED
 		// to sign certs (RFC 5280 4.2.1.9/4.2.1.3) — without this, a non-CA leaf under a
 		// legitimate root could forge a fraudulent "hardware-attested" key.
 		if (issuer.ca !== true)
-			return `"${issuer.subject}" is not a CA (basicConstraints CA:FALSE) and cannot issue certificates`;
+			return `"${label(issuer)}" is not a CA (basicConstraints CA:FALSE) and cannot issue certificates`;
 		if (issuer.keyUsage !== undefined && !issuer.keyUsage.includes('keyCertSign'))
-			return `"${issuer.subject}" keyUsage does not permit keyCertSign`;
+			return `"${label(issuer)}" keyUsage does not permit keyCertSign`;
 	}
 	// The configured root must be self-signed (a real trust anchor), else the chain is not anchored.
 	if (!root.checkIssued(root) || !root.verify(root.publicKey)) {
-		return `configured root "${root.subject}" is not a self-signed trust anchor`;
+		return `configured root "${label(root)}" is not a self-signed trust anchor`;
 	}
 	return null;
 }
@@ -173,7 +200,7 @@ async function runVerify(args: string[]): Promise<number> {
 	}
 
 	ok(
-		`hardware key-attestation verified (leaf="${leaf.subject}", anchored to root="${root.subject}")`,
+		`hardware key-attestation verified (leaf="${label(leaf)}", anchored to root="${label(root)}")`,
 	);
 	process.stdout.write(
 		`  ${pc.dim('leaf SPKI == deployment signing key; chain reaches the configured trust anchor.')}\n`,

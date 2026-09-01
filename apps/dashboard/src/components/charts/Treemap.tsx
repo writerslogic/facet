@@ -16,7 +16,7 @@ import { useHoverTarget } from '../../lib/chartInteraction.js';
 import { formatNumber } from '../../lib/format.js';
 import { useSize } from '../../lib/useSize.js';
 import { ChartTooltip, TooltipRow } from './ChartTooltip.js';
-import { HUES, lerp, sliceFill, sliceStroke, useLayoutTransition } from './hierarchy.js';
+import { HUES, lerp, sliceFill, sliceStroke, trim, useLayoutTransition } from './hierarchy.js';
 
 export interface Rect {
 	x: number;
@@ -173,14 +173,6 @@ export function tweenTiles(from: TreemapTile[], to: TreemapTile[], t: number): T
 	return out;
 }
 
-// A treemap label is left-anchored, so an over-optimistic width estimate bleeds it over the
-// neighbouring rectangle rather than just crowding its own. Estimate wide, not tight.
-const trim = (label: string, px: number): string | null => {
-	const room = Math.floor((px - 10) / 6);
-	if (room < 3) return null;
-	return label.length <= room ? label : `${label.slice(0, room - 1)}…`;
-};
-
 export function Treemap({
 	focus,
 	levels,
@@ -246,7 +238,7 @@ export function Treemap({
 					const on = live?.datum.key === tile.key || active === tile.key;
 					const openable = tile.level === 1 && tile.item.drillable;
 					const nested = tile.item.children.length > 0 && tile.h >= NEST_MIN_H;
-					const label = trim(tile.item.label, tile.w);
+					const label = trim(tile.item.label, tile.w - 10, 6);
 					const focused = active === tile.key;
 					return (
 						<g

@@ -80,9 +80,11 @@ export async function verifySignedExport(env: SignedExport): Promise<SignedExpor
 		};
 	}
 	const { proof, payload } = env;
-	const kid = proof?.kid ?? '';
-	const alg = proof?.alg ?? 'EdDSA';
-	const jwksUrl = proof?.jwksUrl;
+	// REQUIRED: the envelope is untrusted JSON cast to `SignedExport`, so every field echoed into the
+	// verdict is narrowed to its declared type here; the cast is not a guarantee.
+	const kid = typeof proof?.kid === 'string' ? proof.kid : '';
+	const alg: SigningAlg = proof?.alg === 'ES256' ? 'ES256' : 'EdDSA';
+	const jwksUrl = typeof proof?.jwksUrl === 'string' ? proof.jwksUrl : undefined;
 	const fail = (reason: string): SignedExportVerification => ({
 		valid: false,
 		kid,

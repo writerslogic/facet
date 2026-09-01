@@ -139,27 +139,44 @@ export async function exportIssuerKey(key: IssuerKey): Promise<Record<string, un
 
 /** Reload an issuer key previously produced by {@link exportIssuerKey}. */
 export async function importIssuerKey(doc: Record<string, unknown>): Promise<IssuerKey> {
-	const suite = doc.suite as SdSuite;
-	const secret = doc.secretKey as { id: string; controller: string };
+	const suite = doc.suite;
+	// IMPORTANT: a key document is untrusted input; an unchecked `suite` falls through to ecdsa, so a
+	// tampered or mislabelled file silently signs or verifies with the wrong algorithm's material.
+	if (suite !== 'ecdsa-sd-2023' && suite !== 'bbs-2023')
+		throw new Error('key document `suite` must be ecdsa-sd-2023 or bbs-2023');
+	const secret = doc.secretKey;
+	if (typeof secret !== 'object' || secret === null || Array.isArray(secret))
+		throw new Error('key document `secretKey` must be a multikey object');
+	const { id, controller } = secret as { id?: unknown; controller?: unknown };
+	if (typeof id !== 'string' || id === '' || typeof controller !== 'string' || controller === '')
+		throw new Error('key document `secretKey` needs non-empty string `id` and `controller`');
+	const material = secret as Record<string, unknown>;
 	const keyPair =
 		suite === 'bbs-2023'
-			? await Bls12381Multikey.from(secret)
-			: await EcdsaMultikey.from(secret);
+			? await Bls12381Multikey.from(material)
+			: await EcdsaMultikey.from(material);
 	const publicKeyDoc = await keyPair.export({
 		publicKey: true,
 		includeContext: true,
 	});
 	return {
 		suite,
-		controller: secret.controller,
-		verificationMethod: secret.id,
+		controller,
+		verificationMethod: id,
 		keyPair,
 		publicKeyDoc,
 	};
 }
 
+// IMPORTANT: `suite` picks the algorithm while `key` carries the material, so a mismatch would sign or
+// verify P-256 data with BLS material (or the reverse). Refuse it; never fall back to one of the two.
+function suiteModule(suite: SdSuite, key: IssuerKey) {
+	if (key.suite !== suite) throw new Error(`issuer key is for suite ${key.suite}, not ${suite}`);
+	return suite === 'bbs-2023' ? bbs2023 : ecdsaSd2023;
+}
+
 function signSuiteFor(suite: SdSuite, key: IssuerKey, mandatoryPointers: string[]) {
-	const factory = suite === 'bbs-2023' ? bbs2023 : ecdsaSd2023;
+	const factory = suiteModule(suite, key);
 	return new DataIntegrityProof({
 		signer: key.keyPair.signer(),
 		cryptosuite: factory.createSignCryptosuite({ mandatoryPointers }),
@@ -200,7 +217,7 @@ export async function deriveSelective(
 	key: IssuerKey,
 	selectivePointers: string[],
 ): Promise<Record<string, unknown>> {
-	const factory = suite === 'bbs-2023' ? bbs2023 : ecdsaSd2023;
+	const factory = suiteModule(suite, key);
 	const documentLoader = loaderWithController(
 		baseLoader(),
 		key.controller,
@@ -232,7 +249,7 @@ export async function verifySelective(
 	presentation: Record<string, unknown>,
 	key: IssuerKey,
 ): Promise<SdVerification> {
-	const factory = suite === 'bbs-2023' ? bbs2023 : ecdsaSd2023;
+	const factory = suiteModule(suite, key);
 	const documentLoader = loaderWithController(
 		baseLoader(),
 		key.controller,

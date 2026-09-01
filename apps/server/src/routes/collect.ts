@@ -11,7 +11,8 @@ import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import { isGpcOptOut } from '../lib/gpc.js';
 import { validationErrorHook } from '../lib/http.js';
-import { deriveEvent, ingestEvent } from '../lib/ingest.js';
+import { deriveEvent, ingestEvent, persistDerived } from '../lib/ingest.js';
+import { createLogger } from '../lib/log.js';
 import { enforceRateLimit, rateLimit } from '../lib/ratelimit.js';
 import {
 	clientIp,
@@ -24,6 +25,8 @@ import {
 } from '../lib/request-meta.js';
 
 export const collectRoute = new Hono<AppEnv>();
+
+const log = createLogger({ route: 'collect' });
 
 function normalizedHostname(value: string): string {
 	return value.trim().toLowerCase().replace(/\.$/, '');
@@ -109,7 +112,18 @@ collectRoute.post(
 		// Falls back to a synchronous write only when no queue is bound (tests / minimal deployments).
 		if (c.env.INGEST_QUEUE) {
 			const derived = await deriveEvent(c.env, input);
-			if (derived) await c.env.INGEST_QUEUE.send(derived);
+			if (derived) {
+				try {
+					await c.env.INGEST_QUEUE.send(derived);
+				} catch (err) {
+					// IMPORTANT: a queue outage must not drop the event. Persist the ALREADY-derived row
+					// rather than re-running `ingestEvent` — a second derivation would hit the in-isolate
+					// dedup key this one just recorded and return null, silently discarding the event, and
+					// would mirror a duplicate data point into Analytics Engine.
+					log.error('ingest_enqueue_failed', err, { site_id: body.site_id });
+					await persistDerived(c.env, [derived]);
+				}
+			}
 		} else {
 			await ingestEvent(c.env, input);
 		}

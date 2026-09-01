@@ -24,6 +24,7 @@ const ADMIN_PATHS = [
 	'/api/experiments',
 	'/api/flags',
 	'/api/alerts',
+	'/api/annotations',
 	// Only `/api/users/:id/revoke-sessions` exists under this prefix and it is behind `requireAdmin`.
 	// Listed because the allowlist is what stops the token reaching a route that never asked for it —
 	// a genuine admin route missing from here fails closed with `non_admin_path`, which is the right

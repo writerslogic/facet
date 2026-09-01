@@ -197,7 +197,7 @@ export function Realtime({
 }): ReactElement {
 	const [paused, setPaused] = useState(false);
 	const visible = useVisible();
-	const { data, error, isLoading, isFetching, dataUpdatedAt } = useRealtime(
+	const { data, error, isLoading, isFetching, dataUpdatedAt, refetch } = useRealtime(
 		apiKey,
 		siteId,
 		paused,
@@ -261,6 +261,8 @@ export function Realtime({
 			<ErrorState
 				message="Could not load realtime data"
 				detail={error instanceof Error ? error.message : null}
+				onRetry={() => void refetch()}
+				retrying={isFetching}
 			/>
 		);
 	}
@@ -285,10 +287,12 @@ export function Realtime({
 	const pageviewChange = since ? data.pageviews - (history.pageviews[0] ?? 0) : undefined;
 
 	const lists: { title: string; rows: CountRow[] }[] = [
-		{ title: 'Pages', rows: breakdown.data?.top_paths ?? [] },
-		{ title: 'Referrers', rows: breakdown.data?.top_referrers ?? [] },
-		{ title: 'Countries', rows: breakdown.data?.top_countries ?? [] },
+		{ title: 'Active pages', rows: breakdown.data?.top_paths ?? [] },
+		{ title: 'Recent events', rows: breakdown.data?.top_events ?? [] },
+		{ title: 'Sources', rows: breakdown.data?.top_referrers ?? [] },
+		{ title: 'Geography', rows: breakdown.data?.top_countries ?? [] },
 		{ title: 'Devices', rows: breakdown.data?.top_devices ?? [] },
+		{ title: 'Channels', rows: breakdown.data?.channels ?? [] },
 	];
 	const hasBreakdown = lists.some((l) => l.rows.length > 0);
 
@@ -420,7 +424,7 @@ export function Realtime({
 							</button>
 						</div>
 					) : hasBreakdown ? (
-						<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+						<div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
 							{lists.map((list) => (
 								<TopList
 									key={list.title}
@@ -449,8 +453,9 @@ export function Realtime({
 			<p data-chrome className="text-[color:var(--muted)] text-xs">
 				Active visitors is a privacy-safe distinct-hash proxy, deduped within the {minutes}
 				-minute window — not a precise count. The trend is measured against this session's
-				own polls, not a previous period. Auto-refreshes every 15s and pauses while this tab
-				is hidden.
+				own polls, not a previous period. Activity modules are bounded aggregates from the
+				same trailing window, not a visitor-level event feed. Auto-refreshes every 15s,
+				retries transient failures, and pauses while this tab is hidden.
 			</p>
 		</div>
 	);

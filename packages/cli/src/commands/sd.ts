@@ -36,13 +36,32 @@ function ok(msg: string): void {
 	process.stdout.write(`${pc.green('✓')} ${msg}\n`);
 }
 
-async function readJson(path: string): Promise<unknown | null> {
+async function readJson(path: string): Promise<Record<string, unknown> | null> {
+	let parsed: unknown;
 	try {
-		return JSON.parse(await readFile(path, 'utf8'));
+		parsed = JSON.parse(await readFile(path, 'utf8'));
 	} catch (err) {
 		printError(`could not read ${path}: ${err instanceof Error ? err.message : String(err)}`);
 		return null;
 	}
+	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+		printError(`${path} is not a JSON object`);
+		return null;
+	}
+	return parsed as Record<string, unknown>;
+}
+
+async function readKeyDoc(path: string, suite: SdSuite): Promise<Record<string, unknown> | null> {
+	const doc = await readJson(path);
+	if (doc === null) return null;
+	// IMPORTANT: importIssuerKey builds the key pair from the file's own `suite` and treats every
+	// non-`bbs-2023` value as ecdsa, so an unpinned mismatch signs or verifies with the wrong material.
+	if (doc.suite !== suite) {
+		const found = typeof doc.suite === 'string' ? doc.suite : 'unknown';
+		printError(`key ${path} is for suite ${found}, not ${suite}`);
+		return null;
+	}
+	return doc;
 }
 
 function requireSuite(flags: Record<string, string | undefined>): SdSuite | null {
@@ -110,14 +129,15 @@ export async function runSd(args: string[]): Promise<number> {
 				return 1;
 			}
 			const cred = await readJson(flags.credential);
-			const keyDoc = await readJson(flags.key);
+			const keyDoc = await readKeyDoc(flags.key, suite);
 			if (cred === null || keyDoc === null) return 1;
-			const key = await importIssuerKey(keyDoc as Record<string, unknown>);
+			const key = await importIssuerKey(keyDoc);
+			const mandatory = pointers(flags.mandatory);
 			const signed = await issueSelective(
 				suite,
-				cred as Record<string, unknown>,
+				cred,
 				key,
-				pointers(flags.mandatory).length ? pointers(flags.mandatory) : ['/issuer'],
+				mandatory.length ? mandatory : ['/issuer'],
 			);
 			await writeFile(flags.out, JSON.stringify(signed, null, 2));
 			ok(`issued ${suite} credential → ${flags.out}`);
@@ -133,15 +153,10 @@ export async function runSd(args: string[]): Promise<number> {
 				return 1;
 			}
 			const signed = await readJson(flags.credential);
-			const keyDoc = await readJson(flags.key);
+			const keyDoc = await readKeyDoc(flags.key, suite);
 			if (signed === null || keyDoc === null) return 1;
-			const key = await importIssuerKey(keyDoc as Record<string, unknown>);
-			const derived = await deriveSelective(
-				suite,
-				signed as Record<string, unknown>,
-				key,
-				pointers(flags.reveal),
-			);
+			const key = await importIssuerKey(keyDoc);
+			const derived = await deriveSelective(suite, signed, key, pointers(flags.reveal));
 			await writeFile(flags.out, JSON.stringify(derived, null, 2));
 			ok(`derived ${suite} presentation → ${flags.out}`);
 			return 0;
@@ -153,10 +168,10 @@ export async function runSd(args: string[]): Promise<number> {
 				return 1;
 			}
 			const pres = await readJson(flags.presentation);
-			const keyDoc = await readJson(flags.key);
+			const keyDoc = await readKeyDoc(flags.key, suite);
 			if (pres === null || keyDoc === null) return 1;
-			const key = await importIssuerKey(keyDoc as Record<string, unknown>);
-			const result = await verifySelective(suite, pres as Record<string, unknown>, key);
+			const key = await importIssuerKey(keyDoc);
+			const result = await verifySelective(suite, pres, key);
 			if (result.verified) {
 				ok(`valid ${suite} selective-disclosure proof`);
 				return 0;

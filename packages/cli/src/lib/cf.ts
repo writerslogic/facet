@@ -48,6 +48,10 @@ function fail(
 	return { ok: false, error: { code, message, remedy, resume } };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 /** Everything wrangler printed, trimmed — used as the fallback detail for unclassified failures. */
 function detail(result: RunResult): string {
 	const text = `${result.stderr}\n${result.stdout}`.trim();
@@ -111,20 +115,32 @@ export async function whoami(w: Wrangler): Promise<CfResult<Account[]>> {
 			'Run `wrangler whoami` to see the raw error, then `wrangler login` if you are signed out.',
 		);
 	}
+	// IMPORTANT: a shape wrangler never promised must classify, not throw — every caller of this
+	// module expects a CfError, not a stack trace out of the installer.
+	const unparsable = fail(
+		'whoami_unparsable',
+		'wrangler whoami returned output this installer could not parse.',
+		'Run `wrangler whoami --json` and check the output; a wrangler upgrade usually fixes it.',
+	);
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(result.stdout);
 	} catch {
-		return fail(
-			'whoami_unparsable',
-			'wrangler whoami returned output this installer could not parse.',
-			'Run `wrangler whoami --json` and check the output; a wrangler upgrade usually fixes it.',
-		);
+		return unparsable;
 	}
-	const accounts = (parsed as { accounts?: { name?: string; id?: string }[] }).accounts ?? [];
-	const value = accounts
-		.filter((a): a is { name: string; id: string } => Boolean(a.id))
-		.map((a) => ({ id: a.id, name: a.name ?? a.id }));
+	if (!isRecord(parsed)) return unparsable;
+	const accounts = parsed.accounts ?? [];
+	if (!Array.isArray(accounts)) return unparsable;
+	const value: Account[] = [];
+	for (const entry of accounts) {
+		if (!isRecord(entry)) continue;
+		const id = entry.id;
+		if (typeof id !== 'string' || id === '') continue;
+		value.push({
+			id,
+			name: typeof entry.name === 'string' && entry.name !== '' ? entry.name : id,
+		});
+	}
 	if (value.length === 0) {
 		return fail(
 			'no_account',
@@ -181,12 +197,16 @@ function parseD1(json: string): D1Database[] {
 	}
 }
 
+function isUnauthorized(text: string): boolean {
+	return /authentication|unauthorized|10000/i.test(text);
+}
+
 /** Look up a D1 database by name. `null` means "does not exist", which is not an error. */
 export async function d1Find(w: Wrangler, name: string): Promise<CfResult<D1Database | null>> {
 	const result = await exec(w, ['d1', 'list', '--json']);
 	if (result.code !== 0) {
 		const text = detail(result);
-		if (/authentication|unauthorized|10000/i.test(text)) {
+		if (isUnauthorized(text)) {
 			return fail(
 				'd1_permission',
 				'Cloudflare rejected the D1 request as unauthorized.',
@@ -205,7 +225,19 @@ export async function d1Find(w: Wrangler, name: string): Promise<CfResult<D1Data
 /** Fetch a database by id; used to verify that an id already in wrangler.jsonc still exists. */
 export async function d1InfoById(w: Wrangler, id: string): Promise<CfResult<D1Database | null>> {
 	const result = await exec(w, ['d1', 'info', id, '--json']);
-	if (result.code !== 0) return { ok: true, value: null };
+	if (result.code !== 0) {
+		// IMPORTANT: a refused read must not read as "the database is gone" — the caller answers that
+		// by offering to create a fresh one and overwrite the id, which would orphan a live database.
+		const text = detail(result);
+		if (isUnauthorized(text)) {
+			return fail(
+				'd1_permission',
+				`Cloudflare rejected the D1 lookup as unauthorized: ${text}`,
+				'Your API token needs the "D1 Read" permission (or re-run `wrangler login`, which grants it). The configured database id was left alone.',
+			);
+		}
+		return { ok: true, value: null };
+	}
 	return { ok: true, value: parseD1(result.stdout)[0] ?? null };
 }
 
@@ -224,7 +256,7 @@ export async function d1Create(w: Wrangler, name: string): Promise<CfResult<D1Da
 			const found = await d1Find(w, name);
 			if (found.ok && found.value) return { ok: true, value: found.value };
 		}
-		if (/authentication|unauthorized|10000/i.test(text)) {
+		if (isUnauthorized(text)) {
 			return fail(
 				'd1_permission',
 				`Cloudflare rejected the create as unauthorized: ${text}`,
@@ -344,7 +376,7 @@ export async function deploy(w: Wrangler): Promise<CfResult<DeployResult>> {
 				'Re-run `facet init` and answer "no" when it offers to keep Cloudflare Queues — Facet falls back to synchronous ingest — or subscribe to Workers Paid.',
 			);
 		}
-		if (/authentication|unauthorized|10000/i.test(text)) {
+		if (isUnauthorized(text)) {
 			return fail(
 				'deploy_unauthorized',
 				`Cloudflare rejected the deploy as unauthorized: ${text}`,

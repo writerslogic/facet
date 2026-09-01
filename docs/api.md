@@ -13,7 +13,7 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
 - `POST /api/flags/eval` — **public**, rate-limited: server-side flag evaluation (GPC-aware).
 - `POST`/`DELETE /api/consent` — **API key**, rate-limited: record/revoke a visitor's consent to raise
   their identity tier (GPC-aware; `site_id` is taken from the key, never the body).
-- `GET /api/stats/anomalies`, `GET /api/stats/experiments`, `GET /api/stats/experiment`,
+- `GET /api/annotations`, `GET /api/stats/anomalies`, `GET /api/stats/experiments`, `GET /api/stats/experiment`,
   `GET /api/stats/retention`, `POST /api/stats/query` — **API key**.
 - `GET /api/stats`, `GET /api/stats/cube`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
   `GET /api/stats/interactions`, `GET /api/stats/realtime`, `GET /api/stats/export`,
@@ -25,7 +25,8 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   `POST`/`GET`/`DELETE /api/funnels`), identity config (`PATCH /api/sites/:id/identity`),
   flag CRUD (`POST`/`GET /api/flags`, `PATCH`/`DELETE /api/flags/:id`), alert destinations
   (`POST`/`GET /api/alerts`, `DELETE /api/alerts/:id`) and metric alert rules
-  (`POST`/`GET /api/alerts/rules`, `DELETE /api/alerts/rules/:id`), historical import (`POST /api/import`),
+  (`POST`/`GET /api/alerts/rules`, `DELETE /api/alerts/rules/:id`, `GET /api/alerts/deliveries`), timeline annotation writes
+  (`POST /api/annotations`, `DELETE /api/annotations/:id`), historical import (`POST /api/import`),
   and `POST /api/auth/admin-link` —
   **admin token**: `Authorization: Bearer <ADMIN_TOKEN>`.
 - `POST /api/auth/request`, `POST /api/auth/verify` — **public**, rate-limited (dashboard sign-in);
@@ -1084,6 +1085,23 @@ default with `participating: false`, `reason: "gpc"` — no bucketing occurs.
 
 ---
 
+## `GET /api/annotations?site_id&start&end` (API key)
+
+Lists operator-authored context whose `occurred_at` instant falls inside the half-open analytics
+window `[start, end)`, ordered oldest first. The response is
+`{ "annotations": [{ "id", "site_id", "label", "category", "occurred_at", "created_at" }] }`;
+`category` is `note`, `release`, `campaign`, or `incident`. The API key must have read scope and own
+`site_id`. The same `bad_range` / `range_too_large` rules as stats reads apply.
+
+### `POST /api/annotations` (admin) · `DELETE /api/annotations/:id?site_id=<uuid>` (admin)
+
+Create with `{ site_id, label, category?, occurred_at }`. Labels are trimmed and limited to 160
+characters; category defaults to `note`. Writes require `ADMIN_TOKEN`, while reads use the narrower
+site credential so a dashboard key can display context without gaining configuration authority.
+Delete is scoped by both annotation id and site id and returns `404` when they do not match.
+
+---
+
 ## `GET /api/stats/anomalies?site_id&start&end` (API key)
 
 Automated anomaly detection with a plain-language root-cause "autopsy". Scores the most recent hour
@@ -1459,6 +1477,17 @@ metrics are not accepted because they materialize in a separate scheduled job.
 ### `GET /api/alerts/rules?site_id=<uuid>`
 
 Lists a site's metric rules, newest first, as `{ "metric_alert_rules": [...] }`.
+
+### `GET /api/alerts/deliveries?site_id=<uuid>&limit=<1..200>`
+
+Lists a site's recent alert delivery attempts, newest first, as `{ "alert_deliveries": [...] }`.
+This is the operator-visible outcome of every alert the cron tried to send: without it a destination
+that has been rejecting every POST for a week produces no signal anywhere.
+
+`limit` defaults to 50 and is capped at 200. An unparseable or out-of-range value falls back to the
+default rather than returning `400`, matching the sibling alert reads, which carry no query-parameter
+error taxonomy. Delivery rows outlive the rule that produced them, so they remain readable as the
+audit trail after a rule is deleted.
 
 ### `DELETE /api/alerts/rules/:id?site_id=<uuid>`
 

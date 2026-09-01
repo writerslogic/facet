@@ -15,22 +15,6 @@ export async function goalConversions(
 ): Promise<{ conversions: number; sessions: number; rate: number }> {
 	const matchColumn = goal.type === 'event' ? schema.events.name : schema.events.path;
 
-	const sessionsRow = await db(env)
-		.select({ count: sql<number>`COUNT(*)` })
-		.from(schema.eventSessions)
-		.where(
-			and(
-				eq(schema.eventSessions.siteId, siteId),
-				gte(schema.eventSessions.startedAt, f.start),
-				lt(schema.eventSessions.startedAt, f.end),
-			),
-		)
-		.get();
-	const sessions = Number(sessionsRow?.count ?? 0);
-	if (sessions === 0) {
-		return { conversions: 0, sessions: 0, rate: 0 };
-	}
-
 	const converted = sql<number>`EXISTS (
 		SELECT 1 FROM ${schema.events}
 		WHERE ${schema.events.siteId} = ${schema.eventSessions.siteId}
@@ -39,9 +23,12 @@ export async function goalConversions(
 			AND ${schema.events.createdAt} <= ${schema.eventSessions.endedAt}
 			AND ${matchColumn} = ${goal.match_value}
 	)`;
-	const conversionsRow = await db(env)
+	// PERF: one D1 round-trip for both aggregates instead of two identical-WHERE queries, which
+	// also stops a concurrent session insert landing between them and reporting rate > 1.
+	const row = await db(env)
 		.select({
-			count: sql<number>`SUM(CASE WHEN ${converted} THEN 1 ELSE 0 END)`,
+			sessions: sql<number>`COUNT(*)`,
+			conversions: sql<number>`SUM(CASE WHEN ${converted} THEN 1 ELSE 0 END)`,
 		})
 		.from(schema.eventSessions)
 		.where(
@@ -52,7 +39,8 @@ export async function goalConversions(
 			),
 		)
 		.get();
-	const conversions = Number(conversionsRow?.count ?? 0);
+	const sessions = Number(row?.sessions ?? 0);
+	const conversions = Number(row?.conversions ?? 0);
 
-	return { conversions, sessions, rate: conversions / sessions };
+	return { conversions, sessions, rate: sessions === 0 ? 0 : conversions / sessions };
 }

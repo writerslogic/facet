@@ -18,19 +18,26 @@ import {
 
 /** COSE algorithm identifiers (IANA COSE Algorithms registry): EdDSA = -8, ES256 = -7. */
 const COSE_ALG: Record<SigningAlg, number> = { EdDSA: -8, ES256: -7 };
-const ALG_FOR_COSE: Record<number, SigningAlg> = {
-	[-8]: 'EdDSA',
-	[-7]: 'ES256',
-};
+const ALG_FOR_COSE = new Map<number, SigningAlg>([
+	[-8, 'EdDSA'],
+	[-7, 'ES256'],
+]);
 
-/** COSE header label 1 = alg, label 4 = kid. */
+/** COSE header label 1 = alg, label 2 = crit, label 4 = kid. */
 const HDR_ALG = 1;
+const HDR_CRIT = 2;
 const HDR_KID = 4;
+
+/** Protected-header labels this verifier processes, for the RFC 9052 3.1 `crit` check. */
+const UNDERSTOOD_LABELS: ReadonlySet<unknown> = new Set([HDR_ALG, HDR_CRIT, HDR_KID]);
 
 /** CBOR tag 18 identifies a COSE_Sign1 structure. */
 const COSE_SIGN1_TAG = 18;
 
 const enc = new TextEncoder();
+// IMPORTANT: fatal + ignoreBOM, so distinct kid byte strings cannot collapse onto one label through
+// U+FFFD substitution or a silently stripped BOM.
+const dec = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 
 /** Build the RFC 9052 Sig_structure bytes that are actually signed/verified. */
 function sigStructure(protectedBytes: Uint8Array, payload: Uint8Array): Uint8Array {
@@ -92,7 +99,10 @@ function decodeCoseSign1(
 	) {
 		throw new Error('malformed COSE_Sign1 (protected/payload/signature must be bstr)');
 	}
-	return [protectedBytes, unprotected as Map<unknown, unknown>, payload, signature];
+	if (!(unprotected instanceof Map)) {
+		throw new Error('malformed COSE_Sign1 (unprotected header must be a map)');
+	}
+	return [protectedBytes, unprotected, payload, signature];
 }
 
 /** Parse the protected header bstr into its alg + kid. */
@@ -102,10 +112,32 @@ function parseProtected(protectedBytes: Uint8Array): {
 } {
 	const map = cborDecode(protectedBytes, DECODE_OPTS) as Map<unknown, unknown>;
 	if (!(map instanceof Map)) throw new Error('COSE protected header is not a map');
-	const alg = ALG_FOR_COSE[map.get(HDR_ALG) as number];
-	if (!alg) throw new Error(`unsupported COSE alg ${String(map.get(HDR_ALG))}`);
+	const rawAlg = map.get(HDR_ALG);
+	const alg = typeof rawAlg === 'number' ? ALG_FOR_COSE.get(rawAlg) : undefined;
+	if (!alg) throw new Error(`unsupported COSE alg ${String(rawAlg)}`);
+	// REQUIRED: RFC 9052 3.1 — a message whose `crit` list names a label we do not process must be
+	// rejected, else a signer's critical constraint is silently ignored.
+	if (map.has(HDR_CRIT)) {
+		const crit = map.get(HDR_CRIT);
+		if (!Array.isArray(crit) || crit.length === 0) {
+			throw new Error('COSE crit must be a non-empty array');
+		}
+		for (const label of crit) {
+			if (!UNDERSTOOD_LABELS.has(label)) {
+				throw new Error(`unsupported critical COSE header ${String(label)}`);
+			}
+		}
+	}
 	const kidRaw = map.get(HDR_KID);
-	const kid = kidRaw instanceof Uint8Array ? new TextDecoder().decode(kidRaw) : undefined;
+	let kid: string | undefined;
+	if (kidRaw !== undefined) {
+		if (!(kidRaw instanceof Uint8Array)) throw new Error('COSE kid must be a bstr');
+		try {
+			kid = dec.decode(kidRaw);
+		} catch {
+			throw new Error('COSE kid is not valid UTF-8');
+		}
+	}
 	return { alg, kid };
 }
 

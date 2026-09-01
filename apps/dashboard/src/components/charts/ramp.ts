@@ -15,6 +15,27 @@
 
 export const RAMP_ALPHA = [0.16, 0.28, 0.4, 0.51, 0.62] as const;
 
+export type Rgb = [number, number, number];
+
+/** Parse `#rgb`/`#rrggbb` to channels. Theme tokens resolve to hex, and canvas fills need concrete
+ * channels rather than a `var()`. */
+export function hexToRgb(hex: string): Rgb {
+	const h = hex.replace('#', '').trim();
+	const full =
+		h.length === 3
+			? h
+					.split('')
+					.map((c) => c + c)
+					.join('')
+			: h;
+	const n = Number.parseInt(full || '818cf8', 16);
+	return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+
+export function hexA(hex: string, a: number): string {
+	return `rgba(${hexToRgb(hex).join(',')},${a})`;
+}
+
 /** Fill for a band index from `bandOf` (`-1` = no activity). */
 export function bandFill(band: number): string {
 	if (band < 0) return 'transparent';

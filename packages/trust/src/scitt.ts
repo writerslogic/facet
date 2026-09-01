@@ -88,8 +88,10 @@ export interface ScittReceiptVerification {
 
 /**
  * Verify a SCITT Receipt: the Transparency Service's signature over the receipt must verify, and the
- * embedded MMR inclusion proof must fold to the receipt's committed root. The caller separately
- * checks that `statementHash` matches the Signed Statement they hold.
+ * embedded MMR inclusion proof must fold to the receipt's committed root. Verification is offline
+ * against the proof's EMBEDDED key, so a valid verdict means only that the receipt is internally
+ * consistent; anyone can self-sign one. The caller MUST additionally pin the log's signing key (or
+ * `logId`) and check that `statementHash` matches the Signed Statement they hold.
  */
 export async function verifyScittReceipt(
 	receipt: SignedStatement<ScittReceiptPayload>,
@@ -103,6 +105,7 @@ export async function verifyScittReceipt(
 			entryId: p?.entryId,
 			reason: sig.reason,
 		};
+	if (!p || typeof p !== 'object') return { valid: false, reason: 'malformed receipt payload' };
 	const included = await verifyInclusionReceipt(p.inclusion, p.root);
 	if (!included) {
 		return {
@@ -110,6 +113,16 @@ export async function verifyScittReceipt(
 			logId: p.logId,
 			entryId: p.entryId,
 			reason: 'inclusion proof failed',
+		};
+	}
+	// IMPORTANT: only `inclusion.size` is bagged into the root the proof folds to, so the separately
+	// reported `treeSize` is unproven until it is bound to it.
+	if (p.treeSize !== p.inclusion.size) {
+		return {
+			valid: false,
+			logId: p.logId,
+			entryId: p.entryId,
+			reason: 'treeSize does not match the inclusion proof',
 		};
 	}
 	// Bind the proven leaf to the reported statementHash: the leaf is H(statementHash bytes), so an
@@ -126,7 +139,7 @@ export async function verifyScittReceipt(
 			reason: 'malformed statementHash',
 		};
 	}
-	if (p.inclusion.leaf !== expectedLeaf) {
+	if (p.inclusion.leaf.toLowerCase() !== expectedLeaf) {
 		return {
 			valid: false,
 			logId: p.logId,

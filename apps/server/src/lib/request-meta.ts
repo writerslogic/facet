@@ -9,7 +9,8 @@ export function clientIp(req: Request): string {
 	return req.headers.get('CF-Connecting-IP') ?? '';
 }
 
-/** ISO country code (uppercased), or `null` for unknown/anonymized (`XX`) and Tor (`T1`). */
+/** ISO-3166 alpha-2 country code (uppercased), or `null` for anything else — unknown/anonymized
+ * (`XX`) and Tor (`T1`) included, as well as any malformed header value. */
 export function country(req: Request): string | null {
 	const cf = req.cf?.country;
 	const raw = (typeof cf === 'string' ? cf : undefined) ?? req.headers.get('CF-IPCountry');
@@ -17,7 +18,7 @@ export function country(req: Request): string | null {
 		return null;
 	}
 	const code = raw.toUpperCase();
-	if (code === 'XX' || code === 'T1') {
+	if (!/^[A-Z]{2}$/.test(code) || code === 'XX') {
 		return null;
 	}
 	return code;
@@ -82,15 +83,23 @@ export function connection(req: Request): 'fast' | 'moderate' | 'slow' | null {
 
 // ── Browser / OS / form-factor (User-Agent Client Hints first, UA string only as a fallback) ─────────
 
+// IMPORTANT: `Sec-CH-UA` is client-controlled and a header may be 16KB; an unrecognised brand is stored
+// verbatim as the `browser` dimension, so it is bounded in shape and count here, at the boundary.
+const MAX_BRAND_ENTRIES = 16;
+const BRAND_PATTERN = /^[A-Za-z][A-Za-z0-9 .+_-]{0,31}$/;
+
 /** The significant browser brand from a `Sec-CH-UA` header, ignoring the intentional "GREASE" brand and
  * bare "Chromium" when a more specific brand is present. Returns null when no usable brand is found. */
 export function brandFromSecChUa(secChUa: string | null): string | null {
 	if (!secChUa) return null;
 	const brands: string[] = [];
+	let seen = 0;
 	for (const m of secChUa.matchAll(/"([^"]+)"\s*;\s*v="[^"]*"/g)) {
+		if (++seen > MAX_BRAND_ENTRIES) break;
 		const brand = m[1]?.trim();
 		if (!brand) continue;
 		if (/not.*brand/i.test(brand)) continue; // GREASE / "Not;A=Brand"
+		if (!BRAND_PATTERN.test(brand)) continue;
 		brands.push(brand);
 	}
 	// Prefer a specific brand over generic Chromium.
@@ -118,14 +127,23 @@ export function browserFamily(secChUa: string | null, userAgent: string): string
 	return 'Other';
 }
 
+// IMPORTANT: `Sec-CH-UA-Platform` is a closed set, so an unrecognised (or forged) hint falls through to
+// UA sniffing rather than landing verbatim in the `os` column.
+const UA_PLATFORMS = new Map<string, string>([
+	['android', 'Android'],
+	['chrome os', 'Chrome OS'],
+	['chromium os', 'Chrome OS'],
+	['ios', 'iOS'],
+	['linux', 'Linux'],
+	['macos', 'macOS'],
+	['windows', 'Windows'],
+]);
+
 /** Coarse OS family, from `Sec-CH-UA-Platform` (already a bare family) then a UA-string fallback. */
 export function osFamily(platformHint: string | null, userAgent: string): string {
-	const hint = platformHint?.replace(/"/g, '').trim();
-	if (hint && hint.toLowerCase() !== 'unknown') {
-		if (/macos/i.test(hint)) return 'macOS';
-		if (/chrome os|chromium os/i.test(hint)) return 'Chrome OS';
-		return hint; // "Windows", "Android", "iOS", "Linux"
-	}
+	const hint = platformHint?.slice(0, 64).replace(/"/g, '').trim().toLowerCase();
+	const known = hint ? UA_PLATFORMS.get(hint) : undefined;
+	if (known) return known;
 	if (/\bWindows\b/.test(userAgent)) return 'Windows';
 	if (/\biPhone\b|\biPad\b|\biOS\b/.test(userAgent)) return 'iOS';
 	if (/\bMac OS X\b|\bMacintosh\b/.test(userAgent)) return 'macOS';
@@ -152,10 +170,16 @@ export function formFactor(
  * strong fingerprint, so region, quality values, and secondary languages are discarded. */
 export function primaryLanguage(acceptLanguage: string | null): string | null {
 	if (!acceptLanguage) return null;
-	const first = acceptLanguage.split(',')[0]?.trim();
+	// PERF: slice to the first delimiter instead of splitting; the header is untrusted and a 16KB value
+	// would otherwise materialise thousands of substrings to read one.
+	const comma = acceptLanguage.indexOf(',');
+	const first = (comma === -1 ? acceptLanguage : acceptLanguage.slice(0, comma)).trim();
 	if (!first || first === '*') return null;
-	const tag = first.split(';')[0]?.trim().split('-')[0]?.toLowerCase();
-	return tag && /^[a-z]{2,3}$/.test(tag) ? tag : null;
+	const semi = first.indexOf(';');
+	const base = (semi === -1 ? first : first.slice(0, semi)).trim();
+	const dash = base.indexOf('-');
+	const tag = (dash === -1 ? base : base.slice(0, dash)).toLowerCase();
+	return /^[a-z]{2,3}$/.test(tag) ? tag : null;
 }
 
 // ── On-device coarsened values (the tracker buckets these before they leave the browser, so the raw

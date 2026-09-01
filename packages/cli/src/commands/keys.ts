@@ -4,6 +4,7 @@
 // Integrity `eddsa-jcs-2022` is Ed25519-only). Reuses @facet/trust's generator so the `kid` is the
 // RFC 7638 thumbprint, exactly as the Worker expects.
 
+import { constants } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { parseArgs } from 'node:util';
 import { type SigningAlg, generateSigningJwk } from '@facet/trust';
@@ -36,17 +37,28 @@ async function runGenerate(args: string[]): Promise<number> {
 		printError(`--alg must be EdDSA or ES256 (got: ${values.alg})`);
 		return 1;
 	}
+	// IMPORTANT: an empty --out (an unset shell variable in a provisioning script) must not fall
+	// through to the stdout branch — that dumps the private signing key into a terminal or CI log.
+	if (values.out === '') {
+		printError('--out requires a file path');
+		return 1;
+	}
 
 	const { privateJwk, publicJwk } = await generateSigningJwk(alg);
 	const privateJson = JSON.stringify(privateJwk);
 
-	if (values.out) {
+	if (values.out !== undefined) {
 		// `mode` only applies when the file is CREATED, so overwriting a pre-existing (possibly
 		// world-readable) file would take the private key at its old mode. Chmod through the
 		// descriptor before writing rather than after: the key must never touch an inode that is
-		// readable by anyone else, not even for the window between two syscalls. Opening with `w`
-		// truncates first, so nothing of the previous contents is exposed either.
-		const handle = await open(values.out, 'w', 0o600);
+		// readable by anyone else, not even for the window between two syscalls. O_TRUNC truncates
+		// first, so nothing of the previous contents is exposed either, and O_NOFOLLOW refuses a
+		// symlink planted at the path rather than writing the key wherever it points.
+		const handle = await open(
+			values.out,
+			constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | constants.O_NOFOLLOW,
+			0o600,
+		);
 		try {
 			await handle.chmod(0o600);
 			await handle.writeFile(`${privateJson}\n`);

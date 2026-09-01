@@ -22,7 +22,7 @@ import { type SQL, and, desc, eq, gte, isNotNull, lt, ne, sql } from 'drizzle-or
 import type { SQLiteColumn } from 'drizzle-orm/sqlite-core';
 import type { Env } from '../env.js';
 import { computeAttribution } from '../lib/attribution.js';
-import { DAY_MS, HOUR_MS } from '../lib/constants.js';
+import { DAY_MS, HOUR_MS, SESSION_TIMEOUT_MS } from '../lib/constants.js';
 import { buildEventWhere } from './filters.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
@@ -122,8 +122,17 @@ export async function cube(env: Env, f: StatsFilter, interval: Interval): Promis
 	const bucket = sql<number>`(${schema.events.createdAt} - (${schema.events.createdAt} % ${bucketMs}))`;
 
 	// Bound country cardinality without dropping data: keep the top-N countries, fold the rest to 'other'.
+	// IMPORTANT: rank over the same unfiltered rows the cube itself reads. Ranking under an active
+	// country/device/channel filter would fold every other country into 'other' and destroy the axis
+	// the client slices on — the one thing this endpoint exists to provide.
+	const unfiltered: StatsFilter = {
+		siteId: f.siteId,
+		hostname: f.hostname,
+		start: f.start,
+		end: f.end,
+	};
 	const topCountries = (
-		await topByColumn(env, f, schema.events.country, {
+		await topByColumn(env, unfiltered, schema.events.country, {
 			excludeNull: true,
 			limit: CUBE_TOP_COUNTRIES,
 		})
@@ -402,28 +411,40 @@ export function buildSessionWhere(f: StatsFilter): SQL {
 }
 
 /**
- * Freshness signal for session-derived analytics. `pending` is true when raw events exist in the
- * range but no sessions have been materialized yet (the hourly cron has not caught up), so a caller
- * can distinguish "no data" from "not built yet".
+ * Freshness signal for session-derived analytics. `pending` is true when the range holds raw events
+ * the hourly cron has not sessionized yet, so a caller can distinguish "no data" from "not built yet".
+ *
+ * IMPORTANT: this compares materialization watermarks, not row counts. A row count only detects a
+ * range with NO sessions at all, so a 7d range whose trailing hour is unsessionized reported fresh
+ * while every session-derived read (engagement, channels, funnels, journeys) silently omitted that
+ * hour. `ended_at` is the group's last event time, so a fully materialized range satisfies
+ * max(ended_at) >= max(created_at). The session scan looks back one timeout because the session
+ * covering the range's newest event may have started just before `f.start`.
  */
 export async function sessionFreshness(env: Env, f: StatsFilter): Promise<Freshness> {
 	const [rawRow, sessionRow] = await Promise.all([
 		db(env)
-			.select({ n: sql<number>`COUNT(*)` })
+			.select({ latest: sql<number | null>`MAX(${schema.events.createdAt})` })
 			.from(schema.events)
 			.where(buildEventWhere(f))
 			.get(),
 		db(env)
-			.select({ n: sql<number>`COUNT(*)` })
+			.select({ latest: sql<number | null>`MAX(${schema.eventSessions.endedAt})` })
 			.from(schema.eventSessions)
-			.where(buildSessionWhere(f))
+			.where(
+				and(
+					eq(schema.eventSessions.siteId, f.siteId),
+					gte(schema.eventSessions.startedAt, f.start - SESSION_TIMEOUT_MS),
+					lt(schema.eventSessions.startedAt, f.end),
+				),
+			)
 			.get(),
 	]);
-	const rawEvents = Number(rawRow?.n ?? 0);
-	const sessions = Number(sessionRow?.n ?? 0);
+	const latestEvent = rawRow?.latest == null ? null : Number(rawRow.latest);
+	const latestSession = sessionRow?.latest == null ? null : Number(sessionRow.latest);
 	return {
 		materialization: 'hourly',
-		pending: rawEvents > 0 && sessions === 0,
+		pending: latestEvent !== null && (latestSession === null || latestEvent > latestSession),
 	};
 }
 
@@ -580,10 +601,12 @@ export async function cohortRetention(
 
 	const periodMs = period === 'day' ? DAY_MS : WEEK_MS;
 	// Origin: the bucket-start of the earliest active day, so bucket indices start at 0.
-	const originStart = bucketStart(
-		Math.min(...rows.map((r) => dayKeyToMs(String(r.dayKey)))),
-		period,
-	);
+	let earliestDayMs = Number.POSITIVE_INFINITY;
+	for (const r of rows) {
+		const ms = dayKeyToMs(String(r.dayKey));
+		if (ms < earliestDayMs) earliestDayMs = ms;
+	}
+	const originStart = bucketStart(earliestDayMs, period);
 
 	// Per visitor: their first bucket (cohort) and the full set of buckets they appear in.
 	const byVisitor = new Map<string, { first: number; seen: Set<number> }>();

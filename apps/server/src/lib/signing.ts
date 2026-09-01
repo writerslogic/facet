@@ -15,6 +15,9 @@ export function getSigningKey(env: Env): Promise<SigningKey> | null {
 	let loading = cache.get(jwk);
 	if (!loading) {
 		loading = loadSigningKey(jwk);
+		// IMPORTANT: the cached promise outlives the request that created it, so a malformed JWK's
+		// rejection would surface as an unhandled rejection under any caller that only null-checks.
+		loading.catch(() => {});
 		cache.set(jwk, loading);
 	}
 	return loading;

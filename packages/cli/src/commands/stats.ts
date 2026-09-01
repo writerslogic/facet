@@ -16,6 +16,16 @@ const RANGE_DAYS: Record<string, number> = {
 };
 const DAY_MS = 86_400_000;
 
+/** IMPORTANT: a `top_paths` key is visitor-supplied — `/api/collect` requires only a leading `/` under
+ * 2048 chars — so it reaches this terminal with ESC, CR and bidi runs intact and can otherwise rewrite
+ * the rows already printed above it. */
+const CONTROL_RE = /[\p{Cc}\p{Cf}]/gu;
+
+function safeCell(value: string, limit = 120): string {
+	const flat = String(value).replace(CONTROL_RE, '');
+	return flat.length > limit ? `${flat.slice(0, limit)}…` : flat;
+}
+
 export async function runStats(args: string[], fetchImpl: FetchJson = fetchJson): Promise<number> {
 	const { values } = parseArgs({
 		args,
@@ -32,6 +42,13 @@ export async function runStats(args: string[], fetchImpl: FetchJson = fetchJson)
 	const site = values.site;
 	if (!key || !site) {
 		printError('Missing required option: --key and --site are both required.');
+		return 1;
+	}
+	// IMPORTANT: undici echoes the whole rejected header value into its error message, and this
+	// command prints a failed request's message to stderr — so a key carrying a stray newline from a
+	// wrapped paste would put the live credential in the terminal and in any pasted log.
+	if (!/^[!-~]+$/.test(key)) {
+		printError('--key contains characters that are not valid in an Authorization header.');
 		return 1;
 	}
 
@@ -64,15 +81,21 @@ export async function runStats(args: string[], fetchImpl: FetchJson = fetchJson)
 		const data = await fetchImpl<StatsResponse>(url, {
 			headers: { Authorization: `Bearer ${key}` },
 		});
+		const summary: unknown = data.summary;
+		if (summary === null || typeof summary !== 'object') {
+			printError('stats request failed: the response carried no summary.');
+			return 1;
+		}
 		const { pageviews, visitors, events } = data.summary;
 		process.stdout.write(`${pc.bold('Facet stats')} (${range})\n`);
 		process.stdout.write(`  Pageviews: ${pageviews}\n`);
 		process.stdout.write(`  Visitors:  ${visitors}\n`);
 		process.stdout.write(`  Events:    ${events}\n`);
-		if (data.top_paths.length > 0) {
+		const paths = Array.isArray(data.top_paths) ? data.top_paths.slice(0, 5) : [];
+		if (paths.length > 0) {
 			process.stdout.write(`\n${pc.bold('Top paths')}\n`);
-			for (const row of data.top_paths.slice(0, 5)) {
-				process.stdout.write(`  ${row.count}\t${row.key}\n`);
+			for (const row of paths) {
+				process.stdout.write(`  ${row.count}\t${safeCell(row.key)}\n`);
 			}
 		}
 		return 0;

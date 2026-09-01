@@ -39,6 +39,12 @@ export function useRealtime(apiKey: string, siteId: string, paused = false) {
 		queryFn: () => apiFetch<RealtimeSnapshot>(`/api/stats/realtime?site_id=${siteId}`, apiKey),
 		enabled: Boolean(apiKey && siteId) && live,
 		refetchInterval: live ? REFETCH_MS : false,
+		// Keep trying after a transient edge/network failure; the view also exposes an immediate retry.
+		// TanStack bounds the retry sequence, while the poll interval provides automatic recovery after
+		// that sequence is exhausted.
+		retry: 3,
+		retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, REFETCH_MS),
+		refetchOnReconnect: true,
 	});
 }
 

@@ -46,16 +46,28 @@ const MAX_KEY_LEN = 120;
  *
  * C0/C1 controls (so \n, \r and \t) and the Unicode line/paragraph separators end the line a value
  * sits in. The zero-width and bidi formatting characters are the same attack with the payload hidden
- * from a human reading the output. No legitimate path, referrer or site name needs any of them. */
+ * from a human reading the output. No legitimate path, referrer or site name needs any of them.
+ *
+ * The Tags block (U+E0000..E007F) carries ASCII with no glyph at all, which makes it the direct
+ * channel for text only the consuming LLM sees; the supplementary variation selectors are the same
+ * trick with a base character in front. A lone surrogate is dropped because it is the one input that
+ * defeats the code-point iteration below and emits an unpairable half. */
 function isUnsafeCodePoint(cp: number): boolean {
 	return (
 		cp < 0x20 ||
 		(cp >= 0x7f && cp <= 0x9f) ||
+		cp === 0x061c ||
+		cp === 0x180e ||
 		(cp >= 0x200b && cp <= 0x200f) ||
 		cp === 0x2028 ||
 		cp === 0x2029 ||
 		(cp >= 0x202a && cp <= 0x202e) ||
-		(cp >= 0x2066 && cp <= 0x2069)
+		(cp >= 0x2060 && cp <= 0x2064) ||
+		(cp >= 0x2066 && cp <= 0x2069) ||
+		(cp >= 0xd800 && cp <= 0xdfff) ||
+		cp === 0xfeff ||
+		(cp >= 0xe0000 && cp <= 0xe007f) ||
+		(cp >= 0xe0100 && cp <= 0xe01ef)
 	);
 }
 
@@ -130,7 +142,7 @@ function duration(ms: number): string {
  * remainder is summarised rather than dropped silently — an agent that can't see the truncation would
  * reason about a partial distribution as if it were the whole one.
  */
-function table(title: string, rows: CountRow[], total: number): string {
+function table(title: string, rows: CountRow[], total: number, unit: string): string {
 	if (rows.length === 0) return `### ${title}\n(none)\n`;
 	const shown = rows.slice(0, TOP_N);
 	const lines = shown.map((r) => `| ${cell(r.key)} | ${num(r.count)} |`);
@@ -139,9 +151,12 @@ function table(title: string, rows: CountRow[], total: number): string {
 		const rest = rows.slice(TOP_N).reduce((acc, r) => acc + r.count, 0);
 		out += `(+${rows.length - shown.length} more, ${num(rest)} total)\n`;
 	}
-	if (total > 0) {
-		const covered = shown.reduce((acc, r) => acc + r.count, 0);
-		out += `(top ${shown.length} = ${pct(covered / total)} of ${num(total)})\n`;
+	const covered = shown.reduce((acc, r) => acc + r.count, 0);
+	// The event breakdowns count custom events and interactions too, which `pageviews` excludes, so
+	// the two are not always commensurable. Omit the share rather than state one above 100%, the same
+	// call `delta` makes with no usable baseline; `(+N more)` still flags the truncation.
+	if (total > 0 && covered <= total) {
+		out += `(top ${shown.length} = ${pct(covered / total)} of ${num(total)} ${unit})\n`;
 	}
 	return out;
 }
@@ -191,11 +206,13 @@ export function renderDigest(input: DigestInput): string {
 	);
 
 	parts.push('## Breakdowns');
-	parts.push(table('Pages', input.topPaths, s.pageviews));
-	parts.push(table('Referrers', input.topReferrers, s.pageviews));
-	parts.push(table('Countries', input.topCountries, s.pageviews));
-	parts.push(table('Devices', input.topDevices, s.pageviews));
-	parts.push(table('Channels', input.channels, s.pageviews));
+	parts.push(table('Pages', input.topPaths, s.pageviews, 'pageviews'));
+	parts.push(table('Referrers', input.topReferrers, s.pageviews, 'pageviews'));
+	parts.push(table('Countries', input.topCountries, s.pageviews, 'pageviews'));
+	parts.push(table('Devices', input.topDevices, s.pageviews, 'pageviews'));
+	// Channels counts SESSIONS, not events. Against `pageviews` this share was not just imprecise but
+	// a ratio of two different populations.
+	parts.push(table('Channels', input.channels, e.sessions, 'sessions'));
 
 	if (input.anomalies.length > 0) {
 		const lines = input.anomalies.map((a) => {

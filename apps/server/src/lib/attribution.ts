@@ -25,10 +25,13 @@ export function computeAttribution(rawPaths: AttributionPath[]): AttributionResu
 		.map((p) => ({
 			channels: collapse(p.channels),
 			value: p.value,
-			converted: p.converted,
+			// IMPORTANT: one definition of "converted" for every model. The markov chain reads this
+			// same flag, so a zero-revenue path must not be an absorbing `conv` while being absent
+			// from `conversions`/`revenue`.
+			converted: p.converted && p.value > 0,
 		}))
 		.filter((p) => p.channels.length > 0);
-	const converting = paths.filter((p) => p.converted && p.value > 0);
+	const converting = paths.filter((p) => p.converted);
 	const conversions = converting.length;
 	const revenue = converting.reduce((s, p) => s + p.value, 0);
 
@@ -64,7 +67,10 @@ export function computeAttribution(rawPaths: AttributionPath[]): AttributionResu
 			for (let i = 1; i < n - 1; i++) add('position', c[i] as string, mid);
 		}
 		// Time decay: later touches weigh more (geometric, doubling per step).
-		const weights = c.map((_, i) => 2 ** i);
+		// IMPORTANT: exponents are anchored on the last touch. `2 ** i` overflowed to Infinity past
+		// 1024 touches, making wsum Infinity and every credit NaN; anchored, early touches underflow
+		// to 0 instead. The normalized weights are identical.
+		const weights = c.map((_, i) => 2 ** (i - (n - 1)));
 		const wsum = weights.reduce((a, b) => a + b, 0);
 		c.forEach((ch, i) => add('time_decay', ch, (V * (weights[i] as number)) / wsum));
 	}

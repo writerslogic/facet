@@ -18,10 +18,11 @@ import {
 	storeConsentRecord,
 } from '../lib/consent.js';
 import { isGpcOptOut } from '../lib/gpc.js';
-import { validationErrorHook } from '../lib/http.js';
+import { badRequest, validationErrorHook } from '../lib/http.js';
 import {
 	deriveVisitorHash,
 	getScopedSalt,
+	readScopedSalt,
 	resolvePolicy,
 	saltScope,
 	windowEndMs,
@@ -30,6 +31,9 @@ import {
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp } from '../lib/request-meta.js';
 import { deploymentDid, getSigningKey } from '../lib/signing.js';
+
+/** Largest instant `Date` represents (ECMA-262 time-value range); past it `toISOString()` throws. */
+const MAX_TIMESTAMP_MS = 8_640_000_000_000_000;
 
 export const consentRoutes = new Hono<AppEnv>();
 
@@ -54,6 +58,11 @@ consentRoutes.post(
 		if (!iss) return c.json({ error: 'did_unavailable' }, 501);
 		const siteId = c.get('siteId'); // from the API key, NEVER the body
 		const body = c.req.valid('json');
+		// IMPORTANT: the schema bounds `expires_at` below but not above, and a value past the Date
+		// range makes `toISOString()` throw — turning a validated body into a 500.
+		if (body.expires_at !== undefined && body.expires_at > MAX_TIMESTAMP_MS) {
+			throw badRequest('validation_failed', 'expires_at out of range');
+		}
 		const policy = await resolvePolicy(c.env, siteId);
 		if (policy.tier === 'anonymous') {
 			return c.json({ error: 'site_not_elevated' }, 400);
@@ -86,7 +95,9 @@ consentRoutes.post(
 			external_user_id_present: uid !== null,
 			gpc_at_grant: 0,
 			granted_at: new Date(now).toISOString(),
-			...(body.expires_at ? { expires_at: new Date(body.expires_at).toISOString() } : {}),
+			...(body.expires_at !== undefined
+				? { expires_at: new Date(body.expires_at).toISOString() }
+				: {}),
 		};
 		const statement = await signConsent(key, claims, now);
 		await storeConsentRecord(c.env, {
@@ -133,13 +144,11 @@ consentRoutes.delete(
 		}
 		const wk = windowKey(policy.window, now);
 		const scope = saltScope(siteId, policy.window, wk);
-		const salt = await getScopedSalt(
-			c.env,
-			scope,
-			policy.window,
-			windowEndMs(policy.window, now),
-			now,
-		);
+		// Match, never mint: revocation is a read path, and `getScopedSalt` would create a salt row
+		// here and then derive a hash from it that can match nothing. No salt means no grant was ever
+		// keyed under it, so there is nothing to revoke.
+		const salt = await readScopedSalt(c.env, scope);
+		if (!salt) return c.json({ revoked: 0 });
 		// Always the pseudonymous ip|ua pre-image here (never 'identified' — there is no uid on this
 		// branch, and `buildPreimage` now requires one for that tier). Byte-identical to before: the
 		// ip|ua formula doesn't vary by tier label, only by uid presence.

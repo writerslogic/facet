@@ -42,7 +42,9 @@ eventRoute.post(
 			props: body.props ?? null,
 			utm: body.utm ?? null,
 			country: null,
-			device: device(ua),
+			// A relay that sends no user_agent carries no device signal; `device('')` would assert
+			// `desktop` from nothing, and the column is nullable precisely for the unknown case.
+			device: ua === '' ? null : device(ua),
 			now: Date.now(),
 			gpc,
 			url: new URL(c.req.url),

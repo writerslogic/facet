@@ -18,8 +18,7 @@ export function dayKey(nowMs: number): string {
 // A UTC day's salt is immutable once created, so cache it per Worker isolate: after the first beacon of
 // a day, every subsequent one skips the `salts` read — the single hottest read on the ingest hot path
 // (the anonymous Tier-0 branch hits it for every event). Bounded to a few keys; a day rollover leaves at
-// most today plus a soon-evicted yesterday. Cleared by `resetDailySaltCache` so a test that seeds a
-// specific salt after a prior read is not served the stale one.
+// most today plus a soon-evicted yesterday.
 const saltCache = new Map<string, string>();
 
 function cacheSalt(dayKey: string, salt: string): void {
@@ -32,11 +31,6 @@ function cacheSalt(dayKey: string, salt: string): void {
 			}
 		}
 	}
-}
-
-/** Drop the in-memory salt cache (for tests that pre-seed a deterministic salt after a prior read). */
-export function resetDailySaltCache(): void {
-	saltCache.clear();
 }
 
 /** Return the salt for `dayKey` (UTC), creating it lazily and race-safely if absent. */
@@ -58,7 +52,10 @@ export async function getDailySalt(env: Env, dayKey: string, now: number): Promi
 	const row = await env.DB.prepare('SELECT salt FROM salts WHERE day_key = ?')
 		.bind(dayKey)
 		.first<{ salt: string }>();
-	const resolved = row?.salt ?? salt;
-	cacheSalt(dayKey, resolved);
-	return resolved;
+	// IMPORTANT: falsy, not nullish — an empty stored salt makes the pre-image `ip|ua||siteId`, an
+	// unsalted hash brute-forceable back to the raw IP. The un-stored fallback is not cached either: a
+	// salt no other isolate can read would split this day's visitor hashes for the isolate's whole life.
+	if (!row?.salt) return salt;
+	cacheSalt(dayKey, row.salt);
+	return row.salt;
 }

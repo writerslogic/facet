@@ -11,6 +11,7 @@ import {
 	buildRealtime,
 	buildRetention,
 	buildStats,
+	buildTimelineAnnotations,
 } from './dataset.js';
 
 const DAY_MS = 86_400_000;
@@ -65,6 +66,7 @@ describe('demo dataset', () => {
 	it('builds the remaining tab fixtures without degenerate values', () => {
 		expect(buildRealtime().visitors).toBeGreaterThan(0);
 		expect(buildAnomalies(start, end).anomalies.length).toBeGreaterThan(0);
+		expect(buildTimelineAnnotations(start, end).annotations.length).toBeGreaterThan(0);
 		const ret = buildRetention('week', start, end);
 		expect(ret.cohorts.length).toBeGreaterThan(0);
 		expect(ret.cohorts[0]?.retention[0]).toBe(1);

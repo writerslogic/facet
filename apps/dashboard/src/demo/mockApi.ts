@@ -39,6 +39,7 @@ import {
 	buildRealtime,
 	buildRetention,
 	buildStats,
+	buildTimelineAnnotations,
 	defaultInterval,
 } from './dataset.js';
 
@@ -307,6 +308,8 @@ function route(url: URL, method: string, body: unknown): Response | null {
 			return json(buildCube(start, end, interval));
 		case '/api/stats/anomalies':
 			return json(buildAnomalies(start, end));
+		case '/api/annotations':
+			return json(buildTimelineAnnotations(start, end));
 		case '/api/stats/retention':
 			return json(buildRetention(period, start, end));
 		case '/api/stats/interactions':

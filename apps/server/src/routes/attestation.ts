@@ -3,7 +3,8 @@
 //   GET /api/attestation/privacy   — a PrivacyAttestationCredential that references the RATS evidence.
 //   GET /api/attestation/evidence  — a RATS process-evidence EAT (software attestation only; optional
 //                                    ?nonce=<verifier nonce> for freshness).
-// Both require an Ed25519 signing key (Data Integrity is Ed25519-only); 501 when unconfigured.
+// Both 501 without a signing key; /privacy additionally requires Ed25519 (Data Integrity is
+// Ed25519-only), while the EAT carries whichever algorithm the deployment key uses.
 
 import {
 	EAT_PROCESS_PROFILE,
@@ -18,6 +19,8 @@ import type { AppEnv } from '../env.js';
 import { buildProcessEvidence, deploymentDescriptor } from '../lib/attestation.js';
 import { privacyDpvClaims } from '../lib/dpv.js';
 import { ApiError } from '../lib/http.js';
+import { rateLimit } from '../lib/ratelimit.js';
+import { clientIp } from '../lib/request-meta.js';
 import {
 	deploymentDid,
 	ed25519KeyErrorCode,
@@ -27,7 +30,12 @@ import {
 
 export const attestationRoutes = new Hono<AppEnv>();
 
-attestationRoutes.get('/privacy', async (c) => {
+// Both routes sign on every request (/privacy twice), so like `/.well-known/did-configuration.json`
+// they are rate-limited: one shared bucket per client, because it is the total signing cost that has
+// to be bounded, not each endpoint's share of it.
+const attestationLimit = rateLimit((c) => `attestation:${clientIp(c.req.raw)}`);
+
+attestationRoutes.get('/privacy', attestationLimit, async (c) => {
 	const r = await loadEd25519Key(c.env);
 	if ('error' in r) {
 		return c.json(
@@ -67,7 +75,7 @@ attestationRoutes.get('/privacy', async (c) => {
 	});
 });
 
-attestationRoutes.get('/evidence', async (c) => {
+attestationRoutes.get('/evidence', attestationLimit, async (c) => {
 	const loading = getSigningKey(c.env);
 	if (!loading) return c.json({ error: 'signing_unavailable' }, 501);
 	const key = await loading;
@@ -86,5 +94,8 @@ attestationRoutes.get('/evidence', async (c) => {
 		now: Date.now(),
 		nonce,
 	});
-	return c.json(eat, 200, { 'content-type': 'application/json' });
+	return c.json(eat, 200, {
+		'content-type': 'application/json',
+		'cache-control': 'no-store',
+	});
 });

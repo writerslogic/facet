@@ -114,8 +114,12 @@ export function pickVariant(point: number, variants: FlagVariant[]): string {
 }
 
 function ctxValue(ctx: FlagContext, attr: string): string | number | undefined {
-	if (attr.startsWith('custom.')) return ctx.custom?.[attr.slice('custom.'.length)];
-	return (ctx as Record<string, unknown>)[attr] as string | number | undefined;
+	const raw = attr.startsWith('custom.')
+		? ctx.custom?.[attr.slice('custom.'.length)]
+		: (ctx as Record<string, unknown>)[attr];
+	// IMPORTANT: `constructor`/`toString`/`__proto__` resolve off Object.prototype, so an undeclared
+	// attr would otherwise read as present and match every visitor.
+	return typeof raw === 'string' || typeof raw === 'number' ? raw : undefined;
 }
 
 /** Whether every clause matches (AND). `pct` routes through the same `inRollout` gate as base rollout. */

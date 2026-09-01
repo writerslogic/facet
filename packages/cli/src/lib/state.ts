@@ -103,6 +103,12 @@ export interface LocalState {
 	install: InstallState;
 }
 
+// IMPORTANT: a blank value is not a token. `ADMIN_TOKEN=` on disk, or an exported-but-empty
+// FACET_ADMIN_TOKEN, must read as absent — otherwise doctor reports a credential it cannot use.
+function presentToken(value: string | null | undefined): string | null {
+	return value !== undefined && value !== null && value.trim() !== '' ? value : null;
+}
+
 export function readLocalState(layout: Layout): LocalState {
 	const source = readFileSync(layout.configPath, 'utf8');
 	const routePattern = getRoutePattern(source);
@@ -120,22 +126,31 @@ export function readLocalState(layout: Layout): LocalState {
 		dashboardBuilt: existsSync(
 			join(layout.repoRoot, 'apps', 'dashboard', 'dist', 'index.html'),
 		),
-		hasLocalAdminToken: readDevVar(layout.devVarsPath, 'ADMIN_TOKEN') !== null,
+		hasLocalAdminToken: presentToken(readDevVar(layout.devVarsPath, 'ADMIN_TOKEN')) !== null,
 		install: readInstallState(layout.repoRoot),
 	};
 }
 
 /** Read the stored admin token. Isolated so it is obvious at every call site that this is a secret. */
 export function adminToken(layout: Layout, env: NodeJS.ProcessEnv = process.env): string | null {
-	return env.FACET_ADMIN_TOKEN ?? readDevVar(layout.devVarsPath, 'ADMIN_TOKEN');
+	return (
+		presentToken(env.FACET_ADMIN_TOKEN) ??
+		presentToken(readDevVar(layout.devVarsPath, 'ADMIN_TOKEN'))
+	);
 }
 
 export type Health = 'ok' | 'unreachable' | 'error';
 
+// REQUIRED: bound every probe. Unbounded, a host that accepts the connection and never answers holds
+// `init`'s retry loop open for undici's 300s header timeout per attempt.
+const HEALTH_TIMEOUT_MS = 10_000;
+
 /** Probe `<host>/api/health`. Used to confirm a deploy is live and to resume without re-deploying. */
 export async function probeHealth(host: string, fetchImpl: typeof fetch = fetch): Promise<Health> {
 	try {
-		const res = await fetchImpl(`${host}/api/health`);
+		const res = await fetchImpl(`${host}/api/health`, {
+			signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS),
+		});
 		return res.ok ? 'ok' : 'error';
 	} catch {
 		return 'unreachable';

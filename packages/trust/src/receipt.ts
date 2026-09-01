@@ -27,6 +27,22 @@ export interface ConsistencyReceipt {
 	peaksTo: string[];
 }
 
+/** IMPORTANT: `bytesEqual` matches two empty arrays, so an empty `leaf` and `peaks` entry fold to an
+ * empty peak and bag to the root of a size-0 checkpoint — a forged inclusion proof against a signed
+ * empty log. Every hex field of an MMR_SHA256 receipt is a SHA-256 digest; pin that here. */
+function checkedDigest(hex: string): Uint8Array {
+	const bytes = fromHex(hex);
+	if (bytes.length !== 32) throw new Error('receipt field is not a SHA-256 digest');
+	return bytes;
+}
+
+/** IMPORTANT: a receipt counter reaches `u64be`, which wraps mod 2^64, so an out-of-range `sizeTo`
+ * defeats `verifyConsistency`'s `sizeTo < sizeFrom` gate while still binding to the signed root. */
+function checkedCount(n: number): number {
+	if (!Number.isSafeInteger(n) || n < 0) throw new Error('receipt counter is not a node count');
+	return n;
+}
+
 /** Serialize a binary inclusion proof to a hex receipt. */
 export function inclusionToReceipt(p: InclusionProof): InclusionReceipt {
 	return {
@@ -41,11 +57,11 @@ export function inclusionToReceipt(p: InclusionProof): InclusionReceipt {
 /** Deserialize a hex inclusion receipt back to a binary proof. */
 export function receiptToInclusion(r: InclusionReceipt): InclusionProof {
 	return {
-		index: r.index,
-		leaf: fromHex(r.leaf),
-		path: r.path.map(fromHex),
-		size: r.size,
-		peaks: r.peaks.map(fromHex),
+		index: checkedCount(r.index),
+		leaf: checkedDigest(r.leaf),
+		path: r.path.map(checkedDigest),
+		size: checkedCount(r.size),
+		peaks: r.peaks.map(checkedDigest),
 	};
 }
 
@@ -56,7 +72,7 @@ export async function verifyInclusionReceipt(
 	rootHex: string,
 ): Promise<boolean> {
 	try {
-		return await verifyInclusion(receiptToInclusion(r), fromHex(rootHex));
+		return await verifyInclusion(receiptToInclusion(r), checkedDigest(rootHex));
 	} catch {
 		return false;
 	}
@@ -80,15 +96,15 @@ export function consistencyToReceipt(p: ConsistencyProof): ConsistencyReceipt {
 /** Deserialize a hex consistency receipt back to a binary proof. */
 export function receiptToConsistency(r: ConsistencyReceipt): ConsistencyProof {
 	return {
-		sizeFrom: r.sizeFrom,
-		sizeTo: r.sizeTo,
-		peaksFrom: r.peaksFrom.map(fromHex),
+		sizeFrom: checkedCount(r.sizeFrom),
+		sizeTo: checkedCount(r.sizeTo),
+		peaksFrom: r.peaksFrom.map(checkedDigest),
 		inclusions: r.inclusions.map((i) => ({
-			index: i.index,
-			leaf: fromHex(i.leaf),
-			path: i.path.map(fromHex),
+			index: checkedCount(i.index),
+			leaf: checkedDigest(i.leaf),
+			path: i.path.map(checkedDigest),
 		})),
-		peaksTo: r.peaksTo.map(fromHex),
+		peaksTo: r.peaksTo.map(checkedDigest),
 	};
 }
 
@@ -101,8 +117,8 @@ export async function verifyConsistencyReceipt(
 	try {
 		return await verifyConsistency(
 			receiptToConsistency(r),
-			fromHex(rootFromHex),
-			fromHex(rootToHex),
+			checkedDigest(rootFromHex),
+			checkedDigest(rootToHex),
 		);
 	} catch {
 		return false;

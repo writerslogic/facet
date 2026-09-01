@@ -11,6 +11,9 @@ import { type SigningKey, importVerifyKey, subtleSignParams } from './keys.js';
 /** Covered components, in signature-base order. Kept fixed so signer and verifier agree. */
 const COMPONENTS = ['content-digest', 'content-type'] as const;
 
+/** The RFC 9421 §2.3 inner list every signature we produce or accept must declare. */
+const COVERED = `(${COMPONENTS.map((c) => `"${c}"`).join(' ')})`;
+
 /** Default Structured-Fields label for the signature (`sig1`). */
 const DEFAULT_LABEL = 'sig1';
 
@@ -26,14 +29,20 @@ async function contentDigest(body: Uint8Array): Promise<string> {
 
 /** Build the signature-params inner list + parameters, e.g. `("content-digest" "content-type");created=…`. */
 function signatureParams(created: number, keyid: string, alg: string): string {
-	const inner = COMPONENTS.map((c) => `"${c}"`).join(' ');
-	return `(${inner});created=${created};keyid="${keyid}";alg="${alg}"`;
+	return `${COVERED};created=${created};keyid="${keyid}";alg="${alg}"`;
 }
 
 /** Build the RFC 9421 §2.5 signature base string from component values + params. */
 function signatureBase(values: Record<string, string>, params: string): string {
 	const lines = COMPONENTS.map((c) => `"${c}": ${values[c]}`);
 	lines.push(`"@signature-params": ${params}`);
+	// IMPORTANT: RFC 9421 §2.1 field values are single-line, so a CR/LF in one would forge extra
+	// signature-base lines. An ambiguous base must fail, not be signed or verified.
+	for (const line of lines) {
+		if (line.includes('\n') || line.includes('\r')) {
+			throw new Error('signature base component contains CR/LF');
+		}
+	}
 	return lines.join('\n');
 }
 
@@ -89,7 +98,12 @@ function parseSignatureInput(input: string): { label: string; params: string } {
  * untrusted Signature-Input header, so a RegExp would be an injection / ReDoS surface. */
 function parseSignature(header: string, label: string): Uint8Array {
 	const prefix = `${label}=:`;
-	const start = header.indexOf(prefix);
+	// IMPORTANT: the hit must start a dictionary member. A bare indexOf also matches the tail of a
+	// longer label (`othersig1=:` contains `sig1=:`), which would return another member's bytes.
+	let start = header.indexOf(prefix);
+	while (start > 0 && !/[,\s]/.test(header[start - 1] as string)) {
+		start = header.indexOf(prefix, start + 1);
+	}
 	if (start < 0) throw new Error('signature not found for label');
 	const from = start + prefix.length;
 	const end = header.indexOf(':', from);
@@ -103,9 +117,11 @@ export function parseSignatureParams(params: string): {
 	alg?: string;
 	created?: number;
 } {
-	const keyid = params.match(/keyid="([^"]+)"/)?.[1];
-	const alg = params.match(/alg="([^"]+)"/)?.[1];
-	const created = params.match(/created=(\d+)/)?.[1];
+	// Anchored to a `;` boundary so a value smuggled inside the quoted inner list or another
+	// parameter (`keyid="x alg=\"ed25519\""`) cannot be read back as the parameter itself.
+	const keyid = params.match(/(?:^|;)keyid="([^"]+)"/)?.[1];
+	const alg = params.match(/(?:^|;)alg="([^"]+)"/)?.[1];
+	const created = params.match(/(?:^|;)created=(\d+)/)?.[1];
 	return { keyid, alg, created: created ? Number(created) : undefined };
 }
 
@@ -116,8 +132,9 @@ export interface VerifyResponseInput {
 	signatureInput: string;
 	signature: string;
 	publicJwk: JWK;
-	/** Optional anti-replay bound: reject a signature whose `created` is older than this many seconds
-	 * relative to `now`. Both must be supplied together; omit to leave freshness to the caller. */
+	/** Optional anti-replay bound: reject a signature whose `created` differs from `now` by more than
+	 * this many seconds in EITHER direction. Both must be supplied together; omit to leave freshness
+	 * to the caller. */
 	now?: number;
 	maxAgeSeconds?: number;
 }
@@ -131,13 +148,17 @@ export async function verifyResponse(input: VerifyResponseInput): Promise<boolea
 		if (expectedDigest !== input.contentDigest) return false;
 
 		const { label, params } = parseSignatureInput(input.signatureInput);
+		// RFC 9421 §3.2: the verifier must confirm the signature actually covers the components it
+		// checks, rather than splicing an unexamined inner list into the base it rebuilds.
+		if (!params.startsWith(`${COVERED};`)) return false;
 		const { alg, created } = parseSignatureParams(params);
 		if (alg !== 'ed25519' && alg !== 'ecdsa-p256-sha256') return false;
 
-		// Optional anti-replay: a signature older than maxAgeSeconds is stale even if otherwise valid.
+		// Optional anti-replay: outside ±maxAgeSeconds a signature is stale even if otherwise valid.
+		// IMPORTANT: the bound is absolute — a future-dated `created` would otherwise never expire.
 		if (input.now !== undefined && input.maxAgeSeconds !== undefined) {
 			if (created === undefined) return false;
-			if (input.now / 1000 - created > input.maxAgeSeconds) return false;
+			if (Math.abs(input.now / 1000 - created) > input.maxAgeSeconds) return false;
 		}
 
 		const base = signatureBase(

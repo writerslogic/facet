@@ -6,6 +6,7 @@ import type { AppEnv } from '../env.js';
 import { requireAdmin } from '../lib/auth.js';
 import { adminRoutes } from './admin.js';
 import { alertsRoutes } from './alerts.js';
+import { annotationsRoutes } from './annotations.js';
 import { attestationRoutes } from './attestation.js';
 import { authRoutes } from './auth.js';
 import { collectRoute } from './collect.js';
@@ -55,16 +56,23 @@ readinessRoute.get('/', requireAdmin, async (c) => {
 				'SELECT name, last_success_at, last_failure_at, last_error, last_occurrence, cadence_error FROM scheduled_job_runs ORDER BY name',
 			).all();
 			jobResults = jobs.results;
+		} catch {
+			checks.migrations = false;
+		}
+		try {
+			// IMPORTANT: `sites` keys on `id`, not `site_id`. Joining `s.site_id` made this fail to prepare,
+			// and one shared catch reported that as `migrations: false` on every healthy deployment; hence
+			// the separate catch. EXISTS, not summed COUNT(*)s, so a violation stops at the first orphan row.
 			const integrity = await c.env.DB.prepare(`
 				SELECT
-					(SELECT COUNT(*) FROM events e LEFT JOIN sites s ON s.site_id = e.site_id WHERE s.site_id IS NULL) +
-					(SELECT COUNT(*) FROM api_keys k LEFT JOIN sites s ON s.site_id = k.site_id WHERE s.site_id IS NULL) +
-					(SELECT COUNT(*) FROM event_rollups r LEFT JOIN sites s ON s.site_id = r.site_id WHERE s.site_id IS NULL)
+					(EXISTS(SELECT 1 FROM events e LEFT JOIN sites s ON s.id = e.site_id WHERE s.id IS NULL)
+						OR EXISTS(SELECT 1 FROM api_keys k LEFT JOIN sites s ON s.id = k.site_id WHERE s.id IS NULL)
+						OR EXISTS(SELECT 1 FROM event_rollups r LEFT JOIN sites s ON s.id = r.site_id WHERE s.id IS NULL))
 					AS violations
 			`).first<{ violations: number }>();
 			checks.referentialIntegrity = integrity?.violations === 0;
 		} catch {
-			checks.migrations = false;
+			checks.referentialIntegrity = false;
 		}
 	}
 	if (checks.migrations === undefined) checks.migrations = true;
@@ -99,6 +107,7 @@ export const ROUTES: RouteEntry[] = [
 	{ path: '/api/experiments', router: experimentsRoutes },
 	{ path: '/api/flags', router: flagsRoutes },
 	{ path: '/api/alerts', router: alertsRoutes },
+	{ path: '/api/annotations', router: annotationsRoutes },
 	{ path: '/api/attestation', router: attestationRoutes },
 	{ path: '/api/transparency', router: transparencyRoutes },
 	{ path: '/api/scitt', router: scittRoutes },

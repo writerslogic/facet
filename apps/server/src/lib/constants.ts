@@ -29,9 +29,6 @@ export const CORS_MAX_AGE = 86400 as const;
 /** Maximum accepted body size for a `POST /api/collect` beacon, in bytes. */
 export const COLLECT_MAX_BODY_BYTES = 8192 as const;
 
-/** HTTP status code returned for a successful CORS preflight. */
-export const PREFLIGHT_STATUS = 204 as const;
-
 /** Prefix on every issued API key (Facet key). */
 export const API_KEY_PREFIX = 'clk_' as const;
 
@@ -84,6 +81,11 @@ export const D1_MAX_IN_PARAMS = 90 as const;
  * exceed D1's bound-parameter limit. An empty input yields no chunks, so a caller can iterate the
  * result without a special case for "nothing to look up". */
 export function chunked<T>(values: readonly T[], size: number = D1_MAX_IN_PARAMS): T[][] {
+	// IMPORTANT: a size below 1 never advances the cursor, so the loop below never terminates and
+	// grows `out` until the isolate dies. Fail loudly instead.
+	if (!Number.isInteger(size) || size < 1) {
+		throw new RangeError('chunked: size must be a positive integer');
+	}
 	const out: T[][] = [];
 	for (let i = 0; i < values.length; i += size) {
 		out.push(values.slice(i, i + size));

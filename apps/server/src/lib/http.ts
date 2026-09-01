@@ -51,20 +51,31 @@ interface RawIssue {
 	path?: readonly { key?: unknown }[];
 }
 
-/** Reduce raw valibot issues to `{ path, message }`.
+// IMPORTANT: valibot emits one issue per failing element with no cap, and embeds the raw input in
+// both `message` and `path`. Measured: a 150 KB `/api/import` body of 50k empty events yields 200k
+// issues and a 19.8 MB response (132x amplification, against a 128 MB Worker heap), and a 100 KB
+// `props` key comes back whole in `path`. Both bounds are load-bearing — a count cap alone still
+// admits 50 x 200 KB.
+const MAX_ISSUES = 50;
+const MAX_ISSUE_TEXT = 200;
+
+const clampText = (text: string): string =>
+	text.length > MAX_ISSUE_TEXT ? `${text.slice(0, MAX_ISSUE_TEXT)}…` : text;
+
+/** Reduce raw valibot issues to a bounded `{ path, message }`.
  * A raw issue carries `path[].input`, which is the ENTIRE validated object — so returning issues
  * verbatim echoed every submitted field back to the caller, including a magic-link token
  * (`/api/auth/verify`) or arbitrary event props (`/api/collect`). It also pinned an internal
  * library shape as the public error contract. */
 function toValidationIssues(issues: readonly unknown[] | undefined): ValidationIssue[] {
-	return (issues ?? []).map((raw) => {
+	return (issues ?? []).slice(0, MAX_ISSUES).map((raw) => {
 		const issue = raw as RawIssue;
 		const path = issue.path?.map((p) => String(p.key)).join('.');
 		const out: ValidationIssue = {
-			message: typeof issue.message === 'string' ? issue.message : 'invalid value',
+			message: clampText(typeof issue.message === 'string' ? issue.message : 'invalid value'),
 		};
 		if (path) {
-			out.path = path;
+			out.path = clampText(path);
 		}
 		return out;
 	});

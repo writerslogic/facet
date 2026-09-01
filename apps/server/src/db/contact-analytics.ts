@@ -39,14 +39,19 @@ export interface ContactActivity {
 	top_paths: { path: string; views: number }[];
 }
 
-const EMPTY: ContactActivity = {
-	pageviews: 0,
-	events: 0,
-	total: 0,
-	first_seen: null,
-	last_seen: null,
-	top_paths: [],
-};
+// IMPORTANT: a fresh object per call. A shared module-level constant outlives the request in a warm
+// isolate, so handing the same object (and the same `top_paths` array) to every caller makes one
+// caller's mutation another request's answer.
+function empty(): ContactActivity {
+	return {
+		pageviews: 0,
+		events: 0,
+		total: 0,
+		first_seen: null,
+		last_seen: null,
+		top_paths: [],
+	};
+}
 
 /** Aggregate a linked contact's activity. Scoped by BOTH site and hash: a hash is site-specific by
  * construction (siteId is in every pre-image), and the redundant site predicate keeps that true even
@@ -56,9 +61,9 @@ export async function contactActivity(
 	siteId: string,
 	visitorHashes: string[],
 ): Promise<ContactActivity> {
-	if (visitorHashes.length === 0) return EMPTY;
+	if (visitorHashes.length === 0) return empty();
 	const client = db(env);
-	const summed = { ...EMPTY, top_paths: [] as { path: string; views: number }[] };
+	const summed = empty();
 	const pathViews = new Map<string, number>();
 	// One statement per chunk: an `IN (...)` list is one bound parameter per hash, and D1 refuses a
 	// query with more than 100 of them. A company rollup unions every linked contact's live salt
@@ -108,7 +113,7 @@ export async function contactActivity(
 			pathViews.set(row.path, (pathViews.get(row.path) ?? 0) + row.views);
 		}
 	}
-	if (summed.total === 0) return EMPTY;
+	if (summed.total === 0) return empty();
 	return {
 		...summed,
 		top_paths: [...pathViews]

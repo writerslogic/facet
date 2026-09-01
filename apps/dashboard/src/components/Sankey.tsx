@@ -9,6 +9,7 @@
 
 import { type ReactElement, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { cn } from '../lib/cn.js';
+import { lerp } from './charts/hierarchy.js';
 
 export interface SankeyNode {
 	id: string;
@@ -153,8 +154,6 @@ function reducedMotion(): boolean {
 		typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
 	);
 }
-
-const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 /** Interpolate the whole layout toward `to`. Nodes/ribbons present in both tween their coordinates; a
  * node/ribbon new in `to` (a device just expanded) grows from zero height/width; anything only in `from`

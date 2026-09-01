@@ -4,9 +4,9 @@
 
 import { BREAKDOWN_DIMENSIONS, type BreakdownResponse } from '@facet/shared';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { Explore, GROUPS, LABELS } from '../components/Explore.js';
+import { Explore, GROUPS, LABELS, rankRows } from '../components/Explore.js';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
 
@@ -44,6 +44,16 @@ afterEach(() => {
 });
 
 describe('Explore', () => {
+	it('ranks by the selected metric with a stable label tie-break', () => {
+		const rows = [
+			{ key: 'b', events: 10, pageviews: 2, visitors: 4 },
+			{ key: 'a', events: 5, pageviews: 9, visitors: 4 },
+		];
+		expect(rankRows(rows, 'events').map((row) => row.key)).toEqual(['b', 'a']);
+		expect(rankRows(rows, 'pageviews').map((row) => row.key)).toEqual(['a', 'b']);
+		expect(rankRows(rows, 'visitors').map((row) => row.key)).toEqual(['a', 'b']);
+	});
+
 	// A dimension added to BREAKDOWN_DIMENSIONS but left out of GROUPS is served by the API and
 	// unreachable from the UI — a gap nothing else in the build would report.
 	it('offers every dimension the breakdown endpoint serves, exactly once', () => {
@@ -72,5 +82,32 @@ describe('Explore', () => {
 	it('labels the absent-dimension group instead of rendering an empty cell', async () => {
 		renderPanel(body('d1', false));
 		await waitFor(() => expect(screen.getByText('(not set)')).toBeInTheDocument());
+	});
+
+	it('restores analytical controls in the URL and exposes exact table data', async () => {
+		renderPanel(body('d1', false));
+		await screen.findByText(/D1 · exact/);
+
+		fireEvent.change(screen.getByRole('combobox', { name: 'Metric' }), {
+			target: { value: 'visitors' },
+		});
+		fireEvent.click(screen.getByRole('button', { name: 'table' }));
+
+		await waitFor(() => {
+			const params = new URLSearchParams(window.location.search);
+			expect(params.get('dimension')).toBe('path');
+			expect(params.get('metric')).toBe('visitors');
+			expect(params.get('display')).toBe('table');
+		});
+		expect(screen.getByRole('table', { name: /raw data/ })).toBeInTheDocument();
+		expect(screen.getByText('Top-three concentration')).toBeInTheDocument();
+	});
+
+	it('explains when a search has no match in the bounded result set', async () => {
+		renderPanel(body('d1', false));
+		const search = await screen.findByRole('searchbox', { name: 'Search loaded groups' });
+		fireEvent.change(search, { target: { value: 'not-a-real-path' } });
+		expect(screen.getByText(/No groups match/)).toBeInTheDocument();
+		expect(screen.getByText(/privacy-safe groups loaded/)).toBeInTheDocument();
 	});
 });

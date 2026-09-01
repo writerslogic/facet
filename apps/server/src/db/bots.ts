@@ -31,6 +31,8 @@ export async function getBotRuleset(env: Env, source: string): Promise<BotRulese
 
 /** Every stored ruleset. The compiled pattern cache is built from all sources at once. */
 export async function listBotRulesets(env: Env): Promise<BotRulesetRow[]> {
+	// IMPORTANT: deterministic order — ensureBotPatterns caps the merged set, so row order decides
+	// which patterns survive.
 	return db(env)
 		.select({
 			source: schema.botRulesets.source,
@@ -39,7 +41,8 @@ export async function listBotRulesets(env: Env): Promise<BotRulesetRow[]> {
 			patternCount: schema.botRulesets.patternCount,
 			updatedAt: schema.botRulesets.updatedAt,
 		})
-		.from(schema.botRulesets);
+		.from(schema.botRulesets)
+		.orderBy(schema.botRulesets.source);
 }
 
 /** Replace a source's ruleset. `patterns` is a JSON array of regex source strings. */

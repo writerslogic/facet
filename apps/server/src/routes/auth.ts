@@ -125,8 +125,9 @@ authRoutes.post(
 	},
 );
 
-// Exchange a magic-link token for a session cookie. Accepts the token in the JSON body (SPA) or a `token`
-// query param (direct link click).
+// Exchange a magic-link token for a session cookie. POST with the token in the JSON body, same-origin
+// only, and deliberately no GET-with-query-param variant: a link scanner's prefetch would spend the
+// single-use token, and a cross-site form post would fixate a session on the victim's browser.
 authRoutes.post(
 	'/verify',
 	requireSameOrigin,
@@ -148,7 +149,9 @@ authRoutes.post(
 			path: '/',
 			maxAge: 30 * 24 * 60 * 60,
 		});
-		return c.json({ user });
+		// IMPORTANT: `user` also carries `sessionEpoch`. The revocation counter is internal state and
+		// is never shipped to a client, so the body is built field by field rather than spread.
+		return c.json({ user: { id: user.id, email: user.email } });
 	},
 );
 

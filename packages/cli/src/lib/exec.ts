@@ -29,30 +29,44 @@ export const EXIT_SPAWN_FAILED = 127;
 /** Real runner: spawns without a shell, so argv is passed verbatim and nothing is word-split. */
 export const spawnRunner: Runner = (command, args, options = {}) =>
 	new Promise((resolve) => {
-		const child = spawn(command, args, {
-			cwd: options.cwd,
-			shell: false,
-			stdio: ['pipe', 'pipe', 'pipe'],
-		});
-		let stdout = '';
-		let stderr = '';
-		child.stdout.setEncoding('utf8');
-		child.stderr.setEncoding('utf8');
-		child.stdout.on('data', (chunk: string) => {
-			stdout += chunk;
-			if (options.stream) process.stdout.write(chunk);
-		});
-		child.stderr.on('data', (chunk: string) => {
-			stderr += chunk;
-			if (options.stream) process.stderr.write(chunk);
-		});
-		child.on('error', (err) => {
-			resolve({ code: EXIT_SPAWN_FAILED, stdout, stderr: err.message });
-		});
-		child.on('close', (code) => {
-			resolve({ code: code ?? 1, stdout, stderr });
-		});
-		// Always close stdin: wrangler treats a non-TTY stdin as non-interactive and skips its
-		// confirmation prompts, which is what we want — every destructive step is confirmed by us first.
-		child.stdin.end(options.stdin ?? '');
+		try {
+			const child = spawn(command, args, {
+				cwd: options.cwd,
+				shell: false,
+				stdio: ['pipe', 'pipe', 'pipe'],
+			});
+			let stdout = '';
+			let stderr = '';
+			child.stdout.setEncoding('utf8');
+			child.stderr.setEncoding('utf8');
+			child.stdout.on('data', (chunk: string) => {
+				stdout += chunk;
+				if (options.stream) process.stdout.write(chunk);
+			});
+			child.stderr.on('data', (chunk: string) => {
+				stderr += chunk;
+				if (options.stream) process.stderr.write(chunk);
+			});
+			child.on('error', (err) => {
+				resolve({ code: EXIT_SPAWN_FAILED, stdout, stderr: err.message });
+			});
+			child.on('close', (code) => {
+				resolve({ code: code ?? 1, stdout, stderr });
+			});
+			// IMPORTANT: a child that exits before draining stdin (wrangler rejecting a flag mid-`secret
+			// put`) makes this write fail with EPIPE, and an unhandled stream 'error' is an uncaught
+			// exception that kills the installer. The child's own exit code is the signal; swallow this.
+			child.stdin.on('error', () => {});
+			// Always close stdin: wrangler treats a non-TTY stdin as non-interactive and skips its
+			// confirmation prompts, which is what we want — every destructive step is confirmed by us first.
+			child.stdin.end(options.stdin ?? '');
+		} catch (err) {
+			// spawn() throws synchronously on an empty command or a null byte in an arg or cwd; that is
+			// the same "could not be spawned" case the 'error' event covers, so report it the same way.
+			resolve({
+				code: EXIT_SPAWN_FAILED,
+				stdout: '',
+				stderr: err instanceof Error ? err.message : String(err),
+			});
+		}
 	});

@@ -30,10 +30,12 @@ export function crudRouter(opts: {
 
 	router.post('/', vValidator('json', schema, validationErrorHook), async (c) => {
 		const body = c.req.valid('json') as Record<string, unknown>;
+		// IMPORTANT: body spreads first so a schema that declares `id` or `created_at` cannot let a
+		// caller choose the primary key or backdate the row.
 		const row = {
+			...body,
 			id: crypto.randomUUID(),
 			created_at: Date.now(),
-			...body,
 		};
 		await db(c.env)
 			.insert(table)

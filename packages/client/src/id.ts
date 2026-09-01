@@ -21,10 +21,17 @@ function randomHex(): string {
 	return out;
 }
 
+// IMPORTANT: only a token this file minted is trusted. localStorage is writable by every other script
+// on the host page, and this value goes to /api/flags/eval as the bucketing key, so an unvalidated
+// read would ship whatever a third party planted there: the cross-site identifier this id must never
+// be. Re-minting also self-heals a stored value past the server's 128-char bound, which otherwise
+// fails every eval for that visitor forever.
+const ID_RE = /^[\da-f]{16}$/;
+
 /** Read (or lazily create) the stable local id. Falls back gracefully without storage. */
 export function localId(): string {
 	const existing = safeGet(STORAGE_KEY);
-	if (existing) return existing;
+	if (existing && ID_RE.test(existing)) return existing;
 	const id = randomHex();
 	safeSet(STORAGE_KEY, id);
 	return id;

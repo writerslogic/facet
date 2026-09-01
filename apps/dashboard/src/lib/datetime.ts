@@ -170,6 +170,24 @@ export function formatIso(ms: number): string {
 }
 
 /**
+ * Format an instant for `<input type="datetime-local">` in the dashboard's selected clock. HTML's
+ * control has no zone field, so UTC values use ISO directly while local values offset the instant
+ * before taking the wall-clock fields. This is the inverse of `parseDateTimeInput` below.
+ */
+export function formatDateTimeInput(ms: number, clock: ClockMode = mode): string {
+	if (!Number.isFinite(ms)) return '';
+	const date = new Date(ms);
+	if (clock === 'utc') return date.toISOString().slice(0, 16);
+	return new Date(ms - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+/** Parse a datetime-local wall clock under the chosen dashboard clock into a unix-ms instant. */
+export function parseDateTimeInput(value: string, clock: ClockMode = mode): number {
+	if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)) return Number.NaN;
+	return clock === 'utc' ? Date.parse(`${value}:00.000Z`) : new Date(value).getTime();
+}
+
+/**
  * A `[start, end)` window as one label, in the active clock and always suffixed with it.
  * `withTime` renders the times too (short windows), otherwise just the days.
  */

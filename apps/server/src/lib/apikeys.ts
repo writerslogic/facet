@@ -32,7 +32,8 @@ export function hashKey(key: string): Promise<string> {
 
 /** Issue a new key for a site. Returns the id and the plaintext key (shown once). One `.batch()`:
  * the key row and its scope rows must land together, or a crashed request between the two inserts
- * would mint a real, usable key with zero granted scopes. */
+ * would mint a real, usable key with zero granted scopes. Scopes are narrowed first: a repeated
+ * scope violates the `(api_key_id, scope)` primary key and would fail the whole issuance. */
 export async function issueKey(
 	env: Env,
 	siteId: string,
@@ -42,6 +43,7 @@ export async function issueKey(
 ): Promise<{ id: string; key: string }> {
 	const key = generateKey();
 	const id = crypto.randomUUID();
+	const granted = narrowScopes(scopes);
 	const client = db(env);
 	const stmts = [
 		client.insert(schema.apiKeys).values({
@@ -52,11 +54,11 @@ export async function issueKey(
 			createdAt: now,
 			lastUsed: null,
 		}),
-		...(scopes.length > 0
+		...(granted.length > 0
 			? [
 					client
 						.insert(schema.apiKeyScopes)
-						.values(scopes.map((scope) => ({ apiKeyId: id, scope }))),
+						.values(granted.map((scope) => ({ apiKeyId: id, scope }))),
 				]
 			: []),
 	];
@@ -66,9 +68,13 @@ export async function issueKey(
 
 /** List a site's keys as public records — never the hash or plaintext. Two queries (keys, then all
  * their scope rows) rather than a join: a key with zero scopes must still appear in the list, which
- * an inner join would drop and a left join would return as one null-scope row to unpack either way. */
+ * an inner join would drop and a left join would return as one null-scope row to unpack either way.
+ * IMPORTANT: the scope query re-derives the site's key ids as a subquery rather than binding the ids
+ * it just read — D1 caps bound parameters per statement, so binding them would make a site's key
+ * count the parameter count and break this endpoint outright once a site accrues enough keys. */
 export async function listKeys(env: Env, siteId: string): Promise<ApiKeyRecord[]> {
-	const keys = await db(env)
+	const client = db(env);
+	const keys = await client
 		.select({
 			id: schema.apiKeys.id,
 			site_id: schema.apiKeys.siteId,
@@ -80,13 +86,16 @@ export async function listKeys(env: Env, siteId: string): Promise<ApiKeyRecord[]
 		.where(eq(schema.apiKeys.siteId, siteId))
 		.orderBy(desc(schema.apiKeys.createdAt));
 	if (keys.length === 0) return [];
-	const scopeRows = await db(env)
+	const scopeRows = await client
 		.select({ apiKeyId: schema.apiKeyScopes.apiKeyId, scope: schema.apiKeyScopes.scope })
 		.from(schema.apiKeyScopes)
 		.where(
 			inArray(
 				schema.apiKeyScopes.apiKeyId,
-				keys.map((k) => k.id),
+				client
+					.select({ id: schema.apiKeys.id })
+					.from(schema.apiKeys)
+					.where(eq(schema.apiKeys.siteId, siteId)),
 			),
 		);
 	const byKey = new Map<string, string[]>();
@@ -107,11 +116,23 @@ export async function keyScopes(env: Env, apiKeyId: string): Promise<ApiKeyScope
 	return narrowScopes(rows.map((r) => r.scope));
 }
 
-/** Revoke a key by id, scoped to its site. Returns whether a row was deleted. */
+/** Revoke a key by id, scoped to its site. Returns whether a row was deleted. One `.batch()`, scope
+ * rows first: `api_key_scopes` has no foreign key to cascade on, so deleting the key alone strands
+ * its scope rows in the table forever. The scope delete re-derives ownership through a subquery
+ * rather than trusting `id`, so a caller passing another site's key id strips nothing. */
 export async function revokeKey(env: Env, id: string, siteId: string): Promise<boolean> {
-	const deleted = await db(env)
-		.delete(schema.apiKeys)
-		.where(and(eq(schema.apiKeys.id, id), eq(schema.apiKeys.siteId, siteId)))
-		.returning({ id: schema.apiKeys.id });
+	const client = db(env);
+	const owned = and(eq(schema.apiKeys.id, id), eq(schema.apiKeys.siteId, siteId));
+	const [, deleted] = await client.batch([
+		client
+			.delete(schema.apiKeyScopes)
+			.where(
+				inArray(
+					schema.apiKeyScopes.apiKeyId,
+					client.select({ id: schema.apiKeys.id }).from(schema.apiKeys).where(owned),
+				),
+			),
+		client.delete(schema.apiKeys).where(owned).returning({ id: schema.apiKeys.id }),
+	]);
 	return deleted.length > 0;
 }

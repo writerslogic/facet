@@ -3,21 +3,34 @@
 // client-facing flag definitions (flag_key + variants) so the browser can bucket locally. No
 // server-side identity is involved — the server only stores aggregate exposure/conversion events.
 
-import { type Experiment, ExperimentSchema, type ExperimentVariant } from '@facet/shared';
+import { type Experiment, ExperimentSchema } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as v from 'valibot';
-import { listActiveExperiments, siteExists } from '../db/catalog.js';
+import { listActiveExperiments, listExperiments, siteExists } from '../db/catalog.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import { requireAdmin } from '../lib/auth.js';
 import { validationErrorHook } from '../lib/http.js';
+import { rateLimit } from '../lib/ratelimit.js';
+import { clientIp } from '../lib/request-meta.js';
 
 const UuidSchema = v.pipe(v.string(), v.uuid());
 
 export const experimentsRoutes = new Hono<AppEnv>();
+
+/** Weak ETag over the served config. experiments carry no `version` column (flags do), so the
+ * validator keys on the payload itself; otherwise a create or delete would leave a cached copy
+ * serving bucketing config the site no longer runs. */
+async function activeEtag(payload: string): Promise<string> {
+	const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(payload));
+	const hex = Array.from(new Uint8Array(digest, 0, 8))
+		.map((b) => b.toString(16).padStart(2, '0'))
+		.join('');
+	return `W/"exp-${hex}"`;
+}
 
 // Public flag config for the browser client. Unauthenticated by design (config, not PII). Must be
 // registered before the admin routes so it is not shadowed by requireAdmin.
@@ -26,15 +39,24 @@ export const experimentsRoutes = new Hono<AppEnv>();
 // secret — the id is embedded in the page's script tag — and the response body stays identical.
 experimentsRoutes.get(
 	'/active',
+	rateLimit((c) => `exp-active:${clientIp(c.req.raw)}`),
 	vValidator('query', v.object({ site_id: UuidSchema }), validationErrorHook),
 	async (c) => {
 		const { site_id: siteId } = c.req.valid('query');
 		if (!(await siteExists(c.env, siteId))) {
 			return c.json({ error: 'not_found' }, 404);
 		}
-		return c.json({
+		const payload = JSON.stringify({
 			experiments: await listActiveExperiments(c.env, siteId),
 		});
+		const etag = await activeEtag(payload);
+		c.header('Cache-Control', 'public, max-age=60');
+		c.header('ETag', etag);
+		if (c.req.header('If-None-Match') === etag) {
+			return c.body(null, 304);
+		}
+		c.header('Content-Type', 'application/json; charset=UTF-8');
+		return c.body(payload);
 	},
 );
 
@@ -44,6 +66,11 @@ experimentsRoutes.post(
 	vValidator('json', ExperimentSchema, validationErrorHook),
 	async (c) => {
 		const body = c.req.valid('json');
+		// experiments.site_id carries no foreign key, so an unchecked insert orphans a row that
+		// only ever surfaces as an experiment no site can read.
+		if (!(await siteExists(c.env, body.site_id))) {
+			return c.json({ error: 'not_found' }, 404);
+		}
 		const experiment: Experiment = {
 			id: crypto.randomUUID(),
 			site_id: body.site_id,
@@ -70,21 +97,7 @@ experimentsRoutes.post(
 
 experimentsRoutes.get('/', requireAdmin, async (c) => {
 	const siteId = c.req.query('site_id') ?? '';
-	const rows = await db(c.env)
-		.select()
-		.from(schema.experiments)
-		.where(eq(schema.experiments.site_id, siteId))
-		.orderBy(desc(schema.experiments.created_at));
-	const experiments: Experiment[] = rows.map((r) => ({
-		id: r.id,
-		site_id: r.site_id,
-		name: r.name,
-		flag_key: r.flag_key,
-		variants: JSON.parse(r.variants) as ExperimentVariant[],
-		active: r.active === 1,
-		created_at: r.created_at,
-	}));
-	return c.json({ experiments });
+	return c.json({ experiments: await listExperiments(c.env, siteId) });
 });
 
 experimentsRoutes.delete('/:id', requireAdmin, async (c) => {

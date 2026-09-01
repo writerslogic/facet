@@ -54,9 +54,11 @@ const contactFields = {
  */
 const ContactFieldsSchema = v.object(contactFields);
 
+const EmailSchema = v.pipe(v.string(), v.email());
+
 const emailIsWellFormed = v.check(
 	(b: v.InferOutput<typeof ContactFieldsSchema>) =>
-		!b.email?.trim() || v.safeParse(v.pipe(v.string(), v.email()), b.email).success,
+		!b.email?.trim() || v.safeParse(EmailSchema, b.email).success,
 	'invalid_email',
 );
 
@@ -139,7 +141,7 @@ export const COMPANY_DOMAIN_MAX_LEN = 253;
  * on raw length would fail the input this field exists to accept. */
 const COMPANY_DOMAIN_INPUT_MAX_LEN = 2048;
 
-const HOSTNAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
+const HOSTNAME = /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$/;
 
 /**
  * The stored form of a company domain: lowercased, with the scheme, any path, any port and a
@@ -217,9 +219,20 @@ export const DealStageSchema = v.picklist([
 
 export const DEAL_NOTES_MAX_LEN = 4000;
 
+const SAFE_INT_MAX = Number.MAX_SAFE_INTEGER;
+
 /** Three-letter ISO 4217 code, uppercased on the wire so `USD` and `usd` are the same currency rather
- * than two buckets in a pipeline total. */
-const CurrencySchema = v.pipe(v.string(), v.length(3), v.toUpperCase());
+ * than two buckets in a pipeline total.
+ *
+ * IMPORTANT: checked on the alphabet, and after the uppercase. A bare `length(3)` over the raw string
+ * accepted `'   '`, which the data layer's blank-to-NULL rule then stored as a priced deal with no
+ * currency — the one state `moneyIsPaired` exists to forbid, and one the pipeline summary drops
+ * outright. It also accepted `'ßab'`, whose uppercase is four characters long. */
+const CurrencySchema = v.pipe(
+	v.string(),
+	v.toUpperCase(),
+	v.regex(/^[A-Z]{3}$/, 'invalid_currency'),
+);
 
 const dealFields = {
 	name: v.pipe(v.string(), v.maxLength(200)),
@@ -227,11 +240,15 @@ const dealFields = {
 	contact_id: optionalText(64),
 	stage: v.optional(DealStageSchema),
 	/** Cents. Whole dollars/pounds/etc times 100, matching how every other money amount in this
-	 * ecosystem (Stripe, DEVPLAN's planned ecommerce tracking) avoids float rounding. */
-	value: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+	 * ecosystem (Stripe, DEVPLAN's planned ecommerce tracking) avoids float rounding. Capped where
+	 * that stops being true: past 2^53 a JS integer no longer round-trips, so an unbounded `value`
+	 * would put a lossy float into the column the pipeline SUMs. */
+	value: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(SAFE_INT_MAX))),
 	currency: v.optional(CurrencySchema),
 	/** Unix ms, matching every other timestamp on the wire. */
-	expected_close_date: v.optional(v.pipe(v.number(), v.integer(), v.minValue(0))),
+	expected_close_date: v.optional(
+		v.pipe(v.number(), v.integer(), v.minValue(0), v.maxValue(SAFE_INT_MAX)),
+	),
 	notes: optionalText(DEAL_NOTES_MAX_LEN),
 	owner_user_id: optionalText(64),
 };

@@ -165,9 +165,9 @@ function toDistribution(
  * SQLite — no row ever crosses into JS, which is both the performance property and the privacy one.
  *
  * INDEX: the range predicate is served by `idx_sessions_site_started (site_id, started_at)`. The
- * ranking still needs a sort of the matched rows over `duration_ms` / `pageviews`, which that index
- * does not cover; see the note on `sessionDistribution` in the docs for the covering index that
- * would remove it.
+ * two windows order by `duration_ms` and by `pageviews` respectively, so no single index supplies
+ * both orderings and the sort of the matched rows is unavoidable. Widening that index to carry the
+ * two metric columns would save only the table lookup, never the sort.
  */
 export async function sessionDistribution(
 	env: Env,

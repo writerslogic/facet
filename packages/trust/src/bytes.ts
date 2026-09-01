@@ -39,12 +39,17 @@ export function fromHex(hex: string): Uint8Array {
 	return out;
 }
 
-/** Byte-equality of two arrays. */
+/** Byte-equality of two arrays. Constant time in the contents once the lengths match, so a caller
+ * comparing a digest, MAC or signature cannot have it recovered byte-by-byte through timing. */
 export function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
 	if (a.length !== b.length) return false;
-	for (let k = 0; k < a.length; k++) if (a[k] !== b[k]) return false;
-	return true;
+	let diff = 0;
+	for (let k = 0; k < a.length; k++) diff |= (a[k] as number) ^ (b[k] as number);
+	return diff === 0;
 }
+
+const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
+const BASE64URL_RE = /^[A-Za-z0-9_-]*={0,2}$/;
 
 /** The binary string (`String.fromCharCode` per byte) used by btoa. */
 function toBinaryString(bytes: Uint8Array): string {
@@ -58,8 +63,11 @@ export function bytesToBase64(bytes: Uint8Array): string {
 	return btoa(toBinaryString(bytes));
 }
 
-/** Standard base64 decode to bytes. */
+/** Standard base64 decode to bytes. Validated before `atob` because the WHATWG forgiving-base64
+ * decode strips ASCII whitespace and tolerates a bad length, which would let one signature or key
+ * field have many accepted spellings. Same rule as {@link fromHex}: malformed must fail, not decode. */
 export function base64ToBytes(b64: string): Uint8Array {
+	if (b64.length % 4 !== 0 || !BASE64_RE.test(b64)) throw new Error('invalid base64 string');
 	const bin = atob(b64);
 	const out = new Uint8Array(bin.length);
 	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
@@ -71,8 +79,10 @@ export function bytesToBase64url(bytes: Uint8Array): string {
 	return bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-/** base64url decode to bytes. */
+/** base64url decode to bytes. The alphabet is checked before the mapping to standard base64, so a
+ * value carrying `+` or `/` is rejected rather than silently accepted as its base64url twin. */
 export function base64urlToBytes(b64u: string): Uint8Array {
+	if (!BASE64URL_RE.test(b64u)) throw new Error('invalid base64url string');
 	const b64 = b64u.replace(/-/g, '+').replace(/_/g, '/');
 	return base64ToBytes(b64.padEnd(Math.ceil(b64.length / 4) * 4, '='));
 }

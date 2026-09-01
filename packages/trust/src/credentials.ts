@@ -4,6 +4,7 @@
 // aggregate stats snapshot for a site+range (the DATASET). Builders only assemble the document; the
 // caller signs it with `issueCredential`.
 
+import type { EatClaims } from './rats.js';
 import type { VerifiableCredential } from './vc.js';
 import { VC_V2_CONTEXT } from './vc.js';
 
@@ -36,8 +37,10 @@ export interface PrivacyAttestationInput {
 	deployment: DeploymentProperties;
 	/** Optional DPV (Data Privacy Vocabulary) claims, embedded by the P3.7 manifest layer. */
 	dpv?: Record<string, unknown>;
-	/** Optional reference to a RATS process-evidence EAT (P4.10): its profile + content-ref digest. */
-	evidence?: { profile: string; contentRef: { alg: string; digest: string } };
+	/** Optional reference to a RATS process-evidence EAT (P4.10): its profile + content-ref digest.
+	 * IMPORTANT: `contentRef` reuses the EAT's own claim type, so the digest algorithm stays pinned to
+	 * what rats.ts emits rather than widening to any `string` a caller supplies. */
+	evidence?: { profile: string; contentRef: EatClaims['content-ref'] };
 	validUntil?: string;
 }
 

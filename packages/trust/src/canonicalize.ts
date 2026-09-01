@@ -5,15 +5,14 @@
 // finite JSON number, exponent forms included (see canonicalize.test.ts §3.2.2/§3.2.3 vectors).
 // Reused for detached-JWS export proofs and the eddsa-jcs Data Integrity suite.
 
-import { sha256, toHex } from './bytes.js';
+import { sha256, toHex, utf8 } from './bytes.js';
 
 /** Max nesting depth. Comfortably exceeds any legitimate VC/SCITT/RATS document while staying an order
  * of magnitude below the engine's stack limit, so adversarial nesting throws a deterministic domain
  * error here rather than an engine stack overflow deep inside recursion. */
 const MAX_DEPTH = 256;
 
-/** Canonicalize a JSON value to its RFC 8785 string form. Rejects non-finite numbers. */
-export function canonicalizeJson(value: unknown, depth = 0): string {
+function canonicalize(value: unknown, depth: number): string {
 	if (depth > MAX_DEPTH) throw new Error('cannot canonicalize: nesting too deep');
 	if (value === null) return 'null';
 	if (typeof value === 'number') {
@@ -22,24 +21,28 @@ export function canonicalizeJson(value: unknown, depth = 0): string {
 	}
 	if (typeof value === 'boolean' || typeof value === 'string') return JSON.stringify(value);
 	if (Array.isArray(value)) {
-		return `[${value.map((v) => canonicalizeJson(v, depth + 1)).join(',')}]`;
+		return `[${value.map((v) => canonicalize(v, depth + 1)).join(',')}]`;
 	}
 	if (typeof value === 'object') {
 		const obj = value as Record<string, unknown>;
 		const keys = Object.keys(obj)
 			.filter((k) => obj[k] !== undefined)
 			.sort();
-		const members = keys.map(
-			(k) => `${JSON.stringify(k)}:${canonicalizeJson(obj[k], depth + 1)}`,
-		);
+		const members = keys.map((k) => `${JSON.stringify(k)}:${canonicalize(obj[k], depth + 1)}`);
 		return `{${members.join(',')}}`;
 	}
 	throw new Error(`cannot canonicalize value of type ${typeof value}`);
 }
 
+/** Canonicalize a JSON value to its RFC 8785 string form. Rejects non-finite numbers.
+ * YAGNI: depth is not a parameter; a caller-supplied one could disable MAX_DEPTH. */
+export function canonicalizeJson(value: unknown): string {
+	return canonicalize(value, 0);
+}
+
 /** Canonicalize a JSON value to UTF-8 bytes (the input to signing/hashing). */
 export function canonicalizeBytes(value: unknown): Uint8Array {
-	return new TextEncoder().encode(canonicalizeJson(value));
+	return utf8(canonicalizeJson(value));
 }
 
 /** SHA-256 of a value's canonical (RFC 8785) bytes — the "hash the canonical form" idiom used across

@@ -17,20 +17,13 @@ const CACHE_TTL_MS = 60_000;
 /**
  * Longest prefix of a user-agent the refreshed patterns ever see.
  *
- * IMPORTANT: this is the ReDoS bound. A `user-agent` header is attacker-controlled and can be
- * kilobytes; catastrophic backtracking is exponential in subject length, so without this an operator
- * ruleset that slips past the shape screen turns one request into unbounded Worker CPU. Real
- * user-agents run well under 512 chars, so a bot hiding past the cut would have to be unlike any
- * real browser — which the compiled-in `isbot` floor already catches.
+ * IMPORTANT: a `user-agent` header is attacker-controlled and can be kilobytes. This caps the
+ * subject, which caps but does not eliminate backtracking cost — 512 chars is already far past the
+ * point where a catastrophic pattern stalls, so the shape screen below is what has to reject those.
+ * Real user-agents run well under the cut, and a bot hiding past it would have to be unlike any real
+ * browser, which the compiled-in `isbot` floor already catches.
  */
 const MAX_MATCH_LENGTH = 512;
-
-// ReDoS screen: a quantified group whose body itself ends in an unbounded quantifier — `(a+)+`,
-// `(?:a*)*`, `(a{1,}){2,}`. It is a cheap filter, not the bound: it misses `((a+))+` (the body class
-// excludes `(`) and overlapping alternations like `(a|a)+` entirely. Pattern-shape screening is
-// whack-a-mole, so the actual guarantee is MAX_MATCH_LENGTH below — backtracking blows up in the
-// length of the SUBJECT, and bounding that caps the whole loop at O(patterns) regardless of shape.
-const NESTED_QUANTIFIER = /\((?:[^()\\]|\\.)*(?:[+*]|\{\d+,\d*\})\)(?:[+*]|\{\d+,\d*\})/;
 
 /** Reference human user-agent. Any refreshed pattern matching it is over-broad and is dropped. */
 const CANARY_UA =
@@ -64,9 +57,68 @@ export function validateRulesetPayload(raw: unknown): string[] | null {
 	return out;
 }
 
-/** True for a pattern whose shape makes catastrophic backtracking plausible. */
+function isDigit(ch: string | undefined): boolean {
+	return ch !== undefined && ch >= '0' && ch <= '9';
+}
+
+/** Width of an unbounded quantifier at `at`, or 0. A fixed `{n}` repeat cannot backtrack, so it is
+ * not one; `{n,m}` is, because the screen errs toward rejecting. */
+function quantifierWidth(source: string, at: number): number {
+	const ch = source[at];
+	if (ch === '+' || ch === '*') return 1;
+	if (ch !== '{') return 0;
+	let j = at + 1;
+	const firstDigit = j;
+	while (isDigit(source[j])) j++;
+	if (j === firstDigit || source[j] !== ',') return 0;
+	j++;
+	while (isDigit(source[j])) j++;
+	return source[j] === '}' ? j + 1 - at : 0;
+}
+
+// ReDoS screen: reject a group repeated without an upper bound whose body can itself match a
+// variable number of characters — `(a+)+`, `(?:a*)*`, `(a{1,}){2,}`, `((a+))+`. Tracking nesting on
+// a stack is what catches the last of those; a single regex over the source cannot, because the
+// inner group's parentheses break any body class it can express. Overlapping alternations like
+// `(a|a)+` are still missed, so this is a filter and not a proof, and MAX_MATCH_LENGTH above bounds
+// what a surviving pattern is ever run against.
 function isRedosShaped(source: string): boolean {
-	return NESTED_QUANTIFIER.test(source);
+	const repeats: boolean[] = [false];
+	let i = 0;
+	while (i < source.length) {
+		const ch = source[i];
+		if (ch === '\\') {
+			i += 2;
+			continue;
+		}
+		if (ch === '[') {
+			i++;
+			while (i < source.length && source[i] !== ']') i += source[i] === '\\' ? 2 : 1;
+			i++;
+			continue;
+		}
+		if (ch === '(') {
+			repeats.push(false);
+			i++;
+			continue;
+		}
+		if (ch === ')') {
+			const body = repeats.length > 1 ? repeats.pop() === true : false;
+			const width = quantifierWidth(source, i + 1);
+			if (width > 0 && body) return true;
+			if (body || width > 0) repeats[repeats.length - 1] = true;
+			i += 1 + width;
+			continue;
+		}
+		const width = quantifierWidth(source, i);
+		if (width > 0) {
+			repeats[repeats.length - 1] = true;
+			i += width;
+			continue;
+		}
+		i++;
+	}
+	return false;
 }
 
 /**
@@ -133,13 +185,20 @@ export async function ensureBotPatterns(env: Env, now: number = Date.now()): Pro
 		cache = { ...cache, loadedAt: now };
 		return;
 	}
+	// IMPORTANT: the cap is applied while merging, not after. Each row is bounded at MAX_PATTERNS but
+	// the row count is not, so accumulating every row first and slicing sizes the merge off stored
+	// data rather than off the bound.
 	const sources: string[] = [];
 	for (const row of rows) {
-		const parsed = safeParse(row.patterns);
-		const validated = validateRulesetPayload(parsed);
-		if (validated) sources.push(...validated);
+		const validated = validateRulesetPayload(safeParse(row.patterns));
+		if (!validated) continue;
+		for (const pattern of validated) {
+			if (sources.length >= MAX_PATTERNS) break;
+			sources.push(pattern);
+		}
+		if (sources.length >= MAX_PATTERNS) break;
 	}
-	primeBotPatterns(sources.slice(0, MAX_PATTERNS), key, now);
+	primeBotPatterns(sources, key, now);
 }
 
 function safeParse(text: string): unknown {

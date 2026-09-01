@@ -97,6 +97,16 @@ export async function enforceRetention(env: Env, now: number): Promise<void> {
 	await purge(() =>
 		db(env).delete(schema.authTokens).where(lt(schema.authTokens.expiresAt, now)),
 	);
+	// The analytics DB's counterpart to the CRM audit log: the one alerting table that grows on its
+	// own — a row per (destination, dedupe key) forever, plus a `last_error` string an operator's own
+	// endpoint controls — and nothing else deletes from it.
+	//
+	// Safe on the raw window because both dedupe keys are time-scoped (`anomalyDedupeKey`'s bucket,
+	// `metricAlertDedupeKey`'s window start), so a purged row's window is itself older than the cutoff
+	// and can never be re-evaluated into a duplicate send.
+	await purge(() =>
+		db(env).delete(schema.alertDeliveries).where(lt(schema.alertDeliveries.created_at, cutoff)),
+	);
 
 	if (errors.length > 0) {
 		// log.error only reads `.message`/`.name` off the thrown error — AggregateError.errors is

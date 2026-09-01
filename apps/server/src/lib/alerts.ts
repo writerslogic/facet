@@ -203,9 +203,10 @@ async function metricRuleDestination(
 }
 
 /**
- * Evaluate anomalies and metric rules for every site that has at least one enabled destination,
- * then deliver the ones that clear each destination's severity threshold. Sites with no destinations are never queried, so a
- * deployment that has not configured alerting pays one indexed SELECT per hour and nothing else.
+ * Evaluate anomalies and metric rules for every site that has at least one enabled destination, then
+ * deliver the ones that clear each destination's severity threshold. Sites with no destinations are
+ * never queried, so a deployment that has not configured alerting costs one SELECT per hour.
+ * OPTIMIZE: that SELECT scans — alert_destinations has no index leading with `enabled`.
  */
 export async function runAlerts(env: Env, now: number, fetchImpl?: FetchLike): Promise<void> {
 	const destinations = await enabledDestinations(env);

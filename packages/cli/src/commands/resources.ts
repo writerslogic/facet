@@ -42,7 +42,11 @@ function client(values: Values, fetchImpl: FetchJson): AdminClient {
 }
 
 function emitJson(value: unknown): number {
-	process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
+	const json = JSON.stringify(value, null, 2);
+	if (json === undefined) {
+		throw new Error('unexpected API response: no data to emit.');
+	}
+	process.stdout.write(`${json}\n`);
 	return 0;
 }
 
@@ -405,9 +409,24 @@ const GROUPS: Record<string, (argv: string[], fetchImpl: FetchJson) => Promise<n
 	experiments,
 };
 
+// IMPORTANT: `command` is argv[0]. `in`/bare indexing walks Object.prototype, so `facet toString` or
+// `facet constructor` resolved a prototype member as the handler and returned it as the exit code.
+function group(
+	command: string,
+): ((argv: string[], fetchImpl: FetchJson) => Promise<number>) | undefined {
+	return Object.hasOwn(GROUPS, command) ? GROUPS[command] : undefined;
+}
+
 /** True if `command` names a resource group handled here. */
 export function isResourceCommand(command: string): boolean {
-	return command in GROUPS;
+	return group(command) !== undefined;
+}
+
+function isParseArgsError(err: unknown): err is Error {
+	return (
+		err instanceof Error &&
+		String((err as { code?: unknown }).code).startsWith('ERR_PARSE_ARGS_')
+	);
 }
 
 /** Dispatch a resource group command. Maps UsageError / request failures to a nonzero exit. */
@@ -416,7 +435,7 @@ export async function runResource(
 	argv: string[],
 	fetchImpl: FetchJson = fetchJson,
 ): Promise<number> {
-	const handler = GROUPS[command];
+	const handler = group(command);
 	if (!handler) {
 		printError(`Unknown resource command: ${command}`);
 		return 1;
@@ -424,7 +443,7 @@ export async function runResource(
 	try {
 		return await handler(argv, fetchImpl);
 	} catch (err) {
-		if (err instanceof UsageError) {
+		if (err instanceof UsageError || isParseArgsError(err)) {
 			printError(err.message);
 			return 1;
 		}

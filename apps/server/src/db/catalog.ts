@@ -16,23 +16,41 @@ import type {
 } from '@facet/shared';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import type { Env } from '../env.js';
+import { chunked } from '../lib/constants.js';
 import { createLogger } from '../lib/log.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
 
-/** Parse a stored JSON column, or undefined if the row is corrupt. A single malformed row must
- * skip, not fail, the whole list — logged so silent corruption stays visible. */
-function parseJsonColumn<T>(raw: string, siteId: string, id: string, field: string): T | undefined {
+/** Parse a stored JSON array column, or undefined if the row is corrupt. A single malformed row must
+ * skip, not fail, the whole list — logged so silent corruption stays visible.
+ * IMPORTANT: `JSON.parse` accepts `null`/`42`/`{}`, and a non-array reaches consumers that spread or
+ * index it (`evaluateFlag` spreads `rules`), turning a skippable row into a 500. */
+function parseJsonColumn<T extends unknown[]>(
+	raw: string,
+	siteId: string,
+	id: string,
+	field: string,
+): T | undefined {
+	let parsed: unknown;
 	try {
-		return JSON.parse(raw) as T;
+		parsed = JSON.parse(raw);
 	} catch (err) {
-		createLogger({ component: 'catalog' }).error('catalog_json_parse_failed', err, {
-			site_id: siteId,
-			id,
-			field,
-		});
+		logParseFailure(err, siteId, id, field);
 		return undefined;
 	}
+	if (!Array.isArray(parsed)) {
+		logParseFailure(new Error('not_an_array'), siteId, id, field);
+		return undefined;
+	}
+	return parsed as T;
+}
+
+function logParseFailure(err: unknown, siteId: string, id: string, field: string): void {
+	createLogger({ component: 'catalog' }).error('catalog_json_parse_failed', err, {
+		site_id: siteId,
+		id,
+		field,
+	});
 }
 
 /** Whether a site row exists. Lets a public read 404 an unknown site instead of serving an empty
@@ -232,10 +250,27 @@ export async function getEvalFlags(
 	siteId: string,
 	keys?: string[],
 ): Promise<FlagConfig[]> {
-	const where =
-		keys && keys.length > 0
-			? and(eq(schema.flags.site_id, siteId), inArray(schema.flags.flag_key, keys))
-			: eq(schema.flags.site_id, siteId);
-	const rows = await db(env).select().from(schema.flags).where(where);
+	const rows: FlagRow[] = [];
+	if (keys && keys.length > 0) {
+		// IMPORTANT: `FlagEvalSchema` caps `keys` at 100 and `site_id` binds one more, so an unchunked
+		// `IN (...)` sits one over D1's 100-parameter ceiling and the whole evaluation fails.
+		for (const batch of chunked([...new Set(keys)])) {
+			rows.push(
+				...(await db(env)
+					.select()
+					.from(schema.flags)
+					.where(
+						and(
+							eq(schema.flags.site_id, siteId),
+							inArray(schema.flags.flag_key, batch),
+						),
+					)),
+			);
+		}
+	} else {
+		rows.push(
+			...(await db(env).select().from(schema.flags).where(eq(schema.flags.site_id, siteId))),
+		);
+	}
 	return rows.map(toFlagRecord).filter((f): f is FlagRecord => f !== undefined);
 }

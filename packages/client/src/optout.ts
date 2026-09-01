@@ -15,10 +15,13 @@ const memoryStore = new Map<string, string>();
 export function safeGet(key: string): string | null {
 	try {
 		const v = localStorage.getItem(key);
-		return v === null ? (memoryStore.has(key) ? (memoryStore.get(key) as string) : null) : v;
+		// IMPORTANT: a host page may shim localStorage with a no-op whose getItem returns undefined.
+		// Treating that as a hit hands id.ts a fresh bucketing key on every call, so require a string.
+		if (typeof v === 'string') return v;
 	} catch {
-		return memoryStore.has(key) ? (memoryStore.get(key) as string) : null;
+		// Storage blocked/unavailable: fall through to the in-memory mirror below.
 	}
+	return memoryStore.get(key) ?? null;
 }
 
 /** Write a key to localStorage, mirroring to the in-memory store and never throwing. */
@@ -73,14 +76,15 @@ function scriptOptOut(): boolean {
 /**
  * Whether the visitor is opted out of INDIVIDUAL tracking / personalization (experiments, flags).
  * Precedence (highest first):
- *   1. localStorage['facet.optout'] explicit value ('1'/'true' out, '0'/'false' in) — the
+ *   1. localStorage['facet.optout'] explicit value ('1'/'true' out, '0'/'false' in, matched
+ *      case-insensitively because docs/usage.md tells visitors to set it by hand) — the
  *      visitor's persistent choice, which OVERRIDES DNT because it is deliberate and per-visitor.
  *   2. data-facet-optout script attribute.
  *   3. Do-Not-Track and Global Privacy Control browser signals.
  *   4. Default: opted in.
  */
 export function isOptedOut(): boolean {
-	const stored = safeGet(OPTOUT_KEY);
+	const stored = safeGet(OPTOUT_KEY)?.toLowerCase();
 	if (stored === '1' || stored === 'true') return true;
 	if (stored === '0' || stored === 'false') return false;
 	if (scriptOptOut()) return true;
@@ -96,7 +100,7 @@ export function isOptedOut(): boolean {
  * (the Plausible/Fathom model). An explicit localStorage opt-in ('0'/'false') is honored as opted-in.
  */
 export function isExplicitlyOptedOut(): boolean {
-	const stored = safeGet(OPTOUT_KEY);
+	const stored = safeGet(OPTOUT_KEY)?.toLowerCase();
 	if (stored === '1' || stored === 'true') return true;
 	if (stored === '0' || stored === 'false') return false;
 	return scriptOptOut();

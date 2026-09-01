@@ -3,7 +3,7 @@
 // SESSION_TIMEOUT_MS. Session ids are deterministic (sha256 of site|visitor|startedAt) so a
 // re-run upserts identical rows — idempotent.
 
-import { and, asc, desc, eq, gte, lt } from 'drizzle-orm';
+import { and, asc, eq, gte, lt } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
@@ -35,20 +35,23 @@ const BACKWARD_RESOLVE_FLOOR_MS = 3 * DAY_MS;
 
 /** A day-window query truncates a spanning session at whichever event happens to fall inside the
  * window — not necessarily its true start, since a chain of sub-timeout gaps can push the real start
- * arbitrarily further back (grouping is transitive). Walk backward one hop at a time — each hop only
- * looks inside the timeout danger zone, so a genuine >timeout gap terminates it — until the true
- * start is found or the safety floor is hit. Returns the earlier rows to prepend, oldest first. */
+ * arbitrarily further back (grouping is transitive). Walk backward one SESSION_TIMEOUT_MS window at a
+ * time until the true start is found or the safety floor is hit; every event inside such a window is
+ * under the timeout from every other, so the whole window joins the session in one round-trip and a
+ * genuine >timeout gap returns it empty. PERF: per-window, not per-event — resolving one event per
+ * query made the walk cost a D1 round-trip per event, unbounded under a dense (attacker-supplied)
+ * chain, since the floor bounds elapsed time and not hop count. Rows to prepend, oldest first. */
 async function resolveSpanningStart(
 	env: Env,
 	siteId: string,
 	visitorHash: string,
 	truncatedFirst: EventRow,
 ): Promise<EventRow[]> {
-	const prefix: EventRow[] = [];
+	const hops: EventRow[][] = [];
 	let boundary = truncatedFirst.createdAt;
 	const floor = boundary - BACKWARD_RESOLVE_FLOOR_MS;
 	for (;;) {
-		const [prev] = (await db(env)
+		const hop = (await db(env)
 			.select(EVENT_COLUMNS)
 			.from(schema.events)
 			.where(
@@ -59,13 +62,14 @@ async function resolveSpanningStart(
 					lt(schema.events.createdAt, boundary),
 				),
 			)
-			.orderBy(desc(schema.events.createdAt))
-			.limit(1)) as EventRow[];
-		if (!prev) return prefix;
-		prefix.unshift(prev);
-		boundary = prev.createdAt;
-		if (boundary <= floor) return prefix;
+			.orderBy(asc(schema.events.createdAt))) as EventRow[];
+		const earliest = hop[0];
+		if (!earliest) break;
+		hops.push(hop);
+		boundary = earliest.createdAt;
+		if (boundary <= floor) break;
 	}
+	return hops.reverse().flat();
 }
 
 /** Distinct sites with any event in the query window — the tenants that need sessionizing this run. */
@@ -85,7 +89,11 @@ async function activeSiteIds(env: Env, queryStart: number, dayEnd: number): Prom
  * (`last.createdAt < dayStart`) is skipped — the previous day's own run already wrote it. A group
  * whose start lands inside the lookback is truncation-prone, so `resolveSpanningStart` finds its true
  * start first; that resolved `startedAt` also decides the row's `dayKey`, so a spanning session is
- * attributed to the day it began, not the day it happens to end. */
+ * attributed to the day it began, not the day it happens to end.
+ *
+ * IMPORTANT: the merge can only fire where the visitor hash survives midnight — a pseudonymous or
+ * identified site on a week/month salt window. Under the default Tier-0 daily rotation the hash
+ * changes at the boundary by construction, so the lookback only ever reaches the skip above. */
 async function buildSessionsForSite(
 	env: Env,
 	siteId: string,

@@ -149,6 +149,49 @@ alertsRoutes.get('/rules', async (c) => {
 	return c.json({ metric_alert_rules: rows.map(toPublicRule) });
 });
 
+/** Read bounds for the delivery log: the recent tail is what diagnoses a broken endpoint, and an
+ * unbounded read of an append-only audit table is not something a query string may ask for. */
+const DELIVERIES_DEFAULT_LIMIT = 50 as const;
+const DELIVERIES_MAX_LIMIT = 200 as const;
+
+/** Public view of one delivery attempt. `last_error` is a fixed transport code (or a binding's own
+ * message), never anything request-derived, so it is safe to surface on this admin-only route. */
+function toPublicDelivery(row: typeof schema.alertDeliveries.$inferSelect) {
+	return {
+		id: row.id,
+		destination_id: row.destination_id,
+		site_id: row.site_id,
+		dedupe_key: row.dedupe_key,
+		severity: row.severity as AlertSeverity,
+		status: row.status,
+		attempts: row.attempts,
+		last_error: row.last_error,
+		created_at: row.created_at,
+		updated_at: row.updated_at,
+	};
+}
+
+// IMPORTANT: without this read the delivery outcome is written and never surfaced, so a destination
+// that has been rejecting every POST for a week produces no operator-visible signal anywhere.
+alertsRoutes.get('/deliveries', async (c) => {
+	const siteId = c.req.query('site_id') ?? '';
+	const limitRaw = c.req.query('limit');
+	// KISS: an unusable limit falls back to the default instead of 400ing — the bound exists to cap
+	// the read, and none of the sibling handlers carry a query-parameter error taxonomy to join.
+	const parsed = limitRaw === undefined ? DELIVERIES_DEFAULT_LIMIT : Number(limitRaw);
+	const limit =
+		Number.isFinite(parsed) && parsed >= 1
+			? Math.min(Math.trunc(parsed), DELIVERIES_MAX_LIMIT)
+			: DELIVERIES_DEFAULT_LIMIT;
+	const rows = await db(c.env)
+		.select()
+		.from(schema.alertDeliveries)
+		.where(eq(schema.alertDeliveries.site_id, siteId))
+		.orderBy(desc(schema.alertDeliveries.created_at))
+		.limit(limit);
+	return c.json({ alert_deliveries: rows.map(toPublicDelivery) });
+});
+
 alertsRoutes.delete('/rules/:id', async (c) => {
 	const siteId = c.req.query('site_id') ?? '';
 	const deleted = await db(c.env)

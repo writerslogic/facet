@@ -60,6 +60,15 @@ export function sliceStroke(hue: number, kind: TreeKind, active: boolean): strin
 
 export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
+/** Fit `label` into `px` at an assumed `charPx` per character, ellipsised, or null when even three
+ * characters will not fit. Estimate wide rather than tight: a label that overflows its own box bleeds
+ * over the neighbouring slice. */
+export const trim = (label: string, px: number, charPx: number): string | null => {
+	const room = Math.floor(px / charPx);
+	if (room < 3) return null;
+	return label.length <= room ? label : `${label.slice(0, room - 1)}…`;
+};
+
 /**
  * Drive a layout from wherever it currently is to wherever `key` just moved it.
  *

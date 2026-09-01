@@ -57,7 +57,9 @@ export async function enabledDestinations(env: Env): Promise<StoredDestination[]
 		.all();
 }
 
-/** Every enabled threshold rule across all sites, in one indexed query. */
+/** Every enabled threshold rule across all sites, in one query.
+ * OPTIMIZE: idx_metric_alert_rules_site leads with site_id, so a rule scan is the plan here;
+ * config-sized table, once an hour. An index leading with `enabled` would seek. */
 export async function enabledMetricAlertRules(env: Env): Promise<StoredMetricAlertRule[]> {
 	return db(env)
 		.select()
@@ -152,8 +154,10 @@ export async function markDelivered(env: Env, deliveryId: string, now: number): 
 		.where(eq(schema.alertDeliveries.id, deliveryId));
 }
 
-/** Record a failed delivery so the endpoint's brokenness is visible rather than silent. Retried on a
- * later cron until ALERT_MAX_ATTEMPTS. */
+/** Record a failed delivery so the endpoint's brokenness is visible rather than silent.
+ * FIXME: there is no cross-tick retry. Every dedupe key in lib/alerts.ts embeds the bucket or
+ * windowStart, so the next cron mints a new key and never re-presents this row; only a same-tick
+ * stale-pending reclaim reaches the retry branch above. */
 export async function markFailed(
 	env: Env,
 	deliveryId: string,

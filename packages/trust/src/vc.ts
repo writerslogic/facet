@@ -136,7 +136,9 @@ export async function verifyCredential(
 	if (proof.type !== 'DataIntegrityProof' || proof.cryptosuite !== CRYPTOSUITE) {
 		return fail(`unsupported proof (${proof.type}/${proof.cryptosuite})`);
 	}
-	if (!proof.proofValue?.startsWith('z')) return fail('proofValue is not base58btc multibase');
+	if (typeof proof.proofValue !== 'string' || !proof.proofValue.startsWith('z')) {
+		return fail('proofValue is not base58btc multibase');
+	}
 
 	let jwk: { kty: string; crv?: string; x?: string };
 	try {

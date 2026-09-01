@@ -1,7 +1,7 @@
 // `/.well-known/*` documents served directly from the Worker (not the static-asset binding) so they
 // carry correct content types, caching, and request-derived values (origin, expiry). Mounted before
-// the SPA catch-all in `app.ts`. security.txt (RFC 9116) is the first document; trust/provenance
-// documents (JWKS, DID) are added here as later phases land.
+// the SPA catch-all in `app.ts`. Serves the DPV privacy manifest, the JWKS, the did:web document and
+// its DIF domain-linkage credential, and the RFC 9116 security.txt.
 
 import {
 	buildDidConfiguration,

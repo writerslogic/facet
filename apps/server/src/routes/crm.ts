@@ -103,6 +103,19 @@ import { crmAuditRetentionDays } from '../lib/retention.js';
 
 export const crmRoutes = new Hono<AppEnv>();
 
+// IMPORTANT: these are the only responses in the deployment carrying names, emails and phone numbers,
+// and nothing upstream sets a caching directive — so a shared cache, a disk cache or a bfcache entry
+// is free to keep one and hand it to whoever reaches the machine next. Set in `finally` for the same
+// reason app.ts sets nosniff there: a thrown ApiError unwinds past a bare post-`next()` line before
+// the error response is ever built.
+crmRoutes.use('*', async (c, next) => {
+	try {
+		await next();
+	} finally {
+		c.header('Cache-Control', 'no-store');
+	}
+});
+
 crmRoutes.use('*', requireCrm);
 
 // The global body limit is path-scoped to /api/collect, so it never reached here — leaving the one

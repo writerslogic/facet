@@ -8,7 +8,10 @@ import { HTTPException } from 'hono/http-exception';
 import type { AppEnv } from './env.js';
 import { COLLECT_MAX_BODY_BYTES, CORS_MAX_AGE } from './lib/constants.js';
 import { ApiError, toErrorBody } from './lib/http.js';
+import { createLogger } from './lib/log.js';
 import { ROUTES } from './routes/registry.js';
+
+const log = createLogger({ handler: 'fetch' });
 
 /** Add baseline security headers to a dashboard (non-API) response. Clones because ASSETS responses are
  * immutable. Sets framing/sniff/referrer protection only — no resource-restricting CSP directive, so
@@ -156,6 +159,11 @@ export function createApp(): Hono<AppEnv> {
 			return c.json({ error: 'validation_failed' }, 400);
 		}
 		// Never leak an unexpected error's message to the client; details go to logs only.
+		// Pathname, never `c.req.url`: the query string carries site ids and the magic-link token.
+		log.error('unhandled_error', err, {
+			method: c.req.method,
+			path: new URL(c.req.url).pathname,
+		});
 		return c.json({ error: 'internal_error' }, 500);
 	});
 

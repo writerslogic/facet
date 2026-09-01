@@ -43,6 +43,10 @@ export interface SelectiveCredential {
 	disclosures: Disclosure[];
 }
 
+/** Names the credential itself owns; a disclosure must never supply one. Issue and verify share this
+ * set so the two sides cannot drift into a name that is reserved on one side only. */
+const RESERVED_CLAIM_NAMES = new Set(['_sd', 'id']);
+
 export interface IssueSdOptions {
 	verificationMethod: string;
 	created: string;
@@ -63,13 +67,10 @@ export async function issueSelectiveCredential(
 ): Promise<SelectiveCredential> {
 	// A selective claim must not shadow a mandatory/cleartext claim or a reserved key, else the same name
 	// would have two authoritative sources (one signed-cleartext, one disclosed).
+	// IMPORTANT: `in`, not Object.hasOwn — an inherited name such as `__proto__` must be rejected too,
+	// because assigning it into the plain `revealed` object at verify time would write the prototype.
 	for (const name of Object.keys(selective)) {
-		if (
-			name === '_sd' ||
-			name === 'id' ||
-			name in mandatory ||
-			name in base.credentialSubject
-		) {
+		if (RESERVED_CLAIM_NAMES.has(name) || name in mandatory || name in base.credentialSubject) {
 			throw new Error(
 				`selective claim "${name}" collides with a mandatory or reserved claim`,
 			);
@@ -129,30 +130,49 @@ export async function verifySelectiveCredential(
 	const cleartext = presentation.credential.credentialSubject as Record<string, unknown>;
 	const revealed: Record<string, unknown> = {};
 	const consumed = new Set<string>();
-	for (const d of presentation.disclosures) {
-		const digest = await disclosureDigest(d);
-		if (!sd.has(digest)) {
+	// IMPORTANT: the disclosure list is holder-supplied and unsigned, so every malformed shape has to
+	// come back as valid:false. A non-array list, or a value JCS refuses (`1e999` parses to Infinity,
+	// nesting past MAX_DEPTH), would otherwise throw out of a function whose callers only check .valid.
+	if (!Array.isArray(presentation.disclosures)) {
+		return { ...base, valid: false, revealed: {}, reason: 'disclosures is not an array' };
+	}
+	for (const [i, d] of presentation.disclosures.entries()) {
+		let digest: string;
+		try {
+			digest = await disclosureDigest(d);
+		} catch {
 			return {
+				...base,
 				valid: false,
 				revealed: {},
-				reason: `disclosure "${d.name}" digest not in _sd`,
+				reason: `disclosure ${i} is not canonicalizable`,
+			};
+		}
+		if (!sd.has(digest)) {
+			return {
+				...base,
+				valid: false,
+				revealed: {},
+				reason: `disclosure ${i} digest not in _sd`,
 			};
 		}
 		// Reject a digest presented twice and a name presented twice or colliding with a cleartext claim —
 		// SD-JWT requires exactly one authoritative value per claim name (no last-wins substitution).
 		if (consumed.has(digest)) {
 			return {
+				...base,
 				valid: false,
 				revealed: {},
 				reason: 'duplicate disclosure digest',
 			};
 		}
 		consumed.add(digest);
-		if (d.name in revealed || (d.name !== '_sd' && d.name in cleartext)) {
+		if (RESERVED_CLAIM_NAMES.has(d.name) || d.name in revealed || d.name in cleartext) {
 			return {
+				...base,
 				valid: false,
 				revealed: {},
-				reason: `disclosure "${d.name}" collides with another claim`,
+				reason: `disclosure ${i} collides with another claim`,
 			};
 		}
 		revealed[d.name] = d.value;

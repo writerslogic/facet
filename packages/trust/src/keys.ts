@@ -37,13 +37,28 @@ function algForJwk(jwk: JWK): SigningAlg {
 	throw new Error(`unsupported key type for signing: kty=${jwk.kty} crv=${jwk.crv}`);
 }
 
-/** Public-JWK view of a private JWK: strip every private member (not just `d`) and stamp use/alg/kid.
- * Uses the full private-member stripper so no private scalar can reach the wire if the key set ever
- * grows beyond OKP/EC. The thumbprint is over RFC 7638 required members only, so this is kid-stable. */
+/** Public-JWK view of a private JWK: rebuild from the RFC 7638 required members only, then stamp
+ * use/alg/kid. IMPORTANT: an allowlist, not a strip — an operator-supplied JWK carries Web Crypto's
+ * `key_ops: ['sign']`/`ext`, which would publish a JWKS entry no strict verifier can import. The
+ * thumbprint is over exactly these members, so `kid` is unchanged either way. */
 async function toPublicJwk(privateJwk: JWK, alg: SigningAlg): Promise<JWK> {
-	const pub = toPublicJwkFields(privateJwk);
+	const { kty, crv, x, y } = privateJwk;
+	const pub: JWK = alg === 'EdDSA' ? { kty, crv, x } : { kty, crv, x, y };
 	const kid = await calculateJwkThumbprint(pub);
 	return { ...pub, alg, use: 'sig', kid };
+}
+
+/** Resolve the verification `alg` from the key MATERIAL, never from the JWK's own `alg` claim. A
+ * declared `alg` is honoured only as a consistency check; `importKey` also fails closed on a
+ * contradiction, but pinning here keeps the choice off an attacker-supplied field. */
+function verifyAlgForJwk(jwk: JWK): SigningAlg {
+	const alg = algForJwk(jwk);
+	if ((jwk.alg === 'EdDSA' || jwk.alg === 'ES256') && jwk.alg !== alg) {
+		throw new Error(
+			`JWK alg ${jwk.alg} contradicts key material: kty=${jwk.kty} crv=${jwk.crv}`,
+		);
+	}
+	return alg;
 }
 
 /** Web Crypto import parameters for signing with a given alg. */
@@ -58,12 +73,16 @@ function signImportParams(
  * BOTH workerd and Node (jose's importJWK yields a Node KeyObject that crypto.subtle cannot use for
  * the raw RFC 9421 / Data Integrity signing paths). jose's JWS operations accept a CryptoKey too. */
 export async function loadSigningKey(jwkJson: string): Promise<SigningKey> {
-	let privateJwk: JWK;
+	let parsed: unknown;
 	try {
-		privateJwk = JSON.parse(jwkJson) as JWK;
+		parsed = JSON.parse(jwkJson);
 	} catch {
 		throw new Error('FACET_SIGNING_JWK is not valid JSON');
 	}
+	if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+		throw new Error('FACET_SIGNING_JWK must be a JSON object (a private JWK)');
+	}
+	const privateJwk = parsed as JWK;
 	if (!privateJwk.d) throw new Error('FACET_SIGNING_JWK must be a private JWK (missing `d`)');
 	const alg = algForJwk(privateJwk);
 	const privateKey = await crypto.subtle.importKey(
@@ -105,7 +124,7 @@ export function toJwks(publicJwks: JWK[]): Jwks {
  * workerd, KeyObject in Node) — both are accepted by jose's verify; the RFC 9421 raw path narrows
  * to CryptoKey itself. */
 export async function importPublicJwk(jwk: JWK): Promise<{ key: KeyLike; alg: SigningAlg }> {
-	const alg = jwk.alg === 'ES256' || jwk.alg === 'EdDSA' ? jwk.alg : algForJwk(jwk);
+	const alg = verifyAlgForJwk(jwk);
 	const key = await importJWK(jwk, alg);
 	if (key instanceof Uint8Array) throw new Error('public JWK imported as a symmetric key');
 	return { key, alg };
@@ -125,7 +144,7 @@ export function subtleSignParams(
  * Node — unlike jose's `importJWK`, which yields a Node `KeyObject` that `crypto.subtle` cannot use (the
  * cause of COSE/HTTP-sig verification failing under Node). */
 export async function importVerifyKey(jwk: JWK): Promise<{ key: SubtleKey; alg: SigningAlg }> {
-	const alg = jwk.alg === 'ES256' || jwk.alg === 'EdDSA' ? jwk.alg : algForJwk(jwk);
+	const alg = verifyAlgForJwk(jwk);
 	const key = await crypto.subtle.importKey('jwk', jwk as never, signImportParams(alg), false, [
 		'verify',
 	]);

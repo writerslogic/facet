@@ -68,6 +68,10 @@ function truncateId(id: string): string {
 const OPAQUE_ID_RE =
 	/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b|\b[0-9a-f]{24,}\b/gi;
 
+/** IMPORTANT: ESC is not `\s`, so escape and bidi-override sequences survive the whitespace collapse
+ * and can rewrite rows further up a report that is trusted to state facts. */
+const CONTROL_RE = /[\p{Cc}\p{Cf}]/gu;
+
 /**
  * Flatten, redact and bound server- or tool-supplied text before it reaches a row.
  *
@@ -77,7 +81,13 @@ const OPAQUE_ID_RE =
  * runs are replaced outright; `truncateId` covers the ids doctor prints deliberately.
  */
 function safeText(value: string, limit = 120): string {
-	const flat = value.replace(/\s+/g, ' ').replace(OPAQUE_ID_RE, '<redacted>').trim();
+	// Controls become a space BEFORE the collapse, so a split hex run cannot be rejoined past
+	// OPAQUE_ID_RE.
+	const flat = value
+		.replace(CONTROL_RE, ' ')
+		.replace(/\s+/g, ' ')
+		.replace(OPAQUE_ID_RE, '<redacted>')
+		.trim();
 	return flat.length > limit ? `${flat.slice(0, limit)}…` : flat;
 }
 
@@ -334,9 +344,15 @@ async function probeReady(
 			scheduled_jobs?: JobRow[];
 		};
 		if (typeof body !== 'object' || body === null) return null;
+		const checks = body.checks;
+		const jobs = Array.isArray(body.scheduled_jobs) ? body.scheduled_jobs : [];
 		return {
-			checks: body.checks ?? {},
-			jobs: Array.isArray(body.scheduled_jobs) ? body.scheduled_jobs : [],
+			checks: typeof checks === 'object' && checks !== null ? checks : {},
+			// A job name reaches both a row and a cause verbatim, so it is bounded here at the
+			// boundary rather than at each use.
+			jobs: jobs
+				.filter((job): job is JobRow => typeof job === 'object' && job !== null)
+				.map((job) => ({ ...job, name: safeText(String(job.name ?? 'job'), 60) })),
 		};
 	} catch {
 		return null;
@@ -473,17 +489,42 @@ export async function runDoctor(
 			}
 			const secrets = await secretNames(found.value);
 			if (secrets.ok && secrets.value !== null) {
-				adminSecretSet = secrets.value.includes('ADMIN_TOKEN');
+				const names = secrets.value;
+				adminSecretSet = names.includes('ADMIN_TOKEN');
 				row(
 					adminSecretSet ? 'ok' : 'missing',
 					'worker secret',
 					adminSecretSet ? 'ADMIN_TOKEN is set' : 'ADMIN_TOKEN is not set',
 				);
-				const signing = secrets.value.includes('FACET_SIGNING_JWK');
+				// IMPORTANT: the rest of the secrets are inventory, never a cause. Each gates one
+				// optional feature, so an install that leaves them unset is complete, not broken.
+				row(
+					'info',
+					'session secret',
+					names.includes('SESSION_SECRET')
+						? 'SESSION_SECRET is set'
+						: 'not set — /api/auth answers 503, so dashboard accounts are off',
+				);
+				row(
+					'info',
+					'ae read token',
+					names.includes('CF_API_TOKEN')
+						? 'CF_API_TOKEN is set (reads also need the CF_ACCOUNT_ID var, not listed here)'
+						: 'not set — Analytics Engine SQL reads are unavailable (optional)',
+				);
 				row(
 					'info',
 					'signing key',
-					signing ? 'FACET_SIGNING_JWK is set' : 'not configured (optional)',
+					names.includes('FACET_SIGNING_JWK')
+						? 'FACET_SIGNING_JWK is set'
+						: 'not configured (optional)',
+				);
+				row(
+					'info',
+					'scitt token',
+					names.includes('SCITT_TOKEN')
+						? 'SCITT_TOKEN is set (inert unless the SCITT_URL var is set)'
+						: 'not configured (optional)',
 				);
 			} else {
 				secretsListed = false;
@@ -543,10 +584,15 @@ export async function runDoctor(
 				const { sites } = await adminClient(host, token, deps.fetchJson).get<{
 					sites: Site[];
 				}>('/api/sites');
-				siteCount = sites.length;
-				row('ok', 'admin api', `token accepted — ${sites.length} site(s)`);
-				for (const site of sites) {
-					row('info', 'site', `${site.name} (${site.domain}) ${truncateId(site.id)}`);
+				// IMPORTANT: a malformed body is not a rejected token. Reading `.length` off a
+				// non-array lands in the catch below, which prescribes rotating a token that worked.
+				const list: Partial<Site>[] = Array.isArray(sites) ? sites : [];
+				siteCount = list.length;
+				row('ok', 'admin api', `token accepted — ${list.length} site(s)`);
+				for (const site of list) {
+					const name = safeText(String(site.name ?? ''), 60);
+					const domain = safeText(String(site.domain ?? ''), 60);
+					row('info', 'site', `${name} (${domain}) ${truncateId(String(site.id ?? ''))}`);
 				}
 			} catch (err) {
 				adminError = err instanceof Error ? err.message : String(err);

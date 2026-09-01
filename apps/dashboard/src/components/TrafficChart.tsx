@@ -7,7 +7,7 @@
 // static import: CSS is extracted into the separately-cached stylesheet, costs no JS, and having it
 // present up front stops the chart restyling a frame after it paints.
 
-import type { SeriesPoint } from '@facet/shared';
+import type { SeriesPoint, TimelineAnnotationCategory } from '@facet/shared';
 import { type ReactElement, useEffect, useMemo, useRef } from 'react';
 import type uPlot from 'uplot';
 import 'uplot/dist/uPlot.min.css';
@@ -21,6 +21,7 @@ import {
 import { formatCompact, formatNumber } from '../lib/format.js';
 import { type ThemeColors, useThemeColors } from '../theme.js';
 import { Card } from './Card.js';
+import { hexA } from './charts/ramp.js';
 
 // uplot ships `export = uPlot` types over an ESM default export, so the constructor type comes from the
 // module type itself while the runtime value comes off `.default`.
@@ -35,11 +36,13 @@ function loadUPlot(): Promise<UPlotCtor> {
 	return uplotPending;
 }
 
-/** A vertical event marker on the time axis (e.g. a detected anomaly). */
+/** A vertical event marker on the time axis, from detection or operator-authored context. */
 export interface ChartAnnotation {
 	/** ms timestamp on the x (time) axis. */
 	t: number;
-	label?: string;
+	label: string;
+	kind: 'anomaly' | 'note';
+	category?: TimelineAnnotationCategory;
 }
 
 interface TrafficChartProps {
@@ -68,7 +71,8 @@ interface Palette {
 	ink: string;
 	grid: string;
 	axis: string;
-	mark: string;
+	anomalyMark: string;
+	noteMark: string;
 	pvFill: [string, string];
 	visFill: [string, string];
 }
@@ -76,7 +80,10 @@ interface Palette {
 /** uPlot plugin: draw a dashed vertical line + top caret at each annotation's time position. Positions
  * come from `valToPos(..., true)` (canvas pixels), matching `u.bbox`, so it aligns at any zoom/size.
  * Reads annotations through a getter so the chart never has to be rebuilt when only they change. */
-function annotationPlugin(get: () => ChartAnnotation[], mark: string): uPlot.Plugin {
+function annotationPlugin(
+	get: () => ChartAnnotation[],
+	marks: { anomaly: string; note: string },
+): uPlot.Plugin {
 	return {
 		hooks: {
 			draw: (u: uPlot) => {
@@ -88,6 +95,7 @@ function annotationPlugin(get: () => ChartAnnotation[], mark: string): uPlot.Plu
 				for (const a of annotations) {
 					const cx = Math.round(u.valToPos(a.t / 1000, 'x', true));
 					if (cx < left || cx > left + width) continue;
+					const mark = a.kind === 'note' ? marks.note : marks.anomaly;
 					ctx.strokeStyle = mark;
 					ctx.globalAlpha = 0.5;
 					ctx.lineWidth = 1;
@@ -200,20 +208,6 @@ function fill(
 	grad.addColorStop(0, from);
 	grad.addColorStop(1, to);
 	return grad;
-}
-
-/** Hex (#rrggbb) → rgba string with alpha, for the canvas area fills (which need concrete colours). */
-function hexA(hex: string, a: number): string {
-	const h = hex.replace('#', '').trim();
-	const full =
-		h.length === 3
-			? h
-					.split('')
-					.map((c) => c + c)
-					.join('')
-			: h;
-	const n = Number.parseInt(full || '818cf8', 16);
-	return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
 }
 
 /** Resolve a `var(--token)` accent to its computed colour — canvas fills/strokes need a concrete colour,
@@ -330,7 +324,8 @@ function ChartCanvas({
 				const P: Palette = {
 					ink: pvColor,
 					accent: colors.d2,
-					mark: colors.d3,
+					anomalyMark: colors.d3,
+					noteMark: colors.d2,
 					axis: colors.faint,
 					grid: colors.grid,
 					pvFill: [hexA(pvColor, 0.22), hexA(pvColor, 0)],
@@ -402,7 +397,10 @@ function ChartCanvas({
 						? { tzDate: (ts: number) => UPlot.tzDate(new Date(ts * 1000), 'Etc/UTC') }
 						: {}),
 					plugins: [
-						annotationPlugin(() => annotationsRef.current, P.mark),
+						annotationPlugin(() => annotationsRef.current, {
+							anomaly: P.anomalyMark,
+							note: P.noteMark,
+						}),
 						...(fillHeight ? [tooltipPlugin(() => tooltipRef.current)] : []),
 					],
 					cursor: {
@@ -525,29 +523,47 @@ export function TrafficChart({
 	zoomable = false,
 }: TrafficChartProps): ReactElement {
 	const colors = useThemeColors();
+	const anomalyCount = annotations.filter((annotation) => annotation.kind === 'anomaly').length;
+	const noteCount = annotations.length - anomalyCount;
+	const accessibleAnnotations =
+		annotations.length > 0 ? (
+			<ul className="sr-only" aria-label="Traffic chart annotations">
+				{annotations.map((annotation, index) => (
+					<li key={`${annotation.kind}-${annotation.t}-${index}`}>
+						{annotation.kind === 'note' ? 'Operator note' : 'Detected anomaly'}:{' '}
+						{formatStamp(annotation.t)} — {annotation.label}
+					</li>
+				))}
+			</ul>
+		) : null;
 	// The header states the clock, so it has to re-render when the clock changes.
 	useClockMode();
 	if (bare) {
-		return series.length === 0 ? (
-			// "No data yet" said nothing a reader did not already know. An empty series here is a
-			// statement about the SELECTED RANGE, and naming that is what tells someone whether to
-			// widen the range or go looking for a broken snippet.
-			<div className="flex h-full items-center justify-center px-4 text-center text-[color:var(--faint)] text-sm">
-				No traffic recorded in the selected range
-			</div>
-		) : (
-			<ChartCanvas
-				series={series}
-				height={height}
-				annotations={annotations}
-				colors={colors}
-				fillHeight
-				variant={variant}
-				scale={scale}
-				trend={trend}
-				accent={accent}
-				zoomable={zoomable}
-			/>
+		return (
+			<>
+				{series.length === 0 ? (
+					// "No data yet" said nothing a reader did not already know. An empty series here is a
+					// statement about the SELECTED RANGE, and naming that is what tells someone whether to
+					// widen the range or go looking for a broken snippet.
+					<div className="flex h-full items-center justify-center px-4 text-center text-[color:var(--faint)] text-sm">
+						No traffic recorded in the selected range
+					</div>
+				) : (
+					<ChartCanvas
+						series={series}
+						height={height}
+						annotations={annotations}
+						colors={colors}
+						fillHeight
+						variant={variant}
+						scale={scale}
+						trend={trend}
+						accent={accent}
+						zoomable={zoomable}
+					/>
+				)}
+				{accessibleAnnotations}
+			</>
 		);
 	}
 	return (
@@ -557,15 +573,22 @@ export function TrafficChart({
 					{title}
 				</h3>
 				<div className="flex items-center gap-3 text-xs text-[color:var(--faint)]">
-					{annotations.length > 0 ? (
+					{noteCount > 0 ? (
+						<span className="inline-flex items-center gap-1">
+							<span className="inline-block h-2 w-2 rounded-full bg-[color:var(--d2)]" />
+							{noteCount} {noteCount === 1 ? 'note' : 'notes'}
+						</span>
+					) : null}
+					{anomalyCount > 0 ? (
 						<span className="inline-flex items-center gap-1">
 							<span className="inline-block h-2 w-2 rounded-full bg-[color:var(--neg)]" />
-							Anomaly
+							{anomalyCount} {anomalyCount === 1 ? 'anomaly' : 'anomalies'}
 						</span>
 					) : null}
 					<span title={`All times on this chart are ${clockZone()}`}>{clockLabel()}</span>
 				</div>
 			</div>
+			{accessibleAnnotations}
 			{loading ? (
 				<div
 					className="w-full animate-pulse rounded-xl bg-[color:rgb(var(--hover))]"

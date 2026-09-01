@@ -11,6 +11,7 @@ import {
 } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
 import { Hono } from 'hono';
+import * as v from 'valibot';
 import { insertSite, listSites, setSiteTeam, teamExists, upsertSiteConfig } from '../db/admin.js';
 import { listBotRulesets } from '../db/bots.js';
 import { siteExists } from '../db/catalog.js';
@@ -22,6 +23,10 @@ import { BotRulesetConfigError, refreshBotRulesets } from '../lib/bots-refresh.j
 import { botPatternCount, ensureBotPatterns } from '../lib/bots.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
 import { getSigningKey } from '../lib/signing.js';
+
+// REQUIRED: `site_id` arrives in the query on these two, so it needs the same boundary validation
+// `IssueKeySchema` already gives the POST; a presence check alone admitted any string of any length.
+const SiteIdQuerySchema = v.object({ site_id: v.pipe(v.string(), v.uuid()) });
 
 export const adminRoutes = new Hono<AppEnv>();
 
@@ -191,23 +196,26 @@ adminRoutes.post(
 	},
 );
 
-adminRoutes.get('/keys', requireAdmin, async (c) => {
-	const siteId = c.req.query('site_id');
-	if (!siteId) {
-		throw new ApiError('bad_request', 400, 'site_id query parameter is required');
-	}
-	const keys = await listKeys(c.env, siteId);
-	return c.json({ keys });
-});
+adminRoutes.get(
+	'/keys',
+	requireAdmin,
+	vValidator('query', SiteIdQuerySchema, validationErrorHook),
+	async (c) => {
+		const keys = await listKeys(c.env, c.req.valid('query').site_id);
+		return c.json({ keys });
+	},
+);
 
-adminRoutes.delete('/keys/:id', requireAdmin, async (c) => {
-	const siteId = c.req.query('site_id');
-	if (!siteId) {
-		throw new ApiError('bad_request', 400, 'site_id query parameter is required');
-	}
-	const deleted = await revokeKey(c.env, c.req.param('id'), siteId);
-	if (!deleted) {
-		return c.json({ error: 'not_found' }, 404);
-	}
-	return c.json({ deleted: true });
-});
+adminRoutes.delete(
+	'/keys/:id',
+	requireAdmin,
+	vValidator('query', SiteIdQuerySchema, validationErrorHook),
+	async (c) => {
+		const keyId = c.req.param('id') ?? '';
+		const deleted = await revokeKey(c.env, keyId, c.req.valid('query').site_id);
+		if (!deleted) {
+			return c.json({ error: 'not_found' }, 404);
+		}
+		return c.json({ deleted: true });
+	},
+);

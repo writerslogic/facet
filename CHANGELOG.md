@@ -8,6 +8,11 @@ All notable changes to Facet are documented here. The format follows
 
 ### Added
 
+- **Persistent traffic timeline context.** Expand the Overview's traffic tile to annotate a release,
+  campaign, incident, or general note at an exact instant. Notes are stored per site, filtered with
+  the selected analytics range, rendered as distinct chart markers, listed accessibly outside the
+  canvas, and included in the static demo. Site read keys may display notes; create/delete remains
+  behind `ADMIN_TOKEN`.
 - **Metric alert rules.** Settings → Alerts now manages the existing signed webhook/email
   destinations and user-defined inclusive thresholds over exact pageviews, visitors, or custom
   events in the last completed UTC hour. Rules reuse the anomaly delivery path (severity gates,

@@ -9,6 +9,11 @@ import { parseArgs } from 'node:util';
 import { writeDevVar } from '../lib/store.js';
 import { printError } from '../util.js';
 
+// REQUIRED: --name and --db are interpolated straight into the JSONC string literals below, so an
+// unvalidated value injects config: `--db 'x", "database_id": "<uuid>'` writes a file that
+// `facet config check` reports as ready and that `facet init` then never creates a database for.
+const RESOURCE_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,62}$/;
+
 function wranglerJsonc(name: string, db: string): string {
 	return `{
 	"$schema": "node_modules/wrangler/config-schema.json",
@@ -57,6 +62,18 @@ export async function runScaffold(args: string[]): Promise<number> {
 	const dir = values.dir ?? '.';
 	const db = values.db ?? 'facet';
 	const name = values.name ?? 'facet';
+
+	for (const [flag, value] of [
+		['name', name],
+		['db', db],
+	] as const) {
+		if (!RESOURCE_NAME_RE.test(value)) {
+			printError(
+				`Invalid --${flag}: expected 1-63 characters of letters, digits, "-" or "_", starting with a letter or digit.`,
+			);
+			return 1;
+		}
+	}
 
 	const wranglerPath = join(dir, 'wrangler.jsonc');
 	mkdirSync(dir, { recursive: true });

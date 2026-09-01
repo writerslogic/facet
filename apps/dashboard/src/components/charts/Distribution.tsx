@@ -35,7 +35,7 @@ import { type ReactElement, useMemo, useRef } from 'react';
 import { useHoverTarget, useSpring } from '../../lib/chartInteraction.js';
 import { formatNumber } from '../../lib/format.js';
 import { useSize } from '../../lib/useSize.js';
-import { ChartStateLead } from './ChartChrome.js';
+import { ChartNote, ChartStateLead } from './ChartChrome.js';
 import { ChartTooltip, TooltipRow } from './ChartTooltip.js';
 
 export type DistributionMetric = 'duration' | 'pageviews';
@@ -382,15 +382,11 @@ export function DistributionChart({
 			    became unreadable on a small tile — and these are precisely the two lines that must not
 			    be lost, since they are what stops the chart being read as an ordinary box plot on a
 			    linear axis. */}
-			<p className="shrink-0 text-[10px] text-[color:var(--faint)] leading-snug">
+			<ChartNote>
 				Axis is one slot per histogram bin, not linear — the bins are unequal by design.{' '}
 				{`Percentiles are ${data.percentile_method} order statistics, not interpolated quartiles.`}
-			</p>
-			{filterNote ? (
-				<p className="shrink-0 text-[10px] text-[color:var(--faint)] leading-snug">
-					{filterNote}
-				</p>
-			) : null}
+			</ChartNote>
+			{filterNote ? <ChartNote>{filterNote}</ChartNote> : null}
 			{hover ? (
 				<ChartTooltip
 					x={hover.x}

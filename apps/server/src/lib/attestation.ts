@@ -23,13 +23,21 @@ function schemaTables(): unknown[] {
 	});
 }
 
-/** SHA-256 (hex) of a canonical descriptor of the live D1 schema (table + sorted column names). */
+/**
+ * SHA-256 (hex) of a canonical descriptor of the live D1 schema (table + sorted column names).
+ *
+ * IMPORTANT: columns are read from `col.name`, the SQL name, never the drizzle object's keys — those
+ * are TypeScript identifiers (`siteId`, not `site_id`), so keying on them would let a real column
+ * rename hash identically and a pure code rename forge schema drift, inside a signed claim.
+ */
 export async function schemaFingerprintHash(): Promise<string> {
 	if (cachedSchemaHash) return cachedSchemaHash;
 	const descriptor = schemaTables()
 		.map((t) => ({
 			name: getTableName(t as never) as string,
-			columns: Object.keys(getTableColumns(t as never)).sort(),
+			columns: (Object.values(getTableColumns(t as never)) as { name: string }[])
+				.map((c) => c.name)
+				.sort(),
 		}))
 		.sort((a, b) => a.name.localeCompare(b.name));
 	cachedSchemaHash = await sha256Hex(JSON.stringify(descriptor));

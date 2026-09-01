@@ -310,7 +310,7 @@ export const FunnelSchema = v.object({
 
 export const ExperimentVariantSchema = v.object({
 	key: v.pipe(v.string(), v.minLength(1), v.maxLength(60)),
-	weight: v.pipe(v.number(), v.minValue(0)),
+	weight: v.pipe(v.number(), v.finite(), v.minValue(0)),
 });
 
 export const ExperimentSchema = v.object({
@@ -333,7 +333,7 @@ const FlagClauseSchema = v.object({
 	op: v.picklist(['eq', 'neq', 'in', 'nin', 'contains', 'prefix', 'gte', 'lte', 'pct']),
 	value: v.union([
 		v.pipe(v.string(), v.maxLength(500)),
-		v.number(),
+		v.pipe(v.number(), v.finite()),
 		v.pipe(v.array(v.pipe(v.string(), v.maxLength(200))), v.maxLength(100)),
 	]),
 });

@@ -162,6 +162,13 @@
       "when": 1787881163602,
       "tag": "0023_high_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1787885861264,
+      "tag": "0024_pale_annihilus",
+      "breakpoints": true
     }
   ]
 }

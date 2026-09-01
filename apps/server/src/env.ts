@@ -11,8 +11,9 @@ export interface Env {
 	INGEST_QUEUE?: Queue<DerivedEvent>;
 	/** Static-asset binding serving the built dashboard. */
 	ASSETS: Fetcher;
-	/** Cloudflare native rate-limit binding. */
-	RATE_LIMITER: RateLimit;
+	/** Cloudflare native rate-limit binding. Optional: `lib/ratelimit.ts` fails OPEN when it is
+	 * unbound, so a production deployment MUST bind it. The test config deliberately omits it. */
+	RATE_LIMITER?: RateLimit;
 	/** Analytics Engine dataset — the columnar analytical store every accepted event is mirrored into
 	 * (see lib/ae.ts). Optional: with the binding removed, the AE writes no-op and D1 is the only store. */
 	AE?: AnalyticsEngineDataset;
@@ -32,12 +33,14 @@ export interface Env {
 	ROLLUP_DETAIL_MONTHS?: string;
 	/** Months after which a `month` rollup row is additionally folded into a `year` row (string var). */
 	ROLLUP_MONTHLY_MONTHS?: string;
-	/** Cloudflare account id (var), used for Analytics Engine SQL-over-HTTP reads. */
-	CF_ACCOUNT_ID: string;
+	/** Cloudflare account id (var) for Analytics Engine SQL-over-HTTP reads. Optional: with either
+	 * this or `CF_API_TOKEN` unset, `lib/ae-sql.ts` reports AE unreadable instead of building a URL. */
+	CF_ACCOUNT_ID?: string;
 	/** Cloudflare API token (Worker secret) for Analytics Engine SQL-over-HTTP reads. */
-	CF_API_TOKEN: string;
-	/** Admin bearer token (Worker secret, never a var). */
-	ADMIN_TOKEN: string;
+	CF_API_TOKEN?: string;
+	/** Admin bearer token (Worker secret, never a var). Optional because it genuinely can be unset:
+	 * `requireAdmin` MUST keep failing closed rather than hashing `undefined` into a match. */
+	ADMIN_TOKEN?: string;
 	/** HMAC secret (Worker secret) for signing dashboard session tokens. When unset, account auth is
 	 * disabled (the /api/auth routes return 503) — the per-site API-key path is unaffected. */
 	SESSION_SECRET?: string;

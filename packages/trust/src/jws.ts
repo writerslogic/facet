@@ -82,8 +82,9 @@ export async function verifyDetachedProof(
 				reason: 'kid is not the RFC 7638 thumbprint of publicJwk',
 			};
 		}
-		// The declared proof.alg must equal the SIGNED protected-header alg, else it is unauthenticated.
-		if (proof.alg !== undefined && protectedHeader.alg !== proof.alg) {
+		// IMPORTANT: proof.alg must be PRESENT and equal the SIGNED protected-header alg. Absent is not
+		// "no claim": callers surface proof.alg beside a valid verdict, so it would be unauthenticated.
+		if (protectedHeader.alg !== proof.alg) {
 			return {
 				ok: false,
 				reason: 'protected-header alg does not match proof alg',

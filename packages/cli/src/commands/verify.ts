@@ -36,12 +36,48 @@ Targets:
   attestation <file> [--nonce <n>]               Verify a RATS process-evidence EAT (software only).
 `;
 
-/** Read + parse a JSON file, returning null (and printing) on any error. */
+// IMPORTANT: every value printed below is read out of the artifact under examination, and an offline
+// "✓ valid" only means self-consistent — anyone can sign an envelope with their own key. Raw C0/C1
+// bytes would let that document rewrite the verdict line it is printed beside; V8 embeds a snippet of
+// the file in its own JSON.parse message, so even an unparseable artifact reaches the terminal.
+// Every field below is typed by a cast over arbitrary JSON, so `String(value)` on a non-string throws
+// (`{"toString":"x"}` has no callable toString); only string and number are converted.
+function printable(value: unknown, fallback = ''): string {
+	const raw =
+		typeof value === 'number'
+			? String(value)
+			: typeof value === 'string' && value
+				? value
+				: fallback;
+	let out = '';
+	for (const ch of raw) {
+		const code = ch.codePointAt(0) ?? 0;
+		const spoofing =
+			code < 0x20 ||
+			(code >= 0x7f && code <= 0x9f) ||
+			code === 0x200e ||
+			code === 0x200f ||
+			(code >= 0x202a && code <= 0x202e) ||
+			(code >= 0x2066 && code <= 0x2069);
+		out += spoofing ? '�' : ch;
+		if (out.length >= 200) return `${out}…`;
+	}
+	return out;
+}
+
+/** Read + parse a JSON object, returning null (and printing) on any error. */
 async function readJson(path: string): Promise<unknown | null> {
 	try {
-		return JSON.parse(await readFile(path, 'utf8'));
+		const parsed: unknown = JSON.parse(await readFile(path, 'utf8'));
+		if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+			printError(`could not read ${path}: expected a JSON object`);
+			return null;
+		}
+		return parsed;
 	} catch (err) {
-		printError(`could not read ${path}: ${err instanceof Error ? err.message : String(err)}`);
+		printError(
+			`could not read ${path}: ${printable(err instanceof Error ? err.message : String(err))}`,
+		);
 		return null;
 	}
 }
@@ -55,16 +91,19 @@ async function verifyExport(path: string): Promise<number> {
 	if (doc === null) return 1;
 	const result = await verifySignedExport(doc as SignedExport);
 	if (result.valid) {
-		ok(`valid signed export (alg=${result.alg}, kid=${result.kid})`);
+		ok(`valid signed export (alg=${printable(result.alg)}, kid=${printable(result.kid)})`);
 		if (result.jwksUrl) {
-			process.stdout.write(`  key: ${result.jwksUrl}\n`);
+			// IMPORTANT: jwksUrl is a plain proof field that no signature covers, so a self-signed
+			// envelope names any URL it likes. Telling the operator to confirm the kid *there* was a
+			// trust elevation the attacker controlled both ends of.
+			process.stdout.write(`  self-asserted key location: ${printable(result.jwksUrl)}\n`);
 			process.stdout.write(
-				`  ${pc.dim('note: for full trust, confirm this kid appears in the deployment JWKS above.')}\n`,
+				`  ${pc.dim('note: this URL is not signed; confirm the kid against the JWKS of the deployment you already trust, not against this URL.')}\n`,
 			);
 		}
 		return 0;
 	}
-	printError(`✗ invalid signed export: ${result.reason ?? 'signature did not verify'}`);
+	printError(`✗ invalid signed export: ${printable(result.reason, 'signature did not verify')}`);
 	return 1;
 }
 
@@ -96,10 +135,10 @@ function report(result: {
 	reason?: string;
 }): number {
 	if (result.valid) {
-		ok(`valid credential (issuer=${result.issuer ?? 'unknown'})`);
+		ok(`valid credential (issuer=${printable(result.issuer, 'unknown')})`);
 		return 0;
 	}
-	printError(`✗ invalid credential: ${result.reason ?? 'signature did not verify'}`);
+	printError(`✗ invalid credential: ${printable(result.reason, 'signature did not verify')}`);
 	return 1;
 }
 
@@ -119,19 +158,24 @@ async function verifyDidConfigurationCmd(
 	// surgery on the DID. `did:web:host%3A8443` is a PORT, and stripping the prefix hands `%3A` to the
 	// URL parser as part of the hostname — a legitimate ported deployment then failed its own linkage
 	// check. It also runs the DID through didWebToUrl's host validation before it reaches a URL.
+	// REQUIRED: `||`, not `??` — `--origin=` parses to '' and would otherwise be compared as an origin.
 	let origin: string;
 	try {
-		origin = flags.origin ?? new URL(didWebToUrl(doc.id)).origin;
+		origin = flags.origin || new URL(didWebToUrl(doc.id)).origin;
 	} catch (e) {
-		printError(`✗ invalid DID document id: ${e instanceof Error ? e.message : 'bad did:web'}`);
+		printError(
+			`✗ invalid DID document id: ${printable(e instanceof Error ? e.message : '', 'bad did:web')}`,
+		);
 		return 1;
 	}
 	const result = await verifyDidConfiguration(config as DidConfiguration, doc, origin);
 	if (result.valid) {
-		ok(`valid domain linkage (did=${result.did}, origin=${result.origin})`);
+		ok(
+			`valid domain linkage (did=${printable(result.did)}, origin=${printable(result.origin)})`,
+		);
 		return 0;
 	}
-	printError(`✗ invalid domain linkage: ${result.reason ?? 'verification failed'}`);
+	printError(`✗ invalid domain linkage: ${printable(result.reason, 'verification failed')}`);
 	return 1;
 }
 
@@ -140,10 +184,12 @@ async function verifyReceiptCmd(file: string): Promise<number> {
 	if (doc === null) return 1;
 	const result = await verifyScittReceipt(doc as SignedStatement<ScittReceiptPayload>);
 	if (result.valid) {
-		ok(`valid SCITT receipt (log=${result.logId}, entry=${result.entryId})`);
+		ok(
+			`valid SCITT receipt (log=${printable(result.logId)}, entry=${printable(result.entryId)})`,
+		);
 		return 0;
 	}
-	printError(`✗ invalid SCITT receipt: ${result.reason ?? 'verification failed'}`);
+	printError(`✗ invalid SCITT receipt: ${printable(result.reason, 'verification failed')}`);
 	return 1;
 }
 
@@ -154,13 +200,22 @@ async function verifyAttestationCmd(file: string, flags: Record<string, string>)
 		nonce: flags.nonce,
 	});
 	if (result.valid) {
-		ok(`valid RATS process evidence (key-bound, build=${result.evidence?.buildId})`);
+		ok(
+			`valid RATS process evidence (key-bound, build=${printable(result.evidence?.buildId, 'unknown')})`,
+		);
 		process.stdout.write(
 			`  ${pc.dim('software attestation only — no hardware root of trust')}\n`,
 		);
+		// rats.ts only compares eat_nonce when a nonce is supplied, so without --nonce a replayed EAT
+		// verifies exactly like a fresh one.
+		if (!flags.nonce) {
+			process.stdout.write(
+				`  ${pc.dim('freshness unchecked: pass --nonce <n> to bind this to your challenge')}\n`,
+			);
+		}
 		return 0;
 	}
-	printError(`✗ invalid attestation: ${result.reason ?? 'verification failed'}`);
+	printError(`✗ invalid attestation: ${printable(result.reason, 'verification failed')}`);
 	return 1;
 }
 

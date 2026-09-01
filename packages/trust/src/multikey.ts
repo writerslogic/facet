@@ -1,6 +1,6 @@
 // Multikey / publicKeyMultibase encoding for Ed25519 (Controlled Identifiers v1.0), used by the
 // Data Integrity eddsa-jcs-2022 verification method and did:web/did:key documents. An Ed25519
-// public key is `base58btc('z' + 0xed01 || rawPublicKey)`. Only Ed25519 is supported here; the
+// public key is `'z' + base58btc(0xed01 || rawPublicKey)`. Only Ed25519 is supported here; the
 // eddsa cryptosuite is Ed25519-only (ES256 deployments use JWS/JWKS paths, not Data Integrity).
 
 import type { JWK } from 'jose';

@@ -52,17 +52,28 @@ function detectFormat(file: string): Format {
 /** Epoch milliseconds from either a numeric epoch (ms or seconds) or an ISO 8601 string. Seconds are
  * distinguished by magnitude: any plausible ms timestamp since 2001 exceeds 1e12. */
 function toEpochMs(raw: unknown, where: string): number {
+	let ms: number | undefined;
 	if (typeof raw === 'number' && Number.isFinite(raw)) {
-		return raw < 1e12 ? Math.round(raw * 1000) : Math.round(raw);
-	}
-	if (typeof raw === 'string' && raw !== '') {
+		ms = raw < 1e12 ? Math.round(raw * 1000) : Math.round(raw);
+	} else if (typeof raw === 'string' && raw !== '') {
 		if (/^\d+$/.test(raw)) return toEpochMs(Number(raw), where);
 		const parsed = Date.parse(raw);
-		if (!Number.isNaN(parsed)) return parsed;
+		if (!Number.isNaN(parsed)) ms = parsed;
 	}
-	throw new UsageError(
-		`${where}: "timestamp" is not an epoch or an ISO 8601 date (got ${JSON.stringify(raw)}).`,
-	);
+	if (ms === undefined) {
+		throw new UsageError(
+			`${where}: "timestamp" is not an epoch or an ISO 8601 date (got ${JSON.stringify(raw)}).`,
+		);
+	}
+	// REQUIRED: bound to the server's `integer, >= 0` contract and to the ECMAScript Date range here,
+	// where the record is still named — `batchEvents` calls `new Date(ts).toISOString()`, which throws a
+	// bare "Invalid time value" past ±8.64e15 with the record index already gone.
+	if (!Number.isInteger(ms) || ms < 0 || ms > 8.64e15) {
+		throw new UsageError(
+			`${where}: "timestamp" is outside the supported range (got ${JSON.stringify(raw)}).`,
+		);
+	}
+	return ms;
 }
 
 function requireField(record: Record<string, unknown>, key: string, where: string): string {
@@ -229,6 +240,7 @@ export async function runImport(args: string[], fetchImpl: FetchJson = fetchJson
 		const batches = batchEvents(events);
 
 		const api = adminClient(host, token, fetchImpl);
+		const dryRun = values['dry-run'] === true;
 		let landed = 0;
 		let imported = 0;
 		let skipped = 0;
@@ -245,12 +257,12 @@ export async function runImport(args: string[], fetchImpl: FetchJson = fetchJson
 				res = await api.post<ImportResponse>('/api/import', {
 					site_id: site,
 					events: batch,
-					dry_run: values['dry-run'] === true,
+					dry_run: dryRun,
 				});
 			} catch (err) {
 				const detail = err instanceof Error ? err.message : String(err);
 				throw new UsageError(
-					landed === 0
+					landed === 0 || dryRun
 						? `batch ${i + 1}/${batches.length} failed: ${detail}`
 						: `batch ${i + 1}/${batches.length} failed: ${detail}\n  ${landed} earlier batch(es) already landed (${imported} event(s)). Re-running this file is safe — rows that landed are skipped.`,
 				);
@@ -274,7 +286,7 @@ export async function runImport(args: string[], fetchImpl: FetchJson = fetchJson
 			skipped,
 			duplicates,
 			days: [...days].sort(),
-			dry_run: values['dry-run'] === true,
+			dry_run: dryRun,
 			note,
 		};
 		if (values.json) {
@@ -282,7 +294,7 @@ export async function runImport(args: string[], fetchImpl: FetchJson = fetchJson
 			return 0;
 		}
 		process.stdout.write(
-			`${pc.bold(values['dry-run'] ? 'Dry run' : 'Imported')}: ${imported} of ${events.length} event(s) across ${summary.days.length} day(s)`,
+			`${pc.bold(dryRun ? 'Dry run' : 'Imported')}: ${imported} of ${events.length} event(s) across ${summary.days.length} day(s)`,
 		);
 		const dropped = [
 			skipped > 0 ? `${skipped} bot-filtered` : '',

@@ -20,12 +20,24 @@ export const DPV_PD_CONTEXT = {
 	pd: 'https://w3id.org/dpv/pd#',
 } as const;
 
+type DpvClaims = {
+	'@context': typeof DPV_CONTEXT | typeof DPV_PD_CONTEXT;
+	'dpv:hasProcessing': string[];
+	'dpv:hasPurpose': string | string[];
+	'dpv:hasLegalBasis': string | string[];
+	'dpv:hasTechnicalOrganisationalMeasure': string[];
+	'dpv:hasDataSubject'?: string;
+	'dpv:hasPersonalData'?: string[];
+};
+
 /**
  * Facet's DPV claims: processing operations, purpose, legal basis, and technical measures.
  *
  * Analytics-only (no `CRM_DB`): Collect (events) → Derive (windowed visitor hash from IP+UA,
  * transient) → Aggregate (rollups) → Analyse (reports). The raw IP is never stored, so
- * Pseudonymisation genuinely covers the whole dataset and LegitimateInterest is the only basis.
+ * Pseudonymisation genuinely covers the whole dataset and LegitimateInterest is the only basis —
+ * as long as the deployment also cannot mint a consent record, which is the second axis below and
+ * is keyed on `FACET_SIGNING_JWK` rather than on the CRM.
  *
  * With the CRM bound, three things stop being true and the claims say so:
  *   • `dpv:Store` and `dpv:Erase` join the processing set — contact details are retained as a
@@ -39,6 +51,41 @@ export const DPV_PD_CONTEXT = {
  *     coverage it does not have.
  */
 export function privacyDpvClaims(env: Env): Record<string, unknown> {
+	const claims = baseClaims(env);
+	// Tier 1/2 elevation is refused (501) without a deployment signing key, so THIS binding, not
+	// CRM_DB, decides whether the analytics database can ever hold a consent record: a row storing
+	// the raw site-supplied uid at rest (`consent_records.external_user_id`), erased by revocation
+	// and by the retention cron, and the sole authorization for a visitor above Tier 0.
+	// YAGNI: `AI` deliberately adds no claim - the NL prompt carries operator-authored question text,
+	// never visitor data, to Workers AI inside the account already running this Worker and its D1.
+	return env.FACET_SIGNING_JWK ? withConsentedIdentity(claims) : claims;
+}
+
+/**
+ * A deployment that can mint consent records stores a directly-identifying value the analytics
+ * claims otherwise deny: `dpv:Store`/`dpv:Erase` for the record's lifecycle, `dpv:Consent` because
+ * elevation rests on nothing else, and `pd:UID` because the uid is held raw rather than hashed.
+ */
+function withConsentedIdentity(claims: DpvClaims): DpvClaims {
+	const basis = claims['dpv:hasLegalBasis'];
+	return {
+		...claims,
+		'@context': DPV_PD_CONTEXT,
+		'dpv:hasProcessing': union(claims['dpv:hasProcessing'], ['dpv:Store', 'dpv:Erase']),
+		'dpv:hasLegalBasis': union(Array.isArray(basis) ? basis : [basis], ['dpv:Consent']),
+		'dpv:hasPersonalData': union(claims['dpv:hasPersonalData'] ?? [], ['pd:UID']),
+	};
+}
+
+function union(current: string[], additions: string[]): string[] {
+	const out = [...current];
+	for (const term of additions) {
+		if (!out.includes(term)) out.push(term);
+	}
+	return out;
+}
+
+function baseClaims(env: Env): DpvClaims {
 	if (!env.CRM_DB) {
 		return {
 			'@context': DPV_CONTEXT,

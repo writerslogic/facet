@@ -117,7 +117,9 @@ function loadFlags(): void {
 	fetch(`${config.host}/api/experiments/active?site_id=${config.siteId}`)
 		.then((r) => r.json())
 		.then((body: { experiments?: FlagDef[] }) => {
-			flags = body.experiments ?? [];
+			// IMPORTANT: assignment()/variant() run inside the host page's render path, so a body whose
+			// `experiments` is not an array must degrade to "none", never land in `flags` to throw on.
+			flags = Array.isArray(body?.experiments) ? body.experiments : [];
 		})
 		.catch(() => {
 			flags = [];
@@ -152,8 +154,8 @@ function pick(def: FlagDef, id: string): string {
 
 /** The known control/first variant for a loaded flag, or `'control'` when the flag is unknown. */
 function fallbackVariant(flagKey: string): string {
-	const def = flags?.find((f) => f.flag_key === flagKey);
-	return def?.variants[0]?.key ?? CONTROL;
+	const def = flags?.find((f) => f?.flag_key === flagKey);
+	return def?.variants?.[0]?.key ?? CONTROL;
 }
 
 /**
@@ -178,8 +180,8 @@ export function assignment(flagKey: string): Assignment {
 			status: 'pending',
 		};
 	}
-	const def = flags.find((f) => f.flag_key === flagKey);
-	if (!def || def.variants.length === 0) {
+	const def = flags.find((f) => f?.flag_key === flagKey);
+	if (!def?.variants?.length) {
 		return {
 			variant: CONTROL,
 			participating: false,

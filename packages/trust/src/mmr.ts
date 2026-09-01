@@ -34,6 +34,15 @@ export function leafHash(x: Uint8Array | string): Promise<Uint8Array> {
 // merely CLOSE to a power of two, not only one past 2^31. Plain doubling/halving is exact for every
 // integer this module's tree sizes reach, through JS's 2^53 safe-integer ceiling.
 
+/** IMPORTANT: the descent loops in `indexHeight`/`peakIndices` only terminate for a non-negative safe
+ * integer. A wire-supplied `-1`, `0.5`, `NaN` or `Infinity` spins forever (and `peakIndices` also grows
+ * its output without bound), so both reject at entry and every caller fails closed instead of hanging. */
+function assertNodeCount(n: number, label: string): void {
+	if (!Number.isSafeInteger(n) || n < 0) {
+		throw new RangeError(`mmr: ${label} must be a non-negative safe integer`);
+	}
+}
+
 /** True when every bit of `n` up to its top set bit is 1 (i.e. n = 2^k - 1). */
 function allOnes(n: number): boolean {
 	if (n === 0) return false;
@@ -51,6 +60,7 @@ function mostSigBit(n: number): number {
 
 /** Zero-based height `g` of the node at index `i` (draft `index_height`). */
 export function indexHeight(i: number): number {
+	assertNodeCount(i, 'node index');
 	let pos = i + 1;
 	while (!allOnes(pos)) {
 		pos = pos - mostSigBit(pos) + 1;
@@ -64,6 +74,7 @@ export function indexHeight(i: number): number {
 
 /** Peak indices (the accumulator) for MMR with `count` nodes (draft `peaks`). */
 export function peakIndices(count: number): number[] {
+	assertNodeCount(count, 'node count');
 	let peak = 0;
 	const out: number[] = [];
 	let s = count;
@@ -102,6 +113,8 @@ export async function addLeafHash(nodes: Uint8Array[], f: Uint8Array): Promise<n
 
 /** Sibling indices proving inclusion of node `i` within a tree whose last index is `c` (draft path). */
 export function inclusionProofPath(i: number, c: number): number[] {
+	// The `isibling > c` exit below is never taken for a NaN `c`, so the path grows without bound.
+	if (!Number.isSafeInteger(c)) throw new RangeError('mmr: last index must be a safe integer');
 	const path: number[] = [];
 	let g = indexHeight(i);
 	let idx = i;
@@ -186,6 +199,7 @@ export async function verifyInclusion(proof: InclusionProof, root: Uint8Array): 
 	// An inclusion receipt proves membership of a LEAF; reject interior (aggregation) nodes, else an
 	// internal node hash would verify as a committed log entry.
 	if (indexHeight(proof.index) !== 0) return false;
+	if (proof.index >= proof.size) return false;
 	const peak = await includedRoot(proof.index, proof.leaf, proof.path);
 	if (!proof.peaks.some((p) => bytesEqual(p, peak))) return false;
 	return bytesEqual(await baggedRoot(proof.size, proof.peaks), root);
@@ -357,11 +371,14 @@ export async function verifyConsistency(
 	if (!bytesEqual(await baggedRoot(proof.sizeFrom, proof.peaksFrom), rootFrom)) return false;
 	// The new accumulator must bag to the new signed root.
 	if (!bytesEqual(await baggedRoot(proof.sizeTo, proof.peaksTo), rootTo)) return false;
-	// Each OLD PEAK must itself be the leaf of its inclusion proof AND fold to a new accumulator peak.
-	// Binding inc.leaf to peaksFrom[i] is what actually proves the old tree is a prefix of the new one;
-	// without it a prover could supply inclusions for unrelated nodes and forge a consistency proof.
+	// IMPORTANT: each OLD PEAK must be the leaf of its inclusion proof, fold to a new accumulator peak,
+	// AND sit at the canonical index `sizeFrom` puts it at. The leaf binding alone does NOT prove the
+	// prefix: leaves carry no domain-separation tag (see leafHash), so a log can replant a peak's HASH
+	// as a fresh leaf elsewhere in a rewritten tree. Pinning the index is what forces the real prefix.
+	const expectedIdx = peakIndices(proof.sizeFrom);
 	for (let i = 0; i < proof.inclusions.length; i++) {
 		const inc = proof.inclusions[i] as ConsistencyProof['inclusions'][number];
+		if (inc.index !== expectedIdx[i]) return false;
 		if (!bytesEqual(inc.leaf, proof.peaksFrom[i] as Uint8Array)) return false;
 		const peak = await includedRoot(inc.index, inc.leaf, inc.path);
 		if (!proof.peaksTo.some((p) => bytesEqual(p, peak))) return false;

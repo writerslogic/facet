@@ -39,10 +39,35 @@ function client(
 	return adminClient(host, token, fetchImpl);
 }
 
+const MAX_CELL = 80;
+
+// IMPORTANT: `etag` is copied verbatim from whatever FACET_BOT_RULESET_URL returned, and every cell
+// comes from the host the operator pointed `--host` at. Rendering one raw would let a remote response
+// drive the operator's terminal or pad the table to its own width.
+function cell(value: unknown): string {
+	const out: string[] = [];
+	for (const ch of typeof value === 'string' ? value : String(value ?? '')) {
+		const code = ch.codePointAt(0) ?? 0;
+		out.push(code < 0x20 || (code >= 0x7f && code <= 0x9f) ? ' ' : ch);
+		if (out.length >= MAX_CELL) return `${out.slice(0, MAX_CELL - 1).join('')}…`;
+	}
+	return out.join('');
+}
+
+function fmtTime(ms: unknown): string {
+	const at = new Date(typeof ms === 'number' ? ms : Number.NaN);
+	return Number.isNaN(at.getTime()) ? '-' : at.toISOString();
+}
+
 function print(status: RulesetStatus, asJson: boolean): number {
 	if (asJson) {
 		process.stdout.write(`${JSON.stringify(status, null, 2)}\n`);
 		return 0;
+	}
+	if (!Array.isArray(status?.rulesets)) {
+		throw new UsageError(
+			'Unexpected response from the bots endpoint: no ruleset list. Is --host a Facet deployment?',
+		);
 	}
 	if (status.rulesets.length === 0) {
 		process.stdout.write(`${pc.dim('No bot ruleset stored yet. Run `facet bots refresh`.')}\n`);
@@ -52,14 +77,16 @@ function print(status: RulesetStatus, asJson: boolean): number {
 		renderTable(
 			['SOURCE', 'PATTERNS', 'UPDATED', 'ETAG'],
 			status.rulesets.map((r) => [
-				r.source,
-				String(r.pattern_count),
-				new Date(r.updated_at).toISOString(),
-				r.etag ?? '-',
+				cell(r?.source),
+				cell(r?.pattern_count),
+				fmtTime(r?.updated_at),
+				r?.etag == null ? '-' : cell(r.etag),
 			]),
 		),
 	);
-	process.stdout.write(`${pc.dim(`Active in the serving isolate: ${status.active_patterns}`)}\n`);
+	process.stdout.write(
+		`${pc.dim(`Active in the serving isolate: ${cell(status.active_patterns)}`)}\n`,
+	);
 	return 0;
 }
 
@@ -84,7 +111,9 @@ export async function runBots(args: string[], fetchImpl: FetchJson = fetchJson):
 			printError(err.message);
 			return 1;
 		}
-		const code = err instanceof Error ? err.message : String(err);
+		const detail = err instanceof Error ? err.message : String(err);
+		// `fetchJson` appends `: <message>` when the error envelope carries one, so match the code.
+		const code = detail.split(': ')[0] ?? detail;
 		if (code === 'bot_ruleset_unconfigured') {
 			printError(
 				'Bot ruleset refresh is not configured: set the FACET_BOT_RULESET_URL var on the Worker (https only).',
@@ -97,7 +126,13 @@ export async function runBots(args: string[], fetchImpl: FetchJson = fetchJson):
 			);
 			return 1;
 		}
-		printError(`bots ${sub} failed: ${code}`);
+		if (code === 'bot_ruleset_refresh_failed') {
+			printError(
+				'Bot ruleset refresh failed upstream: FACET_BOT_RULESET_URL was unreachable, redirected off https, or returned a payload that failed validation. The Worker withholds the upstream detail on purpose; the stored ruleset is unchanged.',
+			);
+			return 1;
+		}
+		printError(`bots ${sub} failed: ${detail}`);
 		return 1;
 	}
 }

@@ -92,16 +92,29 @@ export async function persistEvents(
 ): Promise<void> {
 	if (items.length === 0) return;
 	const client = db(env);
-	const stmts = items.flatMap((it) => [
-		client
-			.insert(schema.events)
-			.values({
-				...it.row,
-				id: it.id,
-				props: it.row.props ? JSON.stringify(it.row.props) : null,
-			})
-			.onConflictDoNothing(),
-		client.insert(schema.sessions).values(it.session).onConflictDoNothing(),
-	]);
+	// PERF: a burst from one visitor repeats the same (site, visitor, day) session across the batch, so
+	// collapsing them drops the redundant statements D1 has to run. Delivery order is not chronological,
+	// so the survivor is the earliest first_seen rather than whichever message happened to arrive first.
+	const sessions = new Map<string, NewSession>();
+	for (const { session } of items) {
+		const key = `${session.siteId}\u0000${session.visitorHash}\u0000${session.dayKey}`;
+		const prev = sessions.get(key);
+		if (!prev || session.firstSeen < prev.firstSeen) sessions.set(key, session);
+	}
+	const stmts = [
+		...items.map((it) =>
+			client
+				.insert(schema.events)
+				.values({
+					...it.row,
+					id: it.id,
+					props: it.row.props ? JSON.stringify(it.row.props) : null,
+				})
+				.onConflictDoNothing(),
+		),
+		...[...sessions.values()].map((session) =>
+			client.insert(schema.sessions).values(session).onConflictDoNothing(),
+		),
+	];
 	await client.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
 }

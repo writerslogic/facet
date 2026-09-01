@@ -13,14 +13,8 @@ export const requireSameOrigin: MiddlewareHandler<AppEnv> = async (c, next) => {
 		throw new ApiError('csrf_rejected', 403);
 	}
 	const origin = c.req.header('origin');
-	if (origin) {
-		let expected: string;
-		try {
-			expected = new URL(c.req.url).origin;
-		} catch {
-			throw new ApiError('csrf_rejected', 403);
-		}
-		if (origin !== expected) throw new ApiError('csrf_rejected', 403);
+	if (origin && origin !== new URL(c.req.url).origin) {
+		throw new ApiError('csrf_rejected', 403);
 	}
 	return next();
 };

@@ -30,6 +30,12 @@ const AE_QUERY_TIMEOUT_MS = 10_000;
  * typo's choosing. Validated to the exact shape rather than merely non-empty. */
 const ACCOUNT_ID = /^[0-9a-f]{32}$/;
 
+/** `CF_API_TOKEN` is interpolated into an `authorization` HEADER. A control character in it — a
+ * trailing newline off a pasted secret is the ordinary way one gets there — is request-splitting
+ * shape rather than a token, so the deployment reports itself unreadable instead of letting `fetch`
+ * throw on every read. Printable ASCII, no space: the field-value subset every API token occupies. */
+const API_TOKEN = /^[\x21-\x7e]+$/;
+
 /** Rejects any value that could end a `'…'` literal or smuggle syntax into one: a single quote, a
  * backslash (the escape character in every dialect this parser could be built on), or a control
  * character. What remains cannot terminate the literal, so it cannot be read as SQL. */
@@ -51,7 +57,7 @@ export function aeReadable(env: Env): boolean {
 		env.AE_BEST_EFFORT_ENABLED === 'true' &&
 		env.AE !== undefined &&
 		ACCOUNT_ID.test(env.CF_ACCOUNT_ID ?? '') &&
-		(env.CF_API_TOKEN ?? '') !== '' &&
+		API_TOKEN.test(env.CF_API_TOKEN ?? '') &&
 		retentionDays(env) >= AE_RETENTION_DAYS
 	);
 }
@@ -101,6 +107,10 @@ export async function queryAe<T>(
 					'content-type': 'text/plain; charset=utf-8',
 				},
 				body: sql,
+				// IMPORTANT: the bearer token above travels in this request. Following a redirect
+				// replays it at whatever host the response names; the analytics API does not
+				// redirect, so a 3xx is a fault to decline on rather than a route to take.
+				redirect: 'manual',
 				signal: controller.signal,
 			},
 		);

@@ -121,8 +121,9 @@ export interface KeyAttestationVerification {
 /**
  * Verify a hardware key-attestation and decide `hardware`. The gating, in order:
  *   1. The attestor signature over the statement must verify (delegated to `verifyStatement`).
- *   2. The attested `subjectThumbprint` must equal the RFC 7638 thumbprint of the echoed subject JWK
- *      (self-consistency: the attestation cannot lie about which key it is for).
+ *   2. The claim set must assert `extractable: false`, and the attested `subjectThumbprint` must equal
+ *      the RFC 7638 thumbprint of the echoed subject JWK (self-consistency: the attestation cannot lie
+ *      about which key it is for).
  *   3. If `expectedThumbprint` is supplied, it must equal the attested subject thumbprint.
  *   4. The signer (the statement proof's public JWK) must be one of the configured `trustAnchors`,
  *      matched by RFC 7638 thumbprint. NO anchor match ⇒ `hardware: false`.
@@ -132,6 +133,12 @@ export async function verifyKeyAttestation(
 	attestation: KeyAttestation,
 	opts: VerifyKeyAttestationOptions,
 ): Promise<KeyAttestationVerification> {
+	// A null/undefined envelope or payload would throw out of this never-throw verifier: `verifyStatement`
+	// destructures its argument, and a genuine signature over a null payload verifies.
+	if (!attestation) {
+		return { valid: false, hardware: false, reason: 'attestation is missing' };
+	}
+
 	const sig = await verifyStatement(attestation, KEY_ATTESTATION_TYPE);
 	if (!sig.valid) {
 		return {
@@ -142,35 +149,51 @@ export async function verifyKeyAttestation(
 	}
 
 	const claims = attestation.payload;
+	if (!claims) {
+		return { valid: false, hardware: false, reason: 'attestation carries no claim set' };
+	}
 
-	// Freshness: an attestation dated in the future (beyond clock skew) cannot be trusted — an attestor
-	// cannot vouch for a key before it exists. Only enforced when the caller supplies `now`.
-	if (
-		opts.now !== undefined &&
-		typeof claims.iat === 'number' &&
-		claims.iat > Math.floor(opts.now / 1000) + FRESHNESS_SKEW_SECONDS
-	) {
+	// The non-extractability assertion is the substance of the credential, so it is read, not assumed:
+	// an attestation that does not assert it can never yield hardware:true.
+	if (claims.extractable !== false) {
 		return {
 			valid: true,
 			hardware: false,
 			subjectThumbprint: claims.subjectThumbprint,
-			reason: 'attestation is dated in the future',
+			reason: 'attestation does not assert a non-extractable key',
 		};
 	}
 
-	// Staleness: an attestation older than maxAgeSeconds is no longer trustworthy for "currently hardware".
-	if (
-		opts.now !== undefined &&
-		opts.maxAgeSeconds !== undefined &&
-		typeof claims.iat === 'number' &&
-		claims.iat < Math.floor(opts.now / 1000) - opts.maxAgeSeconds
-	) {
-		return {
-			valid: true,
-			hardware: false,
-			subjectThumbprint: claims.subjectThumbprint,
-			reason: 'attestation is stale',
-		};
+	if (opts.now !== undefined) {
+		const nowSeconds = Math.floor(opts.now / 1000);
+		// A caller supplying `now` has opted into the time gates; an unusable `iat` (missing, non-numeric,
+		// NaN) must fail them rather than silently skip both.
+		if (!Number.isFinite(claims.iat) || !Number.isFinite(nowSeconds)) {
+			return {
+				valid: true,
+				hardware: false,
+				subjectThumbprint: claims.subjectThumbprint,
+				reason: 'attestation freshness cannot be evaluated',
+			};
+		}
+		// An attestor cannot vouch for a key before it exists.
+		if (claims.iat > nowSeconds + FRESHNESS_SKEW_SECONDS) {
+			return {
+				valid: true,
+				hardware: false,
+				subjectThumbprint: claims.subjectThumbprint,
+				reason: 'attestation is dated in the future',
+			};
+		}
+		// An attestation older than maxAgeSeconds is no longer trustworthy for "currently hardware".
+		if (opts.maxAgeSeconds !== undefined && claims.iat < nowSeconds - opts.maxAgeSeconds) {
+			return {
+				valid: true,
+				hardware: false,
+				subjectThumbprint: claims.subjectThumbprint,
+				reason: 'attestation is stale',
+			};
+		}
 	}
 
 	// All thumbprinting below runs on attacker-controlled attestation content (and caller-supplied
@@ -205,8 +228,10 @@ export async function verifyKeyAttestation(
 		// (4) THE security-critical gate: the signer must be a configured trust anchor. This is the only
 		// way `hardware` becomes true. An empty/absent anchor set can never match ⇒ hardware stays false.
 		const signerThumbprint = await signerThumbprintOf(attestation);
+		// One malformed entry in the caller's anchor set must not disable the valid anchors beside it; a
+		// JWK that cannot be thumbprinted can never be a legitimate signer, so drop it rather than throw.
 		const anchorThumbprints = await Promise.all(
-			opts.trustAnchors.map((a) => calculateJwkThumbprint(a)),
+			(opts.trustAnchors ?? []).map((a) => calculateJwkThumbprint(a).catch(() => undefined)),
 		);
 		const anchored =
 			signerThumbprint !== undefined && anchorThumbprints.includes(signerThumbprint);

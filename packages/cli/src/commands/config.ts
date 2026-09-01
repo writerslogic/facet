@@ -4,6 +4,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
+import { isUuid } from '../admin.js';
 import {
 	PLACEHOLDER_DB_ID,
 	getDatabaseId,
@@ -53,6 +54,13 @@ function setDbId(args: string[]): number {
 
 	if (!values.id) {
 		printError('Missing required option: --id <database_id>.');
+		return 1;
+	}
+	// REQUIRED: a D1 database_id is a UUID, and it is interpolated straight into the JSONC string and
+	// into a String.replace replacement, so an unvalidated value injects config or writes a silently
+	// different id (`$&`, `$1`).
+	if (!isUuid(values.id)) {
+		printError('Invalid --id: expected a D1 database_id (UUID).');
 		return 1;
 	}
 	const path = resolveConfigPath(values.config);

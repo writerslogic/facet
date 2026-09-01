@@ -21,7 +21,8 @@ const ROLE_RANK: Record<Role, number> = {
 	owner: 3,
 };
 export function isRole(v: unknown): v is Role {
-	return typeof v === 'string' && v in ROLE_RANK;
+	// IMPORTANT: own keys only. `in` walks the prototype, so it accepts 'constructor'/'toString'.
+	return typeof v === 'string' && Object.hasOwn(ROLE_RANK, v);
 }
 /** True when `have` meets or exceeds the privilege of `need`. */
 export function roleAtLeast(have: Role, need: Role): boolean {
@@ -153,8 +154,10 @@ export async function createMagicToken(env: Env, email: string, now: number): Pr
 
 /** Delete a freshly minted token when its delivery failed, so an unreachable link leaves no PII row. */
 export async function discardMagicToken(env: Env, token: string): Promise<void> {
-	const id = token.slice(0, token.indexOf('.'));
-	if (id) await db(env).delete(schema.authTokens).where(eq(schema.authTokens.id, id));
+	const dot = token.indexOf('.');
+	if (dot < 1) return;
+	const id = token.slice(0, dot);
+	await db(env).delete(schema.authTokens).where(eq(schema.authTokens.id, id));
 }
 
 /** Consume a magic-link token: validate hash + expiry + single-use, mark it used, return the email. */

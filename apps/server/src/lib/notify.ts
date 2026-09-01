@@ -278,8 +278,20 @@ export async function deliverWebhook(
 	}
 	// RFC 8785 canonical JSON, so the receiver can recompute exactly the bytes that were signed
 	// without depending on our key ordering.
-	const body = canonicalizeJson(payload);
-	const headers = await signingHeaders(env, dest, payload, body);
+	// IMPORTANT: signing is inside a try of its own — a malformed FACET_SIGNING_JWK rejects for the
+	// life of the isolate (signing.ts caches the promise), and that must be a recorded failure with
+	// its own code, not a throw out of a transport the cron treats as never-throwing.
+	let body: string;
+	let headers: Record<string, string>;
+	try {
+		body = canonicalizeJson(payload);
+		headers = await signingHeaders(env, dest, payload, body);
+	} catch (err) {
+		return {
+			ok: false,
+			error: err instanceof Error ? `sign_failed:${err.name}` : 'sign_failed',
+		};
+	}
 	const controller = new AbortController();
 	const timer = setTimeout(() => controller.abort(), DELIVERY_TIMEOUT_MS);
 	try {
@@ -415,14 +427,18 @@ export async function deliverEmail(
 		return { ok: false, error: 'email_unconfigured' };
 	}
 	const to = dest.target;
-	const raw = buildAlertMime(payload, from, to);
 	try {
+		// Inside the try: emailBody renders bucket/window timestamps with toISOString(), which throws
+		// on a non-finite value rather than degrading the way toUTCString() does.
+		const raw = buildAlertMime(payload, from, to);
 		await sender.send(new EmailMessage(from, to, raw));
 		return { ok: true };
 	} catch (err) {
+		// `err.name`, not `err.message`: this string is persisted to alert_deliveries.last_error and
+		// surfaced, so it stays a bounded stable code like the webhook transport's.
 		return {
 			ok: false,
-			error: err instanceof Error ? `email_failed:${err.message}` : 'email_failed',
+			error: err instanceof Error ? `email_failed:${err.name}` : 'email_failed',
 		};
 	}
 }

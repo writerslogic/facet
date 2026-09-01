@@ -37,6 +37,7 @@ const EXPECTED_TABLES = [
 	'site_config',
 	'sites',
 	'teams',
+	'timeline_annotations',
 	'users',
 ];
 

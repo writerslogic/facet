@@ -103,6 +103,29 @@ export async function verifyConsentRecord(
 	);
 }
 
+/** A stored `statement` column is untrusted text: `JSON.parse` returns `null` for the literal `null`
+ * and a scalar for a number, and `verifyStatement` destructures its argument — so a corrupt or
+ * hand-written row would throw out of functions documented never to throw. Only an object can be a
+ * statement. */
+function parseStatement(raw: string): SignedStatement<ConsentClaims> | null {
+	try {
+		const parsed: unknown = JSON.parse(raw);
+		if (typeof parsed !== 'object' || parsed === null) return null;
+		return parsed as SignedStatement<ConsentClaims>;
+	} catch {
+		return null;
+	}
+}
+
+/** IMPORTANT: expiry is a SIGNED claim as well as a column, and the claim is the authorization. The
+ * `expires_at` column alone would let a genuine, time-boxed statement be copied into a fresh row with
+ * that column cleared and re-elevate past the window its subject agreed to. Unparsable fails closed. */
+function claimsActiveAt(claims: ConsentClaims, now: number): boolean {
+	if (claims.expires_at === undefined) return true;
+	const at = Date.parse(claims.expires_at);
+	return Number.isFinite(at) && at > now;
+}
+
 /** Parameters that identify the active consent row to look up at ingest time. */
 export interface ConsentLookup {
 	siteId: string;
@@ -129,12 +152,8 @@ export async function findActiveConsent(
 		.bind(lookup.siteId, lookup.visitorHash, lookup.tier, lookup.now)
 		.first<{ statement: string }>();
 	if (!row) return null;
-	let stmt: SignedStatement<ConsentClaims>;
-	try {
-		stmt = JSON.parse(row.statement) as SignedStatement<ConsentClaims>;
-	} catch {
-		return null;
-	}
+	const stmt = parseStatement(row.statement);
+	if (!stmt) return null;
 	// No did:web for this host ⇒ no `iss` any statement could have been issued under ⇒ nothing to
 	// match, which is the same fail-closed answer this function gives to every other mismatch.
 	const iss = deploymentDid(url);
@@ -147,7 +166,8 @@ export async function findActiveConsent(
 		iss,
 		kid: key.kid,
 	};
-	return (await verifyConsentRecord(stmt, ctx)) ? stmt : null;
+	if (!(await verifyConsentRecord(stmt, ctx))) return null;
+	return claimsActiveAt(stmt.payload, lookup.now) ? stmt : null;
 }
 
 /** A stored consent record, ready to insert. `externalUserId` is the raw site-supplied uid, persisted
@@ -311,12 +331,8 @@ export async function findLinkedVisitorHashesForMany(
 			.bind(lookup.siteId, ...batch, lookup.now)
 			.all<{ external_user_id: string; statement: string }>();
 		for (const row of results ?? []) {
-			let stmt: SignedStatement<ConsentClaims>;
-			try {
-				stmt = JSON.parse(row.statement) as SignedStatement<ConsentClaims>;
-			} catch {
-				continue;
-			}
+			const stmt = parseStatement(row.statement);
+			if (!stmt) continue;
 			if (!(await verifyPinnedToDeployment(stmt, iss, key.kid))) continue;
 			const p = stmt.payload;
 			// The claims, not the columns: this grant must be for this site, at the identified tier,
@@ -325,6 +341,7 @@ export async function findLinkedVisitorHashesForMany(
 			if (p.site_id !== lookup.siteId) continue;
 			if (p.tier !== 'identified') continue;
 			if (!p.external_user_id_present) continue;
+			if (!claimsActiveAt(p, lookup.now)) continue;
 			if (!(await hashBelongsToUid(env, lookup.siteId, row.external_user_id, p, saltCache)))
 				continue;
 			const hashes = seen.get(row.external_user_id) ?? new Set<string>();
@@ -367,11 +384,14 @@ export async function revokeConsent(
 		now: number;
 	},
 ): Promise<number> {
-	if (!params.externalUserId && !params.visitorHash) {
+	// One predicate picks both the column and the value: `??` would have kept an empty-string
+	// externalUserId as the bound value while the truthiness test sent the clause to visitor_hash,
+	// silently revoking nothing.
+	const ident = params.externalUserId || params.visitorHash;
+	if (!ident) {
 		throw new Error('revokeConsent: externalUserId or visitorHash is required');
 	}
 	const clause = params.externalUserId ? 'external_user_id = ?' : 'visitor_hash = ?';
-	const ident = params.externalUserId ?? params.visitorHash ?? '';
 	const res = await env.DB.prepare(
 		`UPDATE consent_records SET revoked_at = ? WHERE site_id = ? AND tier = ? AND ${clause} AND revoked_at IS NULL`,
 	)

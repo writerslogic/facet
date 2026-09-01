@@ -16,24 +16,48 @@ export interface Prompter {
 	close(): void;
 }
 
+const STDIN_CLOSED = 'Standard input closed before the prompt was answered; nothing further ran.';
+
 /** Interactive prompter bound to the real stdin/stdout. */
 export function ttyPrompter(): Prompter {
 	let rl: ReturnType<typeof createInterface> | null = null;
+	let ended = false;
 	const io = () => {
-		if (!rl) rl = createInterface({ input: process.stdin, output: process.stdout });
+		if (!rl) {
+			rl = createInterface({ input: process.stdin, output: process.stdout });
+			rl.once('close', () => {
+				ended = true;
+			});
+		}
 		return rl;
+	};
+	// IMPORTANT: readline's question() never settles once stdin reaches EOF (Ctrl+D, a hung-up
+	// terminal), so without this abort the installer strands mid-run and the process exits 0 as if
+	// it had succeeded. Throwing instead surfaces the abort through the CLI's top-level handler.
+	const ask = async (query: string): Promise<string> => {
+		if (ended) throw new Error(STDIN_CLOSED);
+		const stream = io();
+		const abort = new AbortController();
+		const onClose = () => abort.abort();
+		stream.once('close', onClose);
+		try {
+			return await stream.question(query, { signal: abort.signal });
+		} catch (err) {
+			if (abort.signal.aborted) throw new Error(STDIN_CLOSED);
+			throw err;
+		} finally {
+			stream.off('close', onClose);
+		}
 	};
 	return {
 		async text(message, fallback) {
 			const suffix = fallback ? pc.dim(` (${fallback})`) : pc.dim(' (empty)');
-			const answer = await io().question(`${pc.cyan('?')} ${message}${suffix}: `);
-			return answer.trim() === '' ? fallback : answer.trim();
+			const answer = (await ask(`${pc.cyan('?')} ${message}${suffix}: `)).trim();
+			return answer === '' ? fallback : answer;
 		},
 		async confirm(message, fallback) {
 			const hint = fallback ? 'Y/n' : 'y/N';
-			const answer = (
-				await io().question(`${pc.cyan('?')} ${message} ${pc.dim(`[${hint}]`)} `)
-			)
+			const answer = (await ask(`${pc.cyan('?')} ${message} ${pc.dim(`[${hint}]`)} `))
 				.trim()
 				.toLowerCase();
 			if (answer === '') return fallback;
@@ -42,6 +66,7 @@ export function ttyPrompter(): Prompter {
 		close() {
 			rl?.close();
 			rl = null;
+			ended = false;
 		},
 	};
 }

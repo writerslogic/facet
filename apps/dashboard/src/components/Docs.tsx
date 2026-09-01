@@ -446,6 +446,9 @@ curl -X POST https://your-deployment.example.com/api/keys \\
 						Clicking a row cross-filters the board instantly, and the selected segment
 						follows you to the other tabs — each one either applies it or says plainly
 						that it cannot. Drag tiles to rearrange; layout is remembered per site.
+						Expand Traffic over time to place persistent release, campaign, incident, or
+						general notes directly on the timeline; detected anomalies remain visually
+						distinct from operator-authored context.
 					</Def>
 					<Def term="Explore">
 						One dimension at a time, ranked — including the columns no tile on the

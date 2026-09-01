@@ -48,7 +48,8 @@ importRoutes.post(
 		}
 
 		const now = Date.now();
-		const cutoff = now - retentionDays(c.env) * DAY_MS;
+		const retention = retentionDays(c.env);
+		const cutoff = now - retention * DAY_MS;
 		let oldest = Number.POSITIVE_INFINITY;
 		let newest = Number.NEGATIVE_INFINITY;
 		for (const e of events) {
@@ -57,11 +58,17 @@ importRoutes.post(
 		}
 		// Rejected, not silently trimmed: rows older than the retention window would be deleted by the
 		// next `enforceRetention` run, so accepting them would report an import that quietly evaporates.
-		if (oldest < cutoff) {
+		// IMPORTANT: the bound is the oldest UTC day's MIDNIGHT, not the oldest row. `enforceRetention`
+		// cuts raw events at an instant while `event_rollups` is durable history that is never deleted,
+		// so a day straddling the cutoff has already lost its pre-cutoff rows — and the day rebuild below
+		// recomputes the whole bucket from what survives, overwriting that durable rollup with an
+		// undercount for every site with traffic that day, not just this one.
+		const oldestDay = dayKey(oldest);
+		if (dayStartMs(oldestDay) < cutoff) {
 			throw new ApiError(
 				'out_of_retention',
 				400,
-				`batch reaches ${new Date(oldest).toISOString()}, before the ${retentionDays(c.env)}-day retention window`,
+				`batch reaches UTC day ${oldestDay}, which is not wholly inside the ${retention}-day retention window`,
 			);
 		}
 		if (newest > now) {

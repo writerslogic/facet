@@ -87,7 +87,8 @@ export function didWebToUrl(did: string): string {
 	if (segments.some((s) => s === '' || s === '.' || s === '..' || s.includes('/'))) {
 		throw new Error('invalid did:web path segment');
 	}
-	return `https://${host}/${segments.join('/')}/did.json`;
+	// IMPORTANT: re-encode each segment — a decoded `?`, `#` or `%` would otherwise restructure the URL.
+	return `https://${host}/${segments.map(encodeURIComponent).join('/')}/did.json`;
 }
 
 /** The verification-method id for the deployment key under a DID (`<did>#<kid>`). */
@@ -171,6 +172,20 @@ export function publicKeyMultibaseFor(doc: DidDocument, vmId: string): string | 
 	return vm?.publicKeyMultibase ?? null;
 }
 
+/** The three fields the code below indexes into. Deliberately NOT the full {@link DidDocument} shape:
+ * a real did:web document may carry verification methods of other types, and rejecting those would
+ * make this resolver stricter than the spec. */
+function hasDidDocumentShape(doc: unknown): doc is DidDocument {
+	const d = doc as Partial<DidDocument> | null;
+	return (
+		typeof d === 'object' &&
+		d !== null &&
+		typeof d.id === 'string' &&
+		Array.isArray(d.verificationMethod) &&
+		Array.isArray(d.assertionMethod)
+	);
+}
+
 export interface LinkageVerification {
 	valid: boolean;
 	did?: string;
@@ -178,15 +193,25 @@ export interface LinkageVerification {
 	reason?: string;
 }
 
-/** Verify a did-configuration against a DID document: subject binding + credential proof. */
+/** Verify a did-configuration against a DID document: subject binding + credential proof. Both
+ * documents are untrusted JSON (fetched, or read from a file), so a malformed one is a verification
+ * failure, never a throw. `now` (unix ms) additionally enforces the credential's validity window;
+ * omit to leave temporal validity to the caller. */
 export async function verifyDidConfiguration(
 	config: DidConfiguration,
 	didDoc: DidDocument,
 	expectedOrigin: string,
+	now?: number,
 ): Promise<LinkageVerification> {
+	if (!hasDidDocumentShape(didDoc)) {
+		return { valid: false, reason: 'malformed DID document' };
+	}
 	const did = didDoc.id;
-	const credential = config.linked_dids?.find((c) => {
-		const subject = c.credentialSubject as { id?: string; origin?: string };
+	if (!Array.isArray(config?.linked_dids)) {
+		return { valid: false, did, reason: 'malformed did-configuration' };
+	}
+	const credential = config.linked_dids.find((c) => {
+		const subject = c?.credentialSubject as { id?: string; origin?: string } | undefined;
 		return subject?.id === did;
 	});
 	if (!credential)
@@ -195,6 +220,17 @@ export async function verifyDidConfiguration(
 			did,
 			reason: 'no linked credential for this DID',
 		};
+	// DIF spec: a linkage credential is typed `DomainLinkageCredential`. Without this gate any other
+	// credential the deployment key signed, carrying an `origin` next to the DID, would pass as one.
+	const declaredType: unknown = credential.type;
+	const types = Array.isArray(declaredType) ? declaredType : [declaredType];
+	if (!types.includes('DomainLinkageCredential')) {
+		return {
+			valid: false,
+			did,
+			reason: 'credential is not a DomainLinkageCredential',
+		};
+	}
 	const subject = credential.credentialSubject as {
 		id?: string;
 		origin?: string;
@@ -220,12 +256,19 @@ export async function verifyDidConfiguration(
 		};
 	}
 	const vmId = credential.proof?.verificationMethod ?? '';
-	const vm = didDoc.verificationMethod.find((m) => m.id === vmId);
+	const vm = didDoc.verificationMethod.find((m) => m?.id === vmId);
 	if (!vm) {
 		return {
 			valid: false,
 			did,
 			reason: 'verification method not found in DID document',
+		};
+	}
+	if (typeof vm.controller !== 'string' || typeof vm.publicKeyMultibase !== 'string') {
+		return {
+			valid: false,
+			did,
+			reason: 'malformed verification method',
 		};
 	}
 	if (vm.controller !== did) {
@@ -245,6 +288,7 @@ export async function verifyDidConfiguration(
 	const result = await verifyCredential(credential, {
 		publicKeyMultibase: vm.publicKeyMultibase,
 		expectedProofPurpose: 'assertionMethod',
+		now,
 	});
 	if (!result.valid)
 		return {
@@ -265,5 +309,10 @@ export async function resolveDidWeb(did: string, fetchImpl: FetchLike): Promise<
 	const url = didWebToUrl(did);
 	const res = await fetchImpl(url);
 	if (!res.ok) throw new Error(`did:web resolution failed (${res.status}) for ${url}`);
-	return (await res.json()) as DidDocument;
+	const doc = await res.json();
+	if (!hasDidDocumentShape(doc)) throw new Error(`did:web document is malformed at ${url}`);
+	// IMPORTANT: DID Core requires the document's `id` to BE the DID resolved. Without this a
+	// redirected or substituted response speaks for a DID the caller never asked about.
+	if (doc.id !== did) throw new Error(`did:web document id does not match ${did}`);
+	return doc;
 }

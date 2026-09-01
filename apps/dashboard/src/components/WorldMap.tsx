@@ -12,6 +12,7 @@ import type { CountryShape } from '../lib/worldGeo.js';
 import { useThemeColors } from '../theme.js';
 import { DeltaBadge } from './Delta.js';
 import { Skeleton } from './StatusStates.js';
+import { type Rgb, hexToRgb } from './charts/ramp.js';
 
 interface WorldGeo {
 	shapes: CountryShape[];
@@ -54,21 +55,6 @@ function useWorldGeo(): WorldGeo | null | 'error' {
 /** One list row's height and the gap under it, in px — `py-1` + a 20px line + `gap-0.5`. */
 const ROW_H = 28;
 const ROW_GAP = 2;
-
-type Rgb = [number, number, number];
-
-function hexToRgb(hex: string): Rgb {
-	const h = hex.replace('#', '').trim();
-	const full =
-		h.length === 3
-			? h
-					.split('')
-					.map((c) => c + c)
-					.join('')
-			: h;
-	const n = Number.parseInt(full || '818cf8', 16);
-	return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
 
 // Intensity ramp between the active palette's low (`lo`) and hot (`hi`) data colours; opacity rises with
 // intensity so a hot country glows and a cold one only tints. `t` is 0–1 (log-scaled share).

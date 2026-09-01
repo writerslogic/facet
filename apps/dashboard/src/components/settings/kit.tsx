@@ -204,6 +204,9 @@ export function Field({
 	onChange,
 	placeholder,
 	type = 'text',
+	min,
+	max,
+	maxLength,
 	hint,
 	disabled,
 }: {
@@ -213,6 +216,9 @@ export function Field({
 	onChange: (value: string) => void;
 	placeholder?: string;
 	type?: string;
+	min?: string;
+	max?: string;
+	maxLength?: number;
 	/** Optional helper text under the field. */
 	hint?: string;
 	/** Inert because another control currently owns this value. State the reason in `hint`. */
@@ -229,6 +235,9 @@ export function Field({
 				value={value}
 				onChange={(e) => onChange(e.target.value)}
 				placeholder={placeholder}
+				min={min}
+				max={max}
+				maxLength={maxLength}
 				disabled={disabled}
 				aria-describedby={hint ? `${id}-hint` : undefined}
 				className="input mt-1 block w-full rounded-lg px-3 py-1.5 text-sm disabled:cursor-not-allowed disabled:opacity-60"

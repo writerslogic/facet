@@ -43,15 +43,30 @@ export function stateDir(repoRoot: string): string {
 	return join(repoRoot, STATE_DIR);
 }
 
+function optionalString(value: unknown): string | undefined {
+	return typeof value === 'string' ? value : undefined;
+}
+
 export function readInstallState(repoRoot: string): InstallState {
+	let raw: unknown;
 	try {
-		return JSON.parse(
-			readFileSync(join(stateDir(repoRoot), STATE_FILE), 'utf8'),
-		) as InstallState;
+		raw = JSON.parse(readFileSync(join(stateDir(repoRoot), STATE_FILE), 'utf8'));
 	} catch {
 		// A missing or corrupt state file must never block an install: fall back to full detection.
 		return {};
 	}
+	// IMPORTANT: valid JSON is not a valid state. `null`, an array or a bare string all parse, and
+	// callers dereference `install.host` unguarded, so anything but an object degrades to detection.
+	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+	const record = raw as Record<string, unknown>;
+	return {
+		host: optionalString(record.host),
+		siteId: optionalString(record.siteId),
+		siteDomain: optionalString(record.siteDomain),
+		workerName: optionalString(record.workerName),
+		databaseId: optionalString(record.databaseId),
+		updatedAt: typeof record.updatedAt === 'number' ? record.updatedAt : undefined,
+	};
 }
 
 /** Merge `patch` into the stored state. Never called with a secret — see the module header. */
@@ -70,6 +85,17 @@ export function writeInstallState(repoRoot: string, patch: InstallState): Instal
 	return next;
 }
 
+// REQUIRED: the reader and the writer MUST agree on what a line assigns. When they disagree the
+// writer appends a second `ADMIN_TOKEN=` line and the reader keeps returning the first, so a token
+// rotation silently leaves the old secret live.
+function parseDevVarLine(line: string): { key: string; value: string } | null {
+	const trimmed = line.trim();
+	if (trimmed.startsWith('#')) return null;
+	const eq = trimmed.indexOf('=');
+	if (eq <= 0) return null;
+	return { key: trimmed.slice(0, eq).trim(), value: trimmed.slice(eq + 1).trim() };
+}
+
 /** Read one variable out of a `.dev.vars` file. Returns null when the file or key is absent. */
 export function readDevVar(devVarsPath: string, key: string): string | null {
 	let contents: string;
@@ -80,10 +106,8 @@ export function readDevVar(devVarsPath: string, key: string): string | null {
 		throw err;
 	}
 	for (const line of contents.split('\n')) {
-		const trimmed = line.trim();
-		if (trimmed.startsWith('#')) continue;
-		const eq = trimmed.indexOf('=');
-		if (eq > 0 && trimmed.slice(0, eq).trim() === key) return trimmed.slice(eq + 1).trim();
+		const entry = parseDevVarLine(line);
+		if (entry?.key === key) return entry.value;
 	}
 	return null;
 }
@@ -93,6 +117,14 @@ export function readDevVar(devVarsPath: string, key: string): string | null {
  * lines are preserved byte-for-byte.
  */
 export function writeDevVar(devVarsPath: string, key: string, value: string): void {
+	// REQUIRED: one line, one variable. A newline in either half would silently define a second
+	// variable in a file wrangler loads as the Worker's local environment.
+	if (/[\r\n]/.test(key) || /[\r\n]/.test(value)) {
+		throw new Error(`Refusing to write a multi-line value for ${JSON.stringify(key)}.`);
+	}
+	if (parseDevVarLine(`${key}=`)?.key !== key) {
+		throw new Error(`Refusing to write an unreadable .dev.vars key: ${JSON.stringify(key)}.`);
+	}
 	mkdirSync(dirname(devVarsPath), { recursive: true });
 	// One descriptor for the whole read-modify-write. `a+` creates the file at 0600 when it is
 	// missing; `fchmodSync` tightens it through that same descriptor when it already existed under a
@@ -105,7 +137,7 @@ export function writeDevVar(devVarsPath: string, key: string, value: string): vo
 		fchmodSync(fd, 0o600);
 		const existing = readFileSync(fd, 'utf8');
 		const lines = existing === '' ? [] : existing.replace(/\n$/, '').split('\n');
-		const idx = lines.findIndex((line) => line.trim().startsWith(`${key}=`));
+		const idx = lines.findIndex((line) => parseDevVarLine(line)?.key === key);
 		if (idx >= 0) lines[idx] = `${key}=${value}`;
 		else lines.push(`${key}=${value}`);
 		// `a+` pins every write to end-of-file, so truncating first is what makes the rewrite land at

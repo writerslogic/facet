@@ -18,6 +18,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	clockLabel,
 	clockZone,
+	formatDateTimeInput,
 	formatDay,
 	formatDayShort,
 	formatHourWindow,
@@ -25,6 +26,7 @@ import {
 	formatStamp,
 	formatWindowLabel,
 	getClockMode,
+	parseDateTimeInput,
 	setClockMode,
 	toggleClockMode,
 	uiLocale,
@@ -142,6 +144,13 @@ describe('every timestamp names the clock it is in', () => {
 		const local = formatHourWindow(JULY_30, JULY_30 + 3_600_000);
 		expect(utc.iso).toBe(local.iso);
 		expect(formatIso(JULY_30)).toBe('2026-07-30T14:00:00.000Z');
+	});
+
+	it('round-trips timeline form instants in either selected clock', () => {
+		expect(
+			withClock('utc', () => parseDateTimeInput(formatDateTimeInput(JULY_30), 'utc')),
+		).toBe(JULY_30);
+		expect(parseDateTimeInput(formatDateTimeInput(JULY_30, 'local'), 'local')).toBe(JULY_30);
 	});
 
 	it('composes the hour window itself, so a locale’s own date-time pattern cannot break it', () => {

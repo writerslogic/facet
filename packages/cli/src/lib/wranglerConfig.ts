@@ -31,6 +31,20 @@ function indentOf(line: string): string {
 	return line.slice(0, line.length - line.trimStart().length);
 }
 
+// REQUIRED: every setter writes its value inside a JSONC string literal, so a quote, a backslash or a
+// control character escapes that literal and injects arbitrary deployment config (a second route, a
+// `vars` override) into the file the Worker deploys from. Rejected rather than escaped: no legal D1
+// name, queue name or route pattern contains one. The reason never echoes the value back to a terminal.
+function unsafeReason(field: string, value: string): string | null {
+	if (value === '') return `Empty ${field}.`;
+	for (const ch of value) {
+		const code = ch.codePointAt(0) ?? 0;
+		if (ch === '"' || ch === '\\' || code < 0x20 || code === 0x7f)
+			return `Invalid ${field}: quotes, backslashes and control characters are not allowed.`;
+	}
+	return null;
+}
+
 /** The configured `database_id`, or null when absent or still the placeholder. */
 export function getDatabaseId(source: string): string | null {
 	const match = source.match(DB_ID_RE);
@@ -53,8 +67,10 @@ export function getDatabaseName(source: string): string | null {
  * without a matching name fails at the migration step.
  */
 export function setDatabaseName(source: string, name: string): EditResult {
+	const unsafe = unsafeReason('database_name', name);
+	if (unsafe) return { ok: false, reason: unsafe };
 	if (!DB_NAME_RE.test(source)) return { ok: false, reason: 'No "database_name" field found.' };
-	return { ok: true, source: source.replace(DB_NAME_RE, `"database_name": "${name}"`) };
+	return { ok: true, source: source.replace(DB_NAME_RE, () => `"database_name": "${name}"`) };
 }
 
 /** The Worker name — the first `"name"` key, which in a wrangler config is the top-level one. */
@@ -72,8 +88,10 @@ export function getDeadLetterQueueName(source: string): string | null {
 
 /** Add or update the consumer dead-letter queue while preserving the commented JSONC config. */
 export function setDeadLetterQueue(source: string, name: string): EditResult {
+	const unsafe = unsafeReason('dead_letter_queue', name);
+	if (unsafe) return { ok: false, reason: unsafe };
 	if (DLQ_RE.test(source)) {
-		return { ok: true, source: source.replace(DLQ_RE, `"dead_letter_queue": "${name}"`) };
+		return { ok: true, source: source.replace(DLQ_RE, () => `"dead_letter_queue": "${name}"`) };
 	}
 	const lines = source.split('\n');
 	const consumer = lines.findIndex(
@@ -82,10 +100,16 @@ export function setDeadLetterQueue(source: string, name: string): EditResult {
 	if (consumer < 0) return { ok: false, reason: 'No queue consumer with "max_retries" found.' };
 	const line = lines[consumer];
 	if (line === undefined) return { ok: false, reason: 'Queue consumer line disappeared.' };
-	lines[consumer] = line.replace(
-		/("max_retries"\s*:\s*\d+)/,
-		`$1, "dead_letter_queue": "${name}"`,
+	const patched = line.replace(
+		/"max_retries"\s*:\s*\d+/,
+		(retries: string) => `${retries}, "dead_letter_queue": "${name}"`,
 	);
+	if (patched === line)
+		return {
+			ok: false,
+			reason: 'The queue consumer has no numeric "max_retries" to anchor after.',
+		};
+	lines[consumer] = patched;
 	return { ok: true, source: lines.join('\n') };
 }
 
@@ -94,6 +118,8 @@ export function setDeadLetterQueue(source: string, name: string): EditResult {
  * a live deployment at someone else's database, so it is never silently overwritten.
  */
 export function setDatabaseId(source: string, id: string, force = false): EditResult {
+	const unsafe = unsafeReason('database_id', id);
+	if (unsafe) return { ok: false, reason: unsafe };
 	const match = source.match(DB_ID_RE);
 	if (!match) return { ok: false, reason: 'No "database_id" field found.' };
 	const current = match[2];
@@ -103,7 +129,14 @@ export function setDatabaseId(source: string, id: string, force = false): EditRe
 			reason: `Refusing to overwrite existing database_id "${current}". Pass --force to override.`,
 		};
 	}
-	return { ok: true, source: source.replace(DB_ID_RE, `$1${id}$3`) };
+	return {
+		ok: true,
+		source: source.replace(
+			DB_ID_RE,
+			(_full: string, open: string, _current: string, close: string) =>
+				`${open}${id}${close}`,
+		),
+	};
 }
 
 /** The active custom-domain route pattern, or null when there is none (i.e. workers.dev only). */
@@ -120,6 +153,10 @@ export function getRoutePattern(source: string): string | null {
  * and reports rather than guesses if someone has hand-expanded it.
  */
 export function setRoutePattern(source: string, pattern: string | null): EditResult {
+	if (pattern !== null) {
+		const unsafe = unsafeReason('route pattern', pattern);
+		if (unsafe) return { ok: false, reason: unsafe };
+	}
 	const lines = source.split('\n');
 	const idx = findKeyLine(lines, 'routes');
 	const routeLine = (indent: string, value: string) =>
@@ -147,7 +184,6 @@ export function setRoutePattern(source: string, pattern: string | null): EditRes
 	return { ok: true, source: lines.join('\n') };
 }
 
-/** True when an active (uncommented) `queues` block is present. */
 const CRONS_RE = /"crons"\s*:\s*\[([^\]]*)\]/;
 
 /**
@@ -167,6 +203,7 @@ export function getCronTriggers(source: string): string[] {
 	return [...body.matchAll(/"([^"]*)"/g)].map((m) => m[1] ?? '').filter((v) => v !== '');
 }
 
+/** True when an active (uncommented) `queues` block is present. */
 export function hasQueues(source: string): boolean {
 	return findKeyLine(source.split('\n'), 'queues') >= 0;
 }

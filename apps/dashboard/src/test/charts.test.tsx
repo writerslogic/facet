@@ -63,6 +63,25 @@ describe('TrafficChart', () => {
 		expect(screen.getByText('No traffic recorded in the selected range')).toBeInTheDocument();
 		expect(screen.getByText(/Widen the date range/)).toBeInTheDocument();
 	});
+
+	it('distinguishes operator notes from anomalies and exposes their labels without canvas', () => {
+		const t = 1_700_000_000_000;
+		render(
+			<TrafficChart
+				series={[{ t, pageviews: 10, visitors: 4 }]}
+				annotations={[
+					{ t, kind: 'note', category: 'release', label: 'Checkout release' },
+					{ t, kind: 'anomaly', label: 'Pageviews spiked' },
+				]}
+			/>,
+		);
+		expect(screen.getByText('1 note')).toBeInTheDocument();
+		expect(screen.getByText('1 anomaly')).toBeInTheDocument();
+		const summary = screen.getByRole('list', { name: 'Traffic chart annotations' });
+		expect(summary).toHaveTextContent('Operator note');
+		expect(summary).toHaveTextContent('Checkout release');
+		expect(summary).toHaveTextContent('Detected anomaly');
+	});
 });
 
 describe('WorldMap', () => {

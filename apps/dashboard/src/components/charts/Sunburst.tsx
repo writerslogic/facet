@@ -15,7 +15,7 @@ import { formatNumber } from '../../lib/format.js';
 import { useSize } from '../../lib/useSize.js';
 import { ChartKey } from './ChartChrome.js';
 import { ChartTooltip, TooltipRow } from './ChartTooltip.js';
-import { HUES, lerp, sliceFill, sliceStroke, useLayoutTransition } from './hierarchy.js';
+import { HUES, lerp, sliceFill, sliceStroke, trim, useLayoutTransition } from './hierarchy.js';
 
 /** One laid-out slice. Angles are turns (0..1) clockwise from 12 o'clock, so nothing here is radians
  * and nothing here is pixels — the render owns both conversions. */
@@ -149,16 +149,6 @@ export function arcPath(
  * centre by ~15% — so the readout spilled out of the disc and across the first ring, which is exactly
  * what a rendering fault looks like. */
 const CHAR_PX = { slice: 5.6, core: 6.5 } as const;
-
-/** Roughly how many characters fit in `px` — used to decide whether a label fits at all, and to trim
- * it when it nearly does. */
-const fits = (px: number, charPx: number): number => Math.floor(px / charPx);
-
-const trim = (label: string, px: number, charPx: number = CHAR_PX.slice): string | null => {
-	const room = fits(px, charPx);
-	if (room < 3) return null;
-	return label.length <= room ? label : `${label.slice(0, room - 1)}…`;
-};
 
 /**
  * Width to hand the key beside the dial, or 0 for "draw the dial alone".
@@ -314,7 +304,7 @@ export function Sunburst({
 					// geometry. Labels are for the tile that has no room for a key.
 					const label =
 						legendW === 0 && arc.ring <= 2.5 && outer - r0 >= 13
-							? trim(arc.item.label, arcPx - 8)
+							? trim(arc.item.label, arcPx - 8, CHAR_PX.slice)
 							: null;
 					const flip = mid > 0.5;
 					return (

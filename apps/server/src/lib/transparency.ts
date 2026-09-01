@@ -29,8 +29,18 @@ import { and, asc, count, desc, eq, inArray, isNull, lte, or, sql } from 'drizzl
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
-import { HOUR_MS } from './constants.js';
+import { D1_MAX_IN_PARAMS, HOUR_MS, chunked } from './constants.js';
 import { getSigningKey } from './signing.js';
+
+/** D1 caps a statement at 100 bound parameters. A node row binds 2 and a leaf row binds 4, so each
+ * insert is chunked from its own arity — one shared constant would silently overrun the leaf insert. */
+const NODE_INSERT_CHUNK = 45;
+const LEAF_INSERT_CHUNK = 22;
+
+/** Leaves appended per tick. The first tick after a signing key is configured faces every rollup ever
+ * written; the candidate query's ordering makes the prefix deterministic, so later ticks drain the
+ * remainder rather than this one pulling the table into the isolate and overrunning the batch. */
+const APPEND_LIMIT = 250;
 
 /** Stable identity of a rollup row (used to dedupe log appends and to look up an inclusion proof). */
 export function rollupKey(r: {
@@ -69,15 +79,27 @@ function d1NodeStore(env: Env): NodeStore {
 		async getMany(indices) {
 			if (indices.length === 0) return [];
 			const unique = [...new Set(indices)];
-			const rows = await db(env)
-				.select({
-					index: schema.mmrNodes.nodeIndex,
-					hash: schema.mmrNodes.hash,
-				})
-				.from(schema.mmrNodes)
-				.where(inArray(schema.mmrNodes.nodeIndex, unique));
-			const byIndex = new Map(rows.map((r) => [r.index, fromHex(r.hash)]));
-			return indices.map((i) => byIndex.get(i) as Uint8Array);
+			const byIndex = new Map<number, Uint8Array>();
+			// A consistency proof reads O(log²n) nodes (a sibling path per old peak), so past a few
+			// thousand leaves that IN(…) list alone exceeds D1's bound-parameter cap — and
+			// `/api/transparency/consistency` is public.
+			for (const chunk of chunked(unique, D1_MAX_IN_PARAMS)) {
+				const rows = await db(env)
+					.select({
+						index: schema.mmrNodes.nodeIndex,
+						hash: schema.mmrNodes.hash,
+					})
+					.from(schema.mmrNodes)
+					.where(inArray(schema.mmrNodes.nodeIndex, chunk));
+				for (const r of rows) byIndex.set(r.index, fromHex(r.hash));
+			}
+			return indices.map((i) => {
+				const hash = byIndex.get(i);
+				// IMPORTANT: a missing row means the persisted tree is incomplete; fail here rather
+				// than folding `undefined` into the hash a receipt gets signed over.
+				if (!hash) throw new Error(`transparency: missing MMR node ${i}`);
+				return hash;
+			});
 		},
 	};
 }
@@ -103,6 +125,9 @@ const rollupKeyExpr = sql`${schema.eventRollups.siteId} || '|' || ${schema.event
 export async function appendFinalizedRollups(env: Env, now: number): Promise<number> {
 	const client = db(env);
 	// A rollup is finalized once its bucket has fully elapsed (bucket end <= the current hour floor).
+	// FIXME: routes/import.ts re-runs rollupBucket over arbitrary historical days and rollups.ts
+	// overwrites the counters absolutely, so an elapsed bucket is not in fact immutable. A rewritten
+	// rollup cannot be re-leafed while mmr_leaves.rollup_key is unique, so the fix is not in this file.
 	const hourFloor = Math.floor(now / HOUR_MS) * HOUR_MS;
 	// event_rollups is never pruned (rollups.ts keeps every bucket forever) and mmr_leaves grows in
 	// lockstep with what's already logged, so both filters run in SQL — an unbounded hourly cron tick
@@ -142,7 +167,8 @@ export async function appendFinalizedRollups(env: Env, now: number): Promise<num
 			asc(schema.eventRollups.siteId),
 			asc(schema.eventRollups.hostname),
 			asc(schema.eventRollups.interval),
-		);
+		)
+		.limit(APPEND_LIMIT);
 
 	const finalized: { key: string; leaf: Uint8Array }[] = [];
 	for (const r of candidates) {
@@ -158,25 +184,25 @@ export async function appendFinalizedRollups(env: Env, now: number): Promise<num
 	);
 	const priorLeaves = await mmrLeafCount(env);
 
+	const nodeRows = appended.newNodes.map((n) => ({ nodeIndex: n.index, hash: toHex(n.hash) }));
+	const leafRows = finalized.map((f, k) => ({
+		leafNo: priorLeaves + k,
+		nodeIndex: appended.leafIndices[k] as number,
+		rollupKey: f.key,
+		leafHash: toHex(f.leaf),
+	}));
 	// Nodes and leaves must land together. As two separate inserts, a crash in between would leave
 	// orphaned nodes — counted by peakIndices but referenced by no leaf — silently corrupting every
 	// later root. D1 runs a batch as one atomic transaction, closing that window.
-	await client.batch([
-		client.insert(schema.mmrNodes).values(
-			appended.newNodes.map((n) => ({
-				nodeIndex: n.index,
-				hash: toHex(n.hash),
-			})),
+	const stmts = [
+		...chunked(nodeRows, NODE_INSERT_CHUNK).map((c) =>
+			client.insert(schema.mmrNodes).values(c),
 		),
-		client.insert(schema.mmrLeaves).values(
-			finalized.map((f, k) => ({
-				leafNo: priorLeaves + k,
-				nodeIndex: appended.leafIndices[k] as number,
-				rollupKey: f.key,
-				leafHash: toHex(f.leaf),
-			})),
+		...chunked(leafRows, LEAF_INSERT_CHUNK).map((c) =>
+			client.insert(schema.mmrLeaves).values(c),
 		),
-	]);
+	];
+	await client.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
 	return finalized.length;
 }
 

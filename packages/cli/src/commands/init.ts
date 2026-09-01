@@ -48,6 +48,7 @@ import {
 import { fetchJson } from '../util.js';
 
 const TOTAL_STEPS = 10;
+const PLACEHOLDER_SITE_DOMAIN = 'example.com';
 const HEALTH_ATTEMPTS = 10;
 const HEALTH_INTERVAL_MS = 3000;
 
@@ -313,7 +314,6 @@ async function stepQueue(ctx: Ctx): Promise<CfResult<true>> {
 			};
 		}
 		writeConfig(ctx, edit.source);
-		local.source = edit.source;
 		ui.ok('Ingest queue and dead-letter queue are ready.');
 		return { ok: true, value: true };
 	}
@@ -508,6 +508,11 @@ async function stepAdminToken(ctx: Ctx): Promise<CfResult<string>> {
 	const names = await secretNames(ctx.wrangler);
 	const deployedHasToken =
 		names.ok && names.value !== null && names.value.includes('ADMIN_TOKEN');
+	if (names.ok && names.value !== null && !names.value.includes('SESSION_SECRET')) {
+		ui.info(
+			'Operator sign-in (accounts, teams) is off: the Worker has no SESSION_SECRET. Enable it with `wrangler secret put SESSION_SECRET`; the site-id + API-key path below works without it.',
+		);
+	}
 
 	if (deployedHasToken && stored && !opts.rotateAdminToken) {
 		ui.skip('Worker secret ADMIN_TOKEN is set and this machine has a copy.');
@@ -748,7 +753,7 @@ export async function runInit(args: string[], overrides: Partial<InitDeps> = {})
 		opts.siteDomain ??
 		(await prompter.text(
 			'Domain of the site you want to track',
-			local.install.siteDomain ?? hostname ?? 'example.com',
+			local.install.siteDomain ?? hostname ?? PLACEHOLDER_SITE_DOMAIN,
 		));
 	const siteName =
 		opts.siteName ??
@@ -768,6 +773,17 @@ export async function runInit(args: string[], overrides: Partial<InitDeps> = {})
 		ui.info(
 			'      Cloudflare Queues needs the Workers Paid plan; the installer offers to disable it if unavailable.',
 		);
+	}
+
+	if (!opts.siteDomain && siteDomain === PLACEHOLDER_SITE_DOMAIN) {
+		ui.blank();
+		ui.warn(
+			`The site domain is still the placeholder ${PLACEHOLDER_SITE_DOMAIN}; nothing available could determine the real one.`,
+		);
+		ui.warn(
+			'That domain is the collection allowlist: every beacon from any other hostname is dropped, and the endpoint answers 202 either way, so the install looks healthy and records nothing.',
+		);
+		ui.info('Re-run with `facet init --site-domain <the domain you are tracking>`.');
 	}
 
 	if (!opts.dryRun) {

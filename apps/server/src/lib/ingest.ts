@@ -31,12 +31,23 @@ const DEDUP_MAX_ENTRIES = 2000;
  * AFTER hash derivation, so it suppresses the duplicate row, not the reads that produced the hash. */
 const recentContentKeys = new Map<string, number>();
 
-function isDuplicateContent(input: IngestInput, vh: string): boolean {
+async function isDuplicateContent(input: IngestInput, vh: string): Promise<boolean> {
 	const bucket = Math.floor(input.now / DEDUP_WINDOW_MS);
-	const key = `${input.siteId}|${vh}|${input.path}|${input.name ?? ''}|${bucket}`;
+	// IMPORTANT: `props` is part of the identity of an event — two same-name, same-path beacons that
+	// differ only in props (one $exposure per experiment) are distinct, not a double-boot. Digested so
+	// a validated bag can't put kilobytes into a resident key.
+	const props = input.props ? await sha256Hex(JSON.stringify(input.props)) : '';
+	const key = `${input.siteId}|${vh}|${input.path}|${input.name ?? ''}|${props}|${bucket}`;
 	if (recentContentKeys.size > DEDUP_MAX_ENTRIES) {
 		for (const [k, t] of recentContentKeys) {
 			if (input.now - t > DEDUP_WINDOW_MS * 2) recentContentKeys.delete(k);
+		}
+		// IMPORTANT: the age sweep frees nothing while traffic is dense enough to keep every entry
+		// inside the window, so the cap is enforced by evicting oldest-first (Map insertion order is
+		// arrival order — entries are only ever set on a miss, and backdated rows never reach here).
+		for (const k of recentContentKeys.keys()) {
+			if (recentContentKeys.size <= DEDUP_MAX_ENTRIES) break;
+			recentContentKeys.delete(k);
 		}
 	}
 	if (recentContentKeys.has(key)) return true;
@@ -211,7 +222,7 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 		// The dedup guard buckets on `now`, so it is meaningless against backdated rows and would drop
 		// two genuinely distinct imported hits that share a 5s bucket. Re-import safety comes from the
 		// content-addressed id below instead.
-		if (isDuplicateContent(input, vh)) {
+		if (await isDuplicateContent(input, vh)) {
 			return null;
 		}
 	}

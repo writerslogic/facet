@@ -426,16 +426,17 @@ statsRoutes.get(
 		let name: string;
 
 		if (kind === 'series') {
-			const q = c.req.query('interval');
-			const interval =
-				q === 'hour' || q === 'day' ? q : end - start <= 48 * HOUR_MS ? 'hour' : 'day';
-			const points = await series(c.env, f, interval);
+			const points = await series(c.env, f, intervalFor(query));
 			columns = ['bucket_start_iso', 'bucket_start_ms', 'pageviews', 'visitors'];
 			rows = points.map((p) => [new Date(p.t).toISOString(), p.t, p.pageviews, p.visitors]);
 			name = `facet-series-${start}-${end}`;
 		} else if (kind === 'breakdown') {
 			const dimension = c.req.query('dimension') ?? '';
-			const load = EXPORT_DIMENSIONS[dimension];
+			// IMPORTANT: own-property only — `toString`/`constructor`/`valueOf` are truthy on an
+			// object literal and would reach the loader instead of this 400.
+			const load = Object.hasOwn(EXPORT_DIMENSIONS, dimension)
+				? EXPORT_DIMENSIONS[dimension]
+				: undefined;
 			if (!load) {
 				throw new ApiError('bad_request', 400, 'unknown or missing dimension');
 			}

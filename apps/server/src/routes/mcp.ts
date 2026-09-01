@@ -298,7 +298,9 @@ async function callTool(
 		);
 	}
 
-	return toolError(`unknown tool: ${name}`);
+	// Bound and neutralize before echoing: the name is caller-controlled up to the body cap, exactly
+	// like the unknown-method reply below.
+	return toolError(`unknown tool: ${sanitizeKey(name)}`);
 }
 
 /**
@@ -360,35 +362,41 @@ mcpRoutes.post(
 		}
 
 		const body = payload as JsonRpcRequest;
+		// Shape-check the id BEFORE anything that echoes it: every failure below reflects it, so a
+		// check placed after them is a check the malformed-envelope paths never reach. `undefined`
+		// passes here because an absent id is a notification, resolved below.
+		const rawId = body.id;
+		if (
+			rawId !== undefined &&
+			typeof rawId !== 'string' &&
+			typeof rawId !== 'number' &&
+			rawId !== null
+		) {
+			return c.json(fail(null, INVALID_REQUEST, 'id must be a string, number or null'), 200);
+		}
+
 		if (typeof body.method !== 'string') {
-			return c.json(fail(body.id ?? null, INVALID_REQUEST, 'missing method'), 200);
+			return c.json(fail(rawId ?? null, INVALID_REQUEST, 'missing method'), 200);
 		}
 		if (body.jsonrpc !== '2.0') {
 			// Explicit, so a JSON body aimed at some other API cannot dispatch a tool by accident.
-			return c.json(fail(body.id ?? null, INVALID_REQUEST, 'jsonrpc must be "2.0"'), 200);
+			return c.json(fail(rawId ?? null, INVALID_REQUEST, 'jsonrpc must be "2.0"'), 200);
 		}
 
 		// A message with NO id is a notification: it must get 202 and no body, and its method must not
 		// be dispatched at all. Dispatching one would run a tool through a channel whose result is
 		// discarded by construction — work an agent can trigger but never observe. `id: null` is a
 		// present id, not an absent one, so only `undefined` counts here.
-		if (body.id === undefined) {
+		if (rawId === undefined) {
 			return c.body(null, 202);
 		}
 		// The mirror image: `notifications/*` carrying an id is not a notification. Answering it 202
 		// with no body would strand a client waiting on that id, so it is the invalid request it is.
 		if (body.method.startsWith('notifications/')) {
-			return c.json(
-				fail(body.id, INVALID_REQUEST, 'a notification must not carry an id'),
-				200,
-			);
+			return c.json(fail(rawId, INVALID_REQUEST, 'a notification must not carry an id'), 200);
 		}
 
-		const id = body.id;
-		if (typeof id !== 'string' && typeof id !== 'number' && id !== null) {
-			// Anything else would be reflected verbatim into every response for this request.
-			return c.json(fail(null, INVALID_REQUEST, 'id must be a string, number or null'), 200);
-		}
+		const id: JsonRpcId = rawId;
 
 		const rawParams = body.params as unknown;
 		if (rawParams !== undefined && (typeof rawParams !== 'object' || rawParams === null)) {
@@ -398,14 +406,11 @@ mcpRoutes.post(
 
 		switch (body.method) {
 			case 'initialize': {
-				// Echo the requested revision only when it is the one actually implemented. Reflecting
-				// an arbitrary string told the client this server speaks a protocol it has never seen;
-				// answering with our own version is what the spec asks for on a mismatch.
-				const requested = params.protocolVersion;
+				// Never echoes the requested revision: reflecting an arbitrary string told the client
+				// this server speaks a protocol it has never seen.
 				return c.json(
 					ok(id, {
-						protocolVersion:
-							requested === PROTOCOL_VERSION ? requested : PROTOCOL_VERSION,
+						protocolVersion: PROTOCOL_VERSION,
 						capabilities: { tools: { listChanged: false } },
 						serverInfo: { name: 'facet', version: '0.5.2' },
 						instructions:

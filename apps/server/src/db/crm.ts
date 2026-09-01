@@ -339,7 +339,10 @@ export async function listContacts(
 	const [contacts, totalRow] = await Promise.all([
 		contactQuery(client)
 			.where(where)
-			.orderBy(desc(crmSchema.contacts.created_at))
+			// IMPORTANT: `created_at` is not unique, so ties order arbitrarily between the statements
+			// serving two pages — which for OFFSET paging means a row shown twice and another never
+			// shown. `id` breaks the tie, same as `listCrmAudit`.
+			.orderBy(desc(crmSchema.contacts.created_at), desc(crmSchema.contacts.id))
 			.limit(opts.limit)
 			.offset(opts.offset),
 		contactCountQuery(client).where(where).get(),
@@ -363,7 +366,7 @@ export async function listCompanyContacts(
 	const [contacts, totalRow] = await Promise.all([
 		contactQuery(client)
 			.where(where)
-			.orderBy(desc(crmSchema.contacts.created_at))
+			.orderBy(desc(crmSchema.contacts.created_at), desc(crmSchema.contacts.id))
 			.limit(opts.limit)
 			.offset(opts.offset),
 		client.select({ n: sql<number>`count(*)` }).from(crmSchema.contacts).where(where).get(),
@@ -582,7 +585,7 @@ export async function listCompanies(
 			.select()
 			.from(crmSchema.companies)
 			.where(where)
-			.orderBy(desc(crmSchema.companies.created_at))
+			.orderBy(desc(crmSchema.companies.created_at), desc(crmSchema.companies.id))
 			.limit(opts.limit)
 			.offset(opts.offset),
 		client.select({ n: sql<number>`count(*)` }).from(crmSchema.companies).where(where).get(),
@@ -615,7 +618,9 @@ export async function companyContactLinkage(
 			.select({ external_user_id: crmSchema.contacts.external_user_id })
 			.from(crmSchema.contacts)
 			.where(and(atCompany, isNotNull(crmSchema.contacts.external_user_id)))
-			.orderBy(desc(crmSchema.contacts.created_at))
+			// Tie-broken on `id` so a truncated rollup considers the same contacts every time; without
+			// it two identical requests can report different `contacts_linked`.
+			.orderBy(desc(crmSchema.contacts.created_at), desc(crmSchema.contacts.id))
 			// One past the cap, so truncation is detected rather than assumed from a full page.
 			.limit(limit + 1),
 	]);
@@ -808,7 +813,7 @@ export async function listDeals(
 			.select()
 			.from(crmSchema.deals)
 			.where(where)
-			.orderBy(desc(crmSchema.deals.created_at))
+			.orderBy(desc(crmSchema.deals.created_at), desc(crmSchema.deals.id))
 			.limit(opts.limit)
 			.offset(opts.offset),
 		client.select({ n: sql<number>`count(*)` }).from(crmSchema.deals).where(where).get(),

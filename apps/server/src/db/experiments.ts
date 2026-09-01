@@ -1,7 +1,8 @@
 // Experiment (A/B) result aggregation + two-proportion significance test. Exposures and conversions
 // are read from the `events` table via `json_extract` on the `props` column (the client fires a
-// `$exposure` event carrying `{ flag, variant }`). No server-side identity is used: conversions are
-// counted as DISTINCT visitor_hash within the range. All variant values bind as params.
+// `$exposure` event carrying `{ flag, variant }`). No server-side identity is used: exposures and
+// conversions are both counted as DISTINCT visitor_hash within the range. All variant values bind as
+// params.
 
 import type { Experiment, ExperimentResult, StatsFilter } from '@facet/shared';
 import { and, eq, gte, lt, sql } from 'drizzle-orm';
@@ -42,8 +43,12 @@ export interface ExperimentGoalMatch {
 
 /**
  * Per-variant exposures + conversions for `experiment` over the range, with significance vs. the
- * first (control) variant. Exposures = `$exposure` events tagged with this flag/variant; conversions
- * = distinct visitors who have both an exposure and a goal-matching event in range.
+ * first (control) variant. Exposures = distinct visitors with an `$exposure` for this flag/variant;
+ * conversions = distinct visitors who have both an exposure and a goal-matching event in range.
+ *
+ * IMPORTANT: both counts are per DISTINCT visitor. The client fires one `$exposure` per flag per
+ * page load, so counting exposure rows would put the z-test's denominator in events and its
+ * numerator in visitors, understating every rate.
  */
 export async function experimentResult(
 	env: Env,
@@ -77,7 +82,7 @@ export async function experimentResult(
 			// PERF: one D1 round-trip for both aggregates instead of two identical-WHERE queries.
 			const row = await db(env)
 				.select({
-					exposures: sql<number>`COUNT(*)`,
+					exposures: sql<number>`COUNT(DISTINCT ${schema.events.visitorHash})`,
 					conversions: sql<number>`COUNT(DISTINCT CASE WHEN ${converted} THEN ${schema.events.visitorHash} END)`,
 				})
 				.from(schema.events)

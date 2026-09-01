@@ -47,6 +47,11 @@ const MAX_REGISTER_ATTEMPTS = 5;
  * `seedScittMmr` can produce enough rows to need this — a single registration's new nodes never do. */
 const MMR_INSERT_CHUNK = 45;
 
+/** Bounds on the external Transparency Service call. It runs inside an admin request whose local log
+ * entry is already committed, so neither a hung service nor an oversized body may hold the isolate. */
+const EXTERNAL_TIMEOUT_MS = 10_000;
+const EXTERNAL_MAX_BODY_BYTES = 256 * 1024;
+
 /** Hex SHA-256 of a Signed Statement's canonical bytes. */
 function statementHash(stmt: SignedStatement): Promise<string> {
 	return canonicalDigestHex(stmt);
@@ -63,7 +68,13 @@ function scittNodeStore(env: Env): NodeStore {
 				.from(schema.scittMmrNodes)
 				.where(inArray(schema.scittMmrNodes.nodeIndex, unique));
 			const byIndex = new Map(rows.map((r) => [r.index, fromHex(r.hash)]));
-			return indices.map((i) => byIndex.get(i) as Uint8Array);
+			return indices.map((i) => {
+				const hash = byIndex.get(i);
+				// IMPORTANT: a missing row means the persisted MMR is incomplete; fail here rather
+				// than casting `undefined` into the hasher that folds these into a receipt.
+				if (!hash) throw new Error(`scitt: missing MMR node ${i}`);
+				return hash;
+			});
 		},
 	};
 }
@@ -117,11 +128,16 @@ async function seedScittMmr(env: Env): Promise<void> {
 			client.insert(schema.scittMmrLeaves).values(c),
 		),
 	];
-	// A concurrent seed racing this one collides on `node_index`/`leaf_no` and rolls the whole batch
-	// back (D1 runs `batch` as one transaction) — safe to ignore: the winner already did the work.
-	await client
-		.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]])
-		.catch(() => {});
+	try {
+		await client.batch(stmts as [(typeof stmts)[number], ...(typeof stmts)[number][]]);
+	} catch (err) {
+		// A concurrent seed racing this one collides on `node_index`/`leaf_no` and rolls the whole
+		// batch back (D1 runs `batch` as one transaction) — harmless once the winner's rows landed.
+		// IMPORTANT: any other failure must not be swallowed. The caller would append to an MMR that
+		// omits the log's earlier entries, and every later registration would extend that divergent
+		// tree — the backfill can never catch up again, because it now collides on its own rows.
+		if ((await scittLeafCount(env)) < logCount) throw err;
+	}
 }
 
 interface RegisterAttempt {
@@ -222,8 +238,50 @@ export interface ExternalRegistration {
 /** True when a value looks like a Facet SignedStatement receipt (has a proof + an inclusion payload). */
 function isReceiptShape(v: unknown): v is SignedStatement<ScittReceiptPayload> {
 	if (!v || typeof v !== 'object') return false;
-	const o = v as { proof?: unknown; payload?: { inclusion?: unknown } };
-	return typeof o.proof === 'object' && typeof o.payload?.inclusion === 'object';
+	// IMPORTANT: `typeof null` is 'object', so a null proof or inclusion would pass a bare typeof test
+	// and be reported as a verified-shape receipt.
+	const proof = (v as { proof?: unknown }).proof;
+	const inclusion = (v as { payload?: { inclusion?: unknown } | null }).payload?.inclusion;
+	return (
+		typeof proof === 'object' &&
+		proof !== null &&
+		typeof inclusion === 'object' &&
+		inclusion !== null
+	);
+}
+
+/** Read at most `EXTERNAL_MAX_BODY_BYTES` from a response, enforced while streaming rather than by
+ * measuring an already-buffered body. */
+async function readBounded(res: Response): Promise<string> {
+	const declared = Number(res.headers.get('content-length'));
+	if (Number.isFinite(declared) && declared > EXTERNAL_MAX_BODY_BYTES) {
+		throw new Error('external SCITT receipt exceeds the size limit');
+	}
+	const body = res.body;
+	if (!body) return '';
+	const reader = body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	try {
+		while (true) {
+			const chunk = await reader.read();
+			if (chunk.done || !chunk.value) break;
+			total += chunk.value.byteLength;
+			if (total > EXTERNAL_MAX_BODY_BYTES) {
+				throw new Error('external SCITT receipt exceeds the size limit');
+			}
+			chunks.push(chunk.value);
+		}
+	} finally {
+		await reader.cancel().catch(() => undefined);
+	}
+	const merged = new Uint8Array(total);
+	let offset = 0;
+	for (const chunk of chunks) {
+		merged.set(chunk, offset);
+		offset += chunk.byteLength;
+	}
+	return new TextDecoder().decode(merged);
 }
 
 /**
@@ -244,9 +302,10 @@ export async function registerExternal(
 			...(env.SCITT_TOKEN ? { authorization: `Bearer ${env.SCITT_TOKEN}` } : {}),
 		},
 		body: JSON.stringify(stmt),
+		signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
 	});
 	if (!res.ok) throw new Error(`external SCITT registration failed: ${res.status}`);
-	const receipt = await res.json();
+	const receipt: unknown = JSON.parse(await readBounded(res));
 	if (!isReceiptShape(receipt)) {
 		return { receipt, verification: null, statementMatches: false };
 	}

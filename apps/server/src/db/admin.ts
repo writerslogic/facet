@@ -1,7 +1,7 @@
 // Site + site-config admin queries. Split out of routes/admin.ts so D1 access goes through db/
 // like every other module, not inline in the route handler.
 
-import type { Site } from '@facet/shared';
+import type { IdentityTier, SaltWindow, Site } from '@facet/shared';
 import { desc, eq } from 'drizzle-orm';
 import type { Env } from '../env.js';
 import { db } from './queries.js';
@@ -34,8 +34,8 @@ export async function listSites(env: Env): Promise<Site[]> {
 export async function upsertSiteConfig(
 	env: Env,
 	siteId: string,
-	tier: string,
-	saltWindow: string,
+	tier: IdentityTier,
+	saltWindow: SaltWindow,
 	now: number,
 ): Promise<void> {
 	await db(env)

@@ -110,7 +110,12 @@ export async function refreshBotRulesets(env: Env, now: number): Promise<void> {
 	}
 
 	// 304: the upstream validator still matches, so nothing changed and nothing is written.
+	// IMPORTANT: only when one was actually sent. An upstream answering 304 unconditionally would
+	// otherwise leave the ruleset permanently empty while every run reports success.
 	if (res.status === 304) {
+		if (!headers['if-none-match']) {
+			throw new BotRulesetFetchError('bot ruleset upstream returned 304 without a validator');
+		}
 		await ensureBotPatterns(env, now);
 		return;
 	}

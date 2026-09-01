@@ -22,6 +22,22 @@ function parseBearer(authorization: string | null): string | null {
 	return match?.[1] ?? null;
 }
 
+/** Coarsening window for the `last_used` bump. PERF: every authenticated request runs this path,
+ * POST /api/event ingest included, so an unconditional write would make one D1 row per site a
+ * serialized write hotspot on the hottest endpoint in the product. The column is only ever rendered
+ * at day (dashboard) or clock-time (CLI) granularity, so a minute of coarsening is not observable. */
+const LAST_USED_RESOLUTION_MS = 60_000;
+
+/** True when the stored `last_used` is absent, older than the coarsening window, or ahead of `now`
+ * (colo clock skew, which would otherwise freeze the column at a future timestamp forever). */
+function shouldBumpLastUsed(lastUsed: number | null, now: number): boolean {
+	if (lastUsed === null) {
+		return true;
+	}
+	const age = now - lastUsed;
+	return age >= LAST_USED_RESOLUTION_MS || age < 0;
+}
+
 /** Resolve a bearer API key to its owning site_id, or null if invalid. Bumps `last_used`. */
 export async function authenticateKey(
 	env: Env,
@@ -40,20 +56,27 @@ export async function authenticateKeyDetails(
 	}
 	const keyHash = await hashKey(key);
 	const row = await db(env)
-		.select({ id: schema.apiKeys.id, siteId: schema.apiKeys.siteId })
+		.select({
+			id: schema.apiKeys.id,
+			siteId: schema.apiKeys.siteId,
+			lastUsed: schema.apiKeys.lastUsed,
+		})
 		.from(schema.apiKeys)
 		.where(eq(schema.apiKeys.keyHash, keyHash))
 		.get();
 	if (!row) {
 		return null;
 	}
-	try {
-		await db(env)
-			.update(schema.apiKeys)
-			.set({ lastUsed: Date.now() })
-			.where(eq(schema.apiKeys.keyHash, keyHash));
-	} catch {
-		// last_used is best-effort telemetry; never fail auth because the bump failed.
+	const now = Date.now();
+	if (shouldBumpLastUsed(row.lastUsed, now)) {
+		try {
+			await db(env)
+				.update(schema.apiKeys)
+				.set({ lastUsed: now })
+				.where(eq(schema.apiKeys.keyHash, keyHash));
+		} catch {
+			// last_used is best-effort telemetry; never fail auth because the bump failed.
+		}
 	}
 	return { siteId: row.siteId, scopes: await keyScopes(env, row.id) };
 }

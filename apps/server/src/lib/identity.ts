@@ -150,15 +150,20 @@ export async function resolvePolicy(env: Env, siteId: string): Promise<IdentityP
 	const window = row.salt_window as SaltWindow;
 	if (!TIERS.has(tier) || !WINDOWS.has(window)) return ANONYMOUS;
 	if (tier === 'anonymous') return ANONYMOUS;
-	// Elevation needs a signing key to mint verifiable consent; without one, fail safe to Tier 0.
-	if (getSigningKey(env) === null) return ANONYMOUS;
+	// Elevation needs a signing key to mint verifiable consent; without one, fail safe to Tier 0. A
+	// configured-but-unloadable JWK is the same as none — it can sign nothing — and the load MUST be
+	// awaited rather than null-checked: `getSigningKey` caches the promise it creates, so a bare
+	// null-check here leaves the first rejection of a malformed JWK floating on the ingest path.
+	const signing = getSigningKey(env);
+	if (signing === null) return ANONYMOUS;
+	try {
+		await signing;
+	} catch {
+		return ANONYMOUS;
+	}
 	return { tier, window };
 }
 
-/** Fetch (or lazily create, race-safely) the secret salt for a window scope. Generalizes
- * `getDailySalt` to any window, storing `window_end` so retention can purge on window close. Only
- * ever called on the elevated branch AFTER consent is confirmed, so a downgraded event never creates
- * a salt row. */
 /** The `identity_salts` key for one site's window. Declared once because the consent grant, the
  * revoke, and the CRM's linkage check must all name the same string; three copies of a template
  * literal is three chances for one of them to drift and silently stop resolving. */
@@ -179,6 +184,11 @@ export async function readScopedSalt(env: Env, scope: string): Promise<string | 
 	return row?.salt ?? null;
 }
 
+/** Fetch (or lazily create, race-safely) the secret salt for a window scope. Generalizes
+ * `getDailySalt` to any window, storing `window_end` so retention can purge on window close. Reached
+ * only from an elevated site's branch, but BEFORE any consent is confirmed — ingest must derive the
+ * hash it looks a grant up by, and the grant route mints the window's first salt — so a row here is
+ * not evidence that a visitor was elevated. It holds random bytes and no visitor-derived value. */
 export async function getScopedSalt(
 	env: Env,
 	scope: string,
@@ -199,5 +209,7 @@ export async function getScopedSalt(
 	const row = await env.DB.prepare('SELECT salt FROM identity_salts WHERE scope = ?')
 		.bind(scope)
 		.first<{ salt: string }>();
-	return row?.salt ?? salt;
+	// IMPORTANT: `||`, not `??`. An empty stored salt makes the pre-image `ip|ua||siteId` — an
+	// unsalted hash, brute-forceable back to the raw IP — so it is never the value to return.
+	return row?.salt || salt;
 }

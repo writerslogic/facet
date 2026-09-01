@@ -2,8 +2,9 @@
 
 import { type Funnel, FunnelSchema, type FunnelStep } from '@facet/shared';
 import { vValidator } from '@hono/valibot-validator';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { Hono } from 'hono';
+import { listFunnels } from '../db/catalog.js';
 import { funnelReport } from '../db/funnels.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
@@ -44,20 +45,7 @@ funnelsRoutes.post(
 );
 
 funnelsRoutes.get('/', requireAdmin, async (c) => {
-	const siteId = c.req.query('site_id') ?? '';
-	const rows = await db(c.env)
-		.select()
-		.from(schema.funnels)
-		.where(eq(schema.funnels.site_id, siteId))
-		.orderBy(desc(schema.funnels.created_at));
-	const funnels: Funnel[] = rows.map((r) => ({
-		id: r.id,
-		site_id: r.site_id,
-		name: r.name,
-		steps: JSON.parse(r.steps) as FunnelStep[],
-		created_at: r.created_at,
-	}));
-	return c.json({ funnels });
+	return c.json({ funnels: await listFunnels(c.env, c.req.query('site_id') ?? '') });
 });
 
 funnelsRoutes.delete('/:id', requireAdmin, async (c) => {
@@ -79,7 +67,9 @@ funnelsRoutes.get('/:id/report', requireApiScope('read'), async (c) => {
 	}
 	const start = Number(c.req.query('start'));
 	const end = Number(c.req.query('end'));
-	if (!Number.isInteger(start) || !Number.isInteger(end) || end <= start) {
+	// REQUIRED: safe-integer + non-negative matches StatsQuerySchema's start/end contract. Plain
+	// Number.isInteger admits 1e21, which binds into D1 past int64 and 500s instead of 400ing.
+	if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start) {
 		throw new ApiError('bad_range', 400);
 	}
 	if (end - start > MAX_RANGE_DAYS * DAY_MS) {

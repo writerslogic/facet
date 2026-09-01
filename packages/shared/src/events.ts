@@ -1,4 +1,5 @@
-// Shared event-ingest types: the POST /api/collect payload and stored event shape.
+// Shared event-ingest types. IMPORTANT: `schemas.ts` holds the validated wire contract
+// (`CollectPayloadSchema`); nothing here is a substitute for parsing against it.
 
 /** JSON-safe value permitted inside custom-event `props`. */
 export type PropValue = string | number | boolean | null;
@@ -6,7 +7,7 @@ export type PropValue = string | number | boolean | null;
 /** Custom-event property bag. Keys are arbitrary; values are JSON scalars. */
 export type EventProps = Record<string, PropValue>;
 
-/** Body accepted by `POST /api/collect` (public beacon). */
+/** Core fields of the `POST /api/collect` body. `CollectPayloadSchema` is the complete contract. */
 export interface CollectPayload {
 	/** UUID of the site this event belongs to. */
 	site_id: string;
@@ -20,22 +21,4 @@ export interface CollectPayload {
 	name?: string;
 	/** Optional custom-event properties. */
 	props?: EventProps;
-}
-
-/** Distinguishes a pageview from a named custom event. */
-export type EventKind = 'pageview' | 'event';
-
-/** A raw event row as stored in D1 (`events` table). */
-export interface StoredEvent {
-	id: string;
-	site_id: string;
-	hostname: string;
-	path: string;
-	referrer: string;
-	name: string | null;
-	props: string | null;
-	visitor_hash: string;
-	country: string | null;
-	device: string | null;
-	created_at: number;
 }

@@ -16,6 +16,13 @@ export const SECURITY_TXT_EXPIRY_DAYS = 180 as const;
 
 const DAY_MS = 86_400_000;
 
+// IMPORTANT: RFC 9116 fields are line-delimited, so a CR/LF inside a value forges further fields — a
+// second `Contact:` silently redirects reports. `origin` is request-derived and the operator's env
+// values are never parsed, so nothing reaching this builder is trusted to be single-line.
+function fieldValue(value: string): string {
+	return value.replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, ' ').trim();
+}
+
 export interface SecurityTxtInput {
 	/** Deployment origin, e.g. `https://analytics.example.com`, used for the Canonical URL. */
 	origin: string;
@@ -38,11 +45,12 @@ export function buildSecurityTxt(input: SecurityTxtInput): string {
 		// AGPL-3.0 asks a network deployment to point users at its source; a researcher landing here
 		// also benefits from knowing which software (and which version line) they are looking at.
 		'# Software: Facet — https://github.com/writerslogic/facet',
-		`Contact: ${input.contact}`,
+		`Contact: ${fieldValue(input.contact)}`,
 		`Expires: ${expires}`,
-		`Canonical: ${input.origin}/.well-known/security.txt`,
+		`Canonical: ${fieldValue(input.origin)}/.well-known/security.txt`,
 	];
-	if (input.policy) lines.push(`Policy: ${input.policy}`);
+	const policy = input.policy ? fieldValue(input.policy) : '';
+	if (policy) lines.push(`Policy: ${policy}`);
 	lines.push('Preferred-Languages: en', '');
 	return lines.join('\n');
 }
