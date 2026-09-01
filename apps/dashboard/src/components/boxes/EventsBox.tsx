@@ -22,7 +22,7 @@ export const eventsBox: TileDef = {
 	],
 	options: [ACCENT_OPTION],
 	table: (ctx) => rowsTable('Event', ctx.data.top_events),
-	render: (ctx, expanded, config) => (
+	render: (ctx, density, config) => (
 		<KpiTile
 			label="Events"
 			value={ctx.summary.events}
@@ -31,7 +31,7 @@ export const eventsBox: TileDef = {
 			spark={ctx.sparks.ev}
 			viz={(config?.variant as KpiVizName) ?? 'columns'}
 			accent={accentOf(config)}
-			expanded={expanded}
+			density={density}
 			breakdown={{
 				title: 'Top events',
 				rows: ctx.data.top_events,

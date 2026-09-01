@@ -255,7 +255,7 @@ describe('in-tile drill-down', () => {
 			<ListBody
 				title="Browsers"
 				rows={[{ key: 'Chrome', count: 90 }]}
-				expanded
+				density="expanded"
 				drill={spec({ axis: null })}
 				noun="Browser"
 			/>,

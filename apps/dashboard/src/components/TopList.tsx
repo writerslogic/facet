@@ -114,6 +114,10 @@ interface TopListProps {
 	fit?: boolean;
 	/** Explicit hue for this list's bars (a CSS colour). Overrides the per-dimension default. */
 	accent?: string;
+	/** How to render a row's value. Defaults to the plain count. REQUIRED wherever `count` is not a
+	 * count: attribution's rows carry attributed REVENUE (packages/shared/src/stats.ts), and without
+	 * this the same figure read as currency in one tier and a bare integer in the next. */
+	format?: (value: number) => string;
 	/** Per-key movement vs the equal-length preceding period. A key with no honest comparison is
 	 * simply absent from the map and renders no badge — never a zero, never an invented percentage. */
 	deltas?: ReadonlyMap<string, Movement>;
@@ -142,6 +146,7 @@ export function TopList({
 	dark = false,
 	fit = false,
 	accent,
+	format,
 	deltas,
 	trailing,
 	headingLevel = 3,
@@ -214,16 +219,29 @@ export function TopList({
 								) : null}
 								<span className="truncate">{row.key}</span>
 							</span>
+							{/* IMPORTANT: the key is the only shrinkable member of this row, so on a narrow
+							    tile the three fixed ones squeezed it to "/…" and the list became six
+							    anonymous bars. Least-informative-first, they drop out instead: a row
+							    without its share still reads, a row without its key does not. */}
 							<span className="relative z-10 flex shrink-0 items-baseline gap-1.5">
-								<span className={cn('text-[11px] tabular-nums', c.pct)}>
+								<span
+									className={cn(
+										'text-[11px] tabular-nums @max-[16rem]/tile:hidden',
+										c.pct,
+									)}
+								>
 									{total > 0 ? Math.round((row.count / total) * 100) : 0}%
 								</span>
 								<span className="font-semibold text-[color:var(--ink)] tabular-nums">
-									{formatNumber(row.count)}
+									{(format ?? formatNumber)(row.count)}
 								</span>
 								{/* The movement sits after the figure it qualifies, so a row reads
 								    "/pricing 16,514 +22%" in one pass. Absent when unmeasurable. */}
-								<DeltaBadge movement={deltas?.get(row.key)} size="sm" />
+								<DeltaBadge
+									movement={deltas?.get(row.key)}
+									size="sm"
+									className="@max-[13rem]/tile:hidden"
+								/>
 							</span>
 						</>
 					);

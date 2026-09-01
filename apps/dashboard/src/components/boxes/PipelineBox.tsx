@@ -13,13 +13,26 @@
 // does not belong on the shipped board; it is one click away under "Add tile" for a deployment that
 // wants it.
 
-import type { ReactElement } from 'react';
+// THE THREE TIERS. `expanded` gives every currency its own card; `default` is one currency's open
+// value with the others named, never summed. `compact` keeps that headline and nothing else — at
+// ~56px tall, or 232px wide, the four access notices, the empty state and the retryable failure each
+// shrink to one line rather than rendering a card clipped past its first sentence, and the figure
+// drops its cents, since `$1,234,567.00` in that box is a number nobody can read anyway.
+
+import type { ReactElement, ReactNode } from 'react';
 import { useDealPipeline } from '../../hooks/crm.js';
-import { type CrmBlock, crmBlockOf, formatMoney } from '../../lib/crm.js';
-import { formatNumber } from '../../lib/format.js';
+import { cn } from '../../lib/cn.js';
+import {
+	type CrmBlock,
+	type PipelineCurrencySummary,
+	crmBlockOf,
+	formatMoney,
+} from '../../lib/crm.js';
+import { uiLocale } from '../../lib/datetime.js';
+import { COMPACT_ABOVE, formatNumber } from '../../lib/format.js';
 import { useDashboard } from '../../state.js';
 import { ErrorState, Skeleton } from '../StatusStates.js';
-import type { TileDef } from './types.js';
+import type { TileDef, TileDensity } from './types.js';
 
 const BLOCK_TEXT: Record<CrmBlock, string> = {
 	unavailable: 'The CRM extension is not enabled on this deployment.',
@@ -28,26 +41,113 @@ const BLOCK_TEXT: Record<CrmBlock, string> = {
 	forbidden: 'Needs the analyst role or higher on the team that owns this site.',
 };
 
+/** The same four states in one clause each. Only the short form is drawn at `compact`; the sentence
+ * above still reaches screen readers, and Expand shows it to everyone else. */
+const BLOCK_SHORT: Record<CrmBlock, string> = {
+	unavailable: 'CRM extension not enabled.',
+	'accounts-off': 'Account sign-in not configured.',
+	'signed-out': 'Sign in to see the pipeline.',
+	forbidden: 'Needs the analyst role.',
+};
+
+/**
+ * The headline figure in a fixed-width tile, per `COMPACT_ABOVE`'s rule: exact but without cents,
+ * and compact notation above the threshold. `formatMoney` is right for the expanded cards and for a
+ * figure someone reconciles against a deal, and wrong here — its cents are two characters of noise
+ * that push a seven-digit total out of the box.
+ */
+function glanceMoney(cents: number, currency: string): string {
+	const value = cents / 100;
+	const big = Math.abs(value) >= COMPACT_ABOVE;
+	try {
+		return new Intl.NumberFormat(uiLocale(), {
+			style: 'currency',
+			currency,
+			notation: big ? 'compact' : 'standard',
+			maximumFractionDigits: big ? 1 : 0,
+		}).format(value);
+	} catch {
+		// Unknown/invalid currency code — the label names it, so a plain number is not ambiguous.
+	}
+	return formatNumber(Math.round(value));
+}
+
+/** The `compact` frame: a label over one line of content, centred and clipped rather than reflowed,
+ * so a tile squeezed to 34px by a focused neighbour still shows its middle. */
+function CompactLine({ label, children }: { label: string; children: ReactNode }): ReactElement {
+	return (
+		<div className="flex h-full min-h-0 w-full flex-col justify-center gap-1 overflow-hidden">
+			<span className="shrink-0 truncate font-semibold text-[10px] text-[color:var(--muted)] uppercase leading-none tracking-[0.08em]">
+				{label}
+			</span>
+			{children}
+		</div>
+	);
+}
+
+/** The heading every tier shares. The currency is named even when it is the only one: the figure
+ * below it is one currency's, and a bare symbol does not say which — nor does the plain-number
+ * fallback for a code `Intl` refuses. */
+function headingFor(row: PipelineCurrencySummary): string {
+	return `Pipeline · ${row.currency}`;
+}
+
 /** The four CRM access states read as one calm explanatory line — never an alert, matching how the
  * CRM tab itself treats them. Only a genuinely transient failure gets the retryable red state. */
 function PipelineNotice({
 	error,
 	onRetry,
 	retrying,
+	compact,
 }: {
 	error: unknown;
 	onRetry: () => void;
 	retrying: boolean;
+	compact: boolean;
 }): ReactElement {
 	const block = error ? crmBlockOf(error) : null;
 	if (!block) {
+		if (!compact) {
+			return (
+				<ErrorState
+					message="Could not load the pipeline"
+					detail={error instanceof Error ? error.message : null}
+					onRetry={onRetry}
+					retrying={retrying}
+				/>
+			);
+		}
+		// The card is a p-4 block with a details disclosure; clipping it would take the retry with it,
+		// which is the one thing on it that does anything.
 		return (
-			<ErrorState
-				message="Could not load the pipeline"
-				detail={error instanceof Error ? error.message : null}
-				onRetry={onRetry}
-				retrying={retrying}
-			/>
+			<CompactLine label="Pipeline">
+				<div className="flex min-w-0 items-baseline gap-2">
+					<p
+						role="alert"
+						className="min-w-0 truncate text-[color:var(--ink)] text-xs leading-tight"
+					>
+						Could not load the pipeline
+					</p>
+					<button
+						type="button"
+						onClick={onRetry}
+						disabled={retrying}
+						className="shrink-0 text-[10px] text-[color:var(--muted)] underline disabled:opacity-60"
+					>
+						{retrying ? 'Retrying' : 'Retry'}
+					</button>
+				</div>
+			</CompactLine>
+		);
+	}
+	if (compact) {
+		return (
+			<CompactLine label="Pipeline">
+				<p className="text-[color:var(--ink)] text-xs leading-tight">
+					<span aria-hidden="true">{BLOCK_SHORT[block]}</span>
+					<span className="sr-only">{BLOCK_TEXT[block]}</span>
+				</p>
+			</CompactLine>
 		);
 	}
 	return (
@@ -57,31 +157,55 @@ function PipelineNotice({
 	);
 }
 
-function PipelineBody({ expanded }: { expanded?: boolean }): ReactElement {
+/** No priced deals — distinct from no deals, and never rendered as a zero. */
+function PipelineEmpty({ compact }: { compact: boolean }): ReactElement {
+	if (compact) {
+		return (
+			<CompactLine label="Pipeline">
+				<p className="text-[color:var(--ink)] text-xs leading-tight">
+					No priced deals yet.
+				</p>
+			</CompactLine>
+		);
+	}
+	return (
+		<div className="flex h-full flex-col justify-center gap-1">
+			<div className="font-semibold text-[11px] text-[color:var(--muted)] uppercase tracking-[0.08em]">
+				Pipeline
+			</div>
+			<div className="text-[color:var(--muted)] text-sm">No priced deals yet.</div>
+		</div>
+	);
+}
+
+function PipelineBody({ density }: { density: TileDensity }): ReactElement {
 	const { siteId } = useDashboard();
 	const { data, error, isFetching, refetch } = useDealPipeline(siteId);
+	const compact = density === 'compact';
 
 	if (!data && !error) return <Skeleton className="h-full w-full" />;
 	if (error)
 		return (
-			<PipelineNotice error={error} onRetry={() => void refetch()} retrying={isFetching} />
+			<PipelineNotice
+				error={error}
+				onRetry={() => void refetch()}
+				retrying={isFetching}
+				compact={compact}
+			/>
 		);
 
 	const rows = data?.pipeline ?? [];
-	if (rows.length === 0) {
-		return (
-			<div className="flex h-full flex-col justify-center gap-1">
-				<div className="font-semibold text-[11px] text-[color:var(--muted)] uppercase tracking-[0.08em]">
-					Pipeline
-				</div>
-				<div className="text-[color:var(--muted)] text-sm">No priced deals yet.</div>
-			</div>
-		);
-	}
+	const [primary, ...rest] = rows;
+	if (!primary) return <PipelineEmpty compact={compact} />;
 
-	if (expanded) {
+	if (density === 'expanded') {
 		return (
-			<div className="grid h-full auto-rows-min grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2">
+			<div
+				className={cn(
+					'grid h-full auto-rows-min grid-cols-1 gap-3 overflow-y-auto',
+					rows.length > 1 && 'sm:grid-cols-2',
+				)}
+			>
 				{rows.map((row) => (
 					<div
 						key={row.currency}
@@ -104,25 +228,42 @@ function PipelineBody({ expanded }: { expanded?: boolean }): ReactElement {
 		);
 	}
 
-	// Collapsed: the first currency carries the headline figure — summing across currencies would add
-	// unlike units, the same reason the API itself never returns one grand total. A second (or third)
+	// The first currency carries the headline figure — summing across currencies would add unlike
+	// units, the same reason the API itself never returns one grand total. A second (or third)
 	// currency is named rather than folded in, so the reader knows there is more behind "Expand".
-	const [primary, ...rest] = rows;
-	if (!primary) return <Skeleton className="h-full w-full" />;
+	const more =
+		rest.length > 0
+			? ` · +${rest.length} more ${rest.length === 1 ? 'currency' : 'currencies'}`
+			: '';
+
+	if (compact) {
+		return (
+			<CompactLine label={headingFor(primary)}>
+				<div className="flex min-w-0 items-baseline gap-x-2">
+					<span className="tabular shrink-0 font-semibold text-[color:var(--ink)] text-lg leading-none tracking-[-0.02em]">
+						{glanceMoney(primary.open_value, primary.currency)}
+					</span>
+					<span className="tabular truncate text-[10px] text-[color:var(--muted)] leading-none">
+						{formatNumber(primary.open_count)} open{more}
+					</span>
+				</div>
+			</CompactLine>
+		);
+	}
+
 	return (
-		<div className="flex h-full flex-col justify-center gap-1">
-			<div className="font-semibold text-[11px] text-[color:var(--muted)] uppercase tracking-[0.08em]">
-				Pipeline{rest.length > 0 ? ` · ${primary.currency}` : ''}
+		<div className="flex h-full min-h-0 flex-col justify-center gap-1 overflow-hidden">
+			<div className="truncate font-semibold text-[11px] text-[color:var(--muted)] uppercase tracking-[0.08em]">
+				{headingFor(primary)}
 			</div>
-			<div className="tabular flex items-baseline gap-2 font-semibold text-3xl text-[color:var(--ink)] leading-none tracking-[-0.02em]">
-				{formatMoney(primary.open_value, primary.currency)}
+			<div className="tabular font-semibold text-3xl text-[color:var(--ink)] leading-none tracking-[-0.02em]">
+				{Math.abs(primary.open_value / 100) >= COMPACT_ABOVE
+					? glanceMoney(primary.open_value, primary.currency)
+					: formatMoney(primary.open_value, primary.currency)}
 			</div>
 			<div className="mt-1 text-[color:var(--muted)] text-xs">
 				{formatNumber(primary.open_count)} open ·{' '}
-				{formatMoney(primary.won_value, primary.currency)} won
-				{rest.length > 0
-					? ` · +${rest.length} more ${rest.length === 1 ? 'currency' : 'currencies'}`
-					: ''}
+				{formatMoney(primary.won_value, primary.currency)} won{more}
 			</div>
 		</div>
 	);
@@ -137,5 +278,5 @@ export const pipelineBox: TileDef = {
 	expandable: true,
 	// No `table`: this box's numbers come from its own session-authed request, never from `ctx` — the
 	// same reason `distributionBox` omits it for its own independent fetch.
-	render: (_ctx, expanded) => <PipelineBody expanded={expanded} />,
+	render: (_ctx, density) => <PipelineBody density={density} />,
 };

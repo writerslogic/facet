@@ -7,10 +7,21 @@
 // The text equivalent is an sr-only table of the WHOLE tree, not just the visible level: a chart
 // whose accessible version only describes what is currently on screen makes a screen-reader user
 // operate a drill-down to read numbers a sighted user can see at a glance.
+//
+// Three tiers: `expanded` draws four levels, `default` three, and `compact` draws no chart at all —
+// under ~130px a sunburst is a dot and a treemap a smear, so ring 1 is unrolled into one bar (see
+// SectionBar). The tier only swaps the JSX: the drill stack lives above it, so a neighbour taking
+// this tile's height and giving it back leaves the reader exactly where they were.
 
 import type { PathTreeResponse } from '@facet/shared';
 import { type ReactElement, useMemo } from 'react';
-import { type TreeItem, flattenTree, normalizeTree, usePathTree } from '../../hooks/pathTree.js';
+import {
+	type TreeItem,
+	childrenTotal,
+	flattenTree,
+	normalizeTree,
+	usePathTree,
+} from '../../hooks/pathTree.js';
 import { useDrillPath } from '../../lib/chartInteraction.js';
 import { cn } from '../../lib/cn.js';
 import type { ServerFilter } from '../../lib/cube.js';
@@ -20,11 +31,12 @@ import { ErrorState, Skeleton } from '../StatusStates.js';
 import { ChartEmpty, ChartNote } from '../charts/ChartChrome.js';
 import { Sunburst } from '../charts/Sunburst.js';
 import { Treemap } from '../charts/Treemap.js';
-import type { TileConfig, TileDef } from './types.js';
+import { HUES, sliceStroke } from '../charts/hierarchy.js';
+import type { TileConfig, TileDef, TileDensity } from './types.js';
 
-/** How many levels each chart draws below the focus, by tile state. Expanded gets the tree's full
- * depth; a compact tile stops at three, where the outermost ring is still a few pixels thick. */
-const LEVELS = { compact: 3, expanded: 4 } as const;
+/** How many levels each chart draws below the focus. Expanded gets the tree's full depth; a resting
+ * tile stops at three, where the outermost ring is still a few pixels thick. */
+const LEVELS = { default: 3, expanded: 4 } as const;
 
 function levelsOf(config: TileConfig | undefined, expanded: boolean): number {
 	const chosen = config?.levels;
@@ -32,7 +44,7 @@ function levelsOf(config: TileConfig | undefined, expanded: boolean): number {
 		const n = Number.parseInt(chosen, 10);
 		if (Number.isFinite(n)) return n;
 	}
-	return expanded ? LEVELS.expanded : LEVELS.compact;
+	return expanded ? LEVELS.expanded : LEVELS.default;
 }
 
 /** The breadcrumb. Chrome as a control, but every path name inside it is data and stays copyable —
@@ -89,6 +101,52 @@ function Breadcrumb({
 }
 
 /**
+ * The `compact` tier: the focus, its total, and how that total splits across the branches directly
+ * under it. Deliberately NOT the leading-row readout every ranked list falls back to — that is what
+ * the Pages box already draws, and the only thing this box knows that Pages does not is the shape of
+ * the split. Same order and same `sliceStroke` hues as the sunburst's first ring, so the tile still
+ * reads as itself when a focused neighbour takes its height.
+ */
+function SectionBar({ focus }: { focus: TreeItem }): ReactElement {
+	const total = childrenTotal(focus) || focus.value || 1;
+	const lead = focus.children[0];
+	const rest = focus.children.length - 1;
+	return (
+		<div className="flex min-h-0 flex-1 flex-col justify-center gap-1.5 px-0.5">
+			<div className="flex items-baseline gap-2">
+				<span className="min-w-0 truncate font-semibold text-[color:var(--ink)] text-xs">
+					{focus.path}
+				</span>
+				<span className="ml-auto shrink-0 font-semibold text-[color:var(--ink)] text-sm tabular-nums">
+					{formatNumber(focus.value)}
+				</span>
+			</div>
+			<div
+				aria-hidden="true"
+				className="flex h-1.5 w-full shrink-0 overflow-hidden rounded-full bg-[color:rgb(var(--hover))]"
+			>
+				{focus.children.map((child, i) => (
+					<span
+						key={child.key}
+						className="h-full"
+						style={{
+							width: `${(child.value / total) * 100}%`,
+							background: sliceStroke(i % HUES.length, child.kind, true),
+						}}
+					/>
+				))}
+			</div>
+			{lead ? (
+				<p className="truncate text-[10px] text-[color:var(--faint)]">
+					{`${lead.kind === 'page' ? lead.path : lead.label} ${Math.round((lead.value / total) * 100)}%`}
+					{rest > 0 ? ` · +${formatNumber(rest)} more` : ''}
+				</p>
+			) : null}
+		</div>
+	);
+}
+
+/**
  * The chart, breadcrumb and text equivalent over an already-fetched tree. Split out from the fetching
  * wrapper so the whole interaction is testable without a network, a provider or a fake clock.
  */
@@ -96,10 +154,12 @@ export function PathTreeExplorer({
 	tree,
 	variant,
 	levels,
+	density = 'default',
 }: {
 	tree: PathTreeResponse;
 	variant: string;
 	levels: number;
+	density?: TileDensity;
 }): ReactElement {
 	// Memoized on the response: React Query's structural sharing hands back the same object when a
 	// refetch changed nothing, which is what keeps a background refresh from resetting the drill.
@@ -117,22 +177,28 @@ export function PathTreeExplorer({
 
 	return (
 		<div className="flex h-full min-h-0 flex-col gap-1.5">
-			<Breadcrumb path={drill.path} onJump={drill.jumpTo} />
-			<div className="min-h-0 flex-1">
-				{variant === 'treemap' ? (
-					<Treemap {...shared} levels={levels} />
-				) : (
-					<Sunburst {...shared} rings={levels} />
-				)}
-			</div>
-			<ChartNote>
-				{`${formatNumber(tree.paths)} paths · depth ${tree.max_depth} · subtrees under ${tree.min_count} pageviews grouped as Other`}
-			</ChartNote>
+			{density === 'compact' ? (
+				<SectionBar focus={drill.current} />
+			) : (
+				<>
+					<Breadcrumb path={drill.path} onJump={drill.jumpTo} />
+					<div className="min-h-0 flex-1">
+						{variant === 'treemap' ? (
+							<Treemap {...shared} levels={levels} />
+						) : (
+							<Sunburst {...shared} rings={levels} />
+						)}
+					</div>
+					<ChartNote>
+						{`${formatNumber(tree.paths)} paths${tree.truncated ? ' (a longer tail was not read)' : ''} · depth ${tree.max_depth} · subtrees under ${tree.min_count} pageviews grouped as Other`}
+					</ChartNote>
+				</>
+			)}
 			{/* These ARE the numbers, so — like the flow, map and retention tables — they are selectable
 			    and not marked as chrome. The whole tree, at every depth, in reading order. */}
 			<table className="sr-only">
 				<caption>
-					{`Pages by URL prefix: ${formatNumber(root.value)} pageviews across ${formatNumber(tree.paths)} paths, nested ${tree.max_depth} levels deep. Subtrees under ${tree.min_count} pageviews are grouped as "Other".`}
+					{`Pages by URL prefix: ${formatNumber(root.value)} pageviews across ${formatNumber(tree.paths)} paths, nested ${tree.max_depth} levels deep. Subtrees under ${tree.min_count} pageviews are grouped as "Other".${tree.truncated ? ' A longer tail of paths was not returned.' : ''}`}
 				</caption>
 				<thead>
 					<tr>
@@ -165,11 +231,11 @@ export function PathTreeExplorer({
 
 function PathTreeTile({
 	serverFilter,
-	expanded,
+	density,
 	config,
 }: {
 	serverFilter: ServerFilter;
-	expanded: boolean;
+	density: TileDensity;
 	config?: TileConfig;
 }): ReactElement {
 	const { apiKey, siteId, range } = useDashboard();
@@ -187,7 +253,7 @@ function PathTreeTile({
 	}
 	if (data.root.children.length === 0) {
 		return (
-			<ChartEmpty reason="range">
+			<ChartEmpty reason="range" compact={density === 'compact'}>
 				No pageviews were recorded in this window, so there is no URL tree to walk.
 			</ChartEmpty>
 		);
@@ -196,7 +262,8 @@ function PathTreeTile({
 		<PathTreeExplorer
 			tree={data}
 			variant={typeof config?.variant === 'string' ? config.variant : 'sunburst'}
-			levels={levelsOf(config, expanded)}
+			levels={levelsOf(config, density === 'expanded')}
+			density={density}
 		/>
 	);
 }
@@ -224,11 +291,7 @@ export const pathTreeBox: TileDef = {
 			default: 'auto',
 		},
 	],
-	render: (ctx, expanded, config) => (
-		<PathTreeTile
-			serverFilter={ctx.serverFilter}
-			expanded={Boolean(expanded)}
-			config={config}
-		/>
+	render: (ctx, density, config) => (
+		<PathTreeTile serverFilter={ctx.serverFilter} density={density} config={config} />
 	),
 };

@@ -16,15 +16,18 @@ export const regionsBox: TileDef = {
 	variants: LIST_VARIANTS,
 	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Region', ctx.data.top_regions ?? []),
-	render: (ctx, expanded, config) => (
-		<ListBody
-			title="Regions"
-			rows={ctx.data.top_regions ?? []}
-			expanded={expanded}
-			config={config}
-			compare={{ current: ctx.data.top_regions ?? [], select: (p) => p.top_regions }}
-			drill={drillSpec(ctx, null)}
-			noun="Region"
-		/>
-	),
+	render: (ctx, density, config) => {
+		const rows = ctx.data.top_regions ?? [];
+		return (
+			<ListBody
+				title="Regions"
+				rows={rows}
+				density={density}
+				config={config}
+				compare={{ current: rows, select: (p) => p.top_regions }}
+				drill={drillSpec(ctx, null)}
+				noun="Region"
+			/>
+		);
+	},
 };

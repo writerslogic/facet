@@ -20,7 +20,13 @@
 //
 // The calendar stays UTC in every case. Its days must line up with the range control, which parses
 // date inputs as UTC day boundaries (`state.ts`), and with the clock grid beside it.
+//
+// DENSITY. Compact drops both drawings: a 24-sector dial at 100px is a coin, and the calendar's seven
+// 13px rows no longer fit. What survives is the question the box exists to answer — when the peak was,
+// over the profile it sits in. Expanded keeps the drawing and states that peak in words above it, so
+// the answer no longer has to be found by hovering the darkest cell.
 
+import type { ClockCell } from '@facet/shared';
 import { type ReactElement, useMemo } from 'react';
 import { type ClockFilter, useClock } from '../../hooks/insights.js';
 import { formatNumber } from '../../lib/format.js';
@@ -30,10 +36,30 @@ import {
 	CALENDAR_DAY_MS,
 	CalendarHeatmap,
 	dailyCounts,
+	utcDayKey,
 	utcDayStart,
 } from '../charts/CalendarHeatmap.js';
-import { PolarClock, shiftClockCells } from '../charts/PolarClock.js';
-import type { TileConfig, TileDef } from './types.js';
+import { ChartEmpty, ChartNote } from '../charts/ChartChrome.js';
+import { PolarClock, hourMarginal, shiftClockCells } from '../charts/PolarClock.js';
+import { bandFill, bandOf, intensityThresholds } from '../charts/ramp.js';
+import type { TileConfig, TileDef, TileDensity } from './types.js';
+
+const WEEKDAYS = [
+	'Sunday',
+	'Monday',
+	'Tuesday',
+	'Wednesday',
+	'Thursday',
+	'Friday',
+	'Saturday',
+] as const;
+
+/** One column of the compact profile. `label` is what the screen-reader table calls it. */
+interface StripBar {
+	key: string;
+	label: string;
+	value: number;
+}
 
 /** What the viewer's own clock is doing over the range, and whether it can honestly be applied. */
 export interface LocalFrame {
@@ -90,12 +116,151 @@ function wantsLocal(config: TileConfig | undefined): boolean {
 	return config?.timezone === 'local';
 }
 
+/**
+ * The compact rendering every variant falls back to: the peak named on one line, over the profile it
+ * came from. The bars carry the same intensity ramp as the two full charts, so this reads as the same
+ * chart family rather than a third one, and the frame label rides along — a compact tile must not be
+ * the one place on the board where hours appear without saying which clock they are on.
+ */
+function PeakStrip({
+	headline,
+	frame,
+	value,
+	bars,
+	columnLabel,
+	caption,
+	onActivate,
+	activateLabel,
+}: {
+	headline: string;
+	frame: string;
+	value: number;
+	bars: readonly StripBar[];
+	columnLabel: string;
+	caption: string;
+	onActivate?: () => void;
+	activateLabel?: string;
+}): ReactElement {
+	let max = 0;
+	for (const bar of bars) max = Math.max(max, bar.value);
+	if (max === 0) return <ChartEmpty reason="range" compact />;
+	const thresholds = intensityThresholds(bars.map((b) => b.value));
+
+	const head = (
+		<>
+			<span className="min-w-0 truncate font-medium text-[color:var(--ink)] text-xs">
+				{headline}
+			</span>
+			<span className="ml-auto shrink-0 font-semibold text-[color:var(--ink)] text-sm tabular-nums">
+				{formatNumber(value)}
+			</span>
+			<span className="shrink-0 text-[10px] text-[color:var(--muted)]">{frame}</span>
+		</>
+	);
+
+	return (
+		<div className="flex h-full min-h-0 flex-col justify-center gap-1">
+			{onActivate ? (
+				<button
+					type="button"
+					onClick={onActivate}
+					className="flex items-center gap-2 rounded-md px-2 py-1 text-left transition hover:bg-[color:rgb(var(--hover))]"
+				>
+					{head}
+					<span className="sr-only">{activateLabel}</span>
+				</button>
+			) : (
+				<div className="flex items-center gap-2 px-2">{head}</div>
+			)}
+			{/* preserveAspectRatio="none": one column per bucket, whether that is 24 hours or 90 days,
+			    with no minimum width to overflow a 232px tile and no tail quietly clipped off. */}
+			<svg
+				viewBox={`0 0 ${bars.length} 100`}
+				preserveAspectRatio="none"
+				className="min-h-[12px] w-full flex-1"
+				aria-hidden="true"
+			>
+				{bars.map((bar, index) => {
+					const height = Math.max(3, (bar.value / max) * 100);
+					const band = bandOf(bar.value, thresholds);
+					return (
+						<rect
+							key={bar.key}
+							x={index + 0.12}
+							y={100 - height}
+							width={0.76}
+							height={height}
+							fill={band < 0 ? 'rgb(var(--hover))' : bandFill(band)}
+						/>
+					);
+				})}
+			</svg>
+			<table className="sr-only">
+				<caption>{caption}</caption>
+				<thead>
+					<tr>
+						<th scope="col">{columnLabel}</th>
+						<th scope="col">Pageviews</th>
+					</tr>
+				</thead>
+				<tbody>
+					{bars.map((bar) => (
+						<tr key={bar.key}>
+							<th scope="row">{bar.label}</th>
+							<td>{formatNumber(bar.value)}</td>
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
+	);
+}
+
+/** The peak stated above an expanded chart, so a focused tile answers "when" without a hover. */
+function PeakReadout({
+	label,
+	value,
+	frame,
+}: {
+	label: string;
+	value: number;
+	frame: string;
+}): ReactElement {
+	return (
+		<p className="flex shrink-0 items-baseline gap-2 text-xs">
+			<span className="font-semibold text-[10px] text-[color:var(--muted)] uppercase tracking-[0.08em]">
+				Peak
+			</span>
+			<span className="min-w-0 truncate font-medium text-[color:var(--ink)]">{label}</span>
+			<span className="ml-auto shrink-0 font-semibold text-[color:var(--ink)] tabular-nums">
+				{`${formatNumber(value)} pv`}
+			</span>
+			<span className="shrink-0 text-[10px] text-[color:var(--muted)]">{frame}</span>
+		</p>
+	);
+}
+
+/** The busiest cell of a grid, or null when nothing in it was ever hit. */
+function peakCell(cells: readonly ClockCell[]): ClockCell | null {
+	const best = cells.reduce<ClockCell | null>(
+		(top, cell) => (top === null || cell.pageviews > top.pageviews ? cell : top),
+		null,
+	);
+	return best && best.pageviews > 0 ? best : null;
+}
+
+function hourLabel(hour: number): string {
+	return `${String(hour).padStart(2, '0')}:00`;
+}
+
 function ClockBody({
 	variant,
+	density,
 	local,
 	filter,
 }: {
 	variant: 'polar' | 'nightingale';
+	density: TileDensity;
 	local: boolean;
 	filter: ClockFilter;
 }): ReactElement {
@@ -121,10 +286,36 @@ function ClockBody({
 	const frameLabel = shift ? frame.label : 'UTC';
 	const note = local
 		? (frame.note ??
-			`Shifted client-side from ${data.timezone}; the server never guessed a timezone.`)
+			(frame.offsetHours === 0
+				? `Your offset is ${frame.label}, so the local view and the ${data.timezone} the server sent are the same hours.`
+				: `Shifted client-side from ${data.timezone}; the server never guessed a timezone.`))
 		: 'Server-side UTC, unshifted.';
 
-	return (
+	if (density === 'compact') {
+		const byHour = hourMarginal(cells);
+		let peakHour = 0;
+		let total = 0;
+		byHour.forEach((value, hour) => {
+			total += value;
+			if (value > (byHour[peakHour] ?? 0)) peakHour = hour;
+		});
+		return (
+			<PeakStrip
+				headline={`Peak ${hourLabel(peakHour)}`}
+				frame={frameLabel}
+				value={byHour[peakHour] ?? 0}
+				bars={byHour.map((value, hour) => ({
+					key: String(hour),
+					label: hourLabel(hour),
+					value,
+				}))}
+				columnLabel={`Hour (${frameLabel})`}
+				caption={`Pageviews by hour of day in ${frameLabel}, ${formatNumber(total)} in total; the busiest hour was ${hourLabel(peakHour)}. ${note}`}
+			/>
+		);
+	}
+
+	const chart = (
 		<PolarClock
 			cells={cells}
 			variant={variant === 'nightingale' ? 'nightingale' : 'grid'}
@@ -132,22 +323,95 @@ function ClockBody({
 			note={note}
 		/>
 	);
+	if (density !== 'expanded') return chart;
+
+	const peak = peakCell(cells);
+	if (peak === null) return chart;
+	// The nightingale draws hours only, so naming a weekday it does not show would point at a mark
+	// that is not there.
+	const byHour = hourMarginal(cells);
+	const peakHour = byHour.reduce(
+		(best, value, hour) => (value > (byHour[best] ?? 0) ? hour : best),
+		0,
+	);
+	return (
+		<div className="flex h-full min-h-0 w-full flex-col gap-2">
+			{variant === 'nightingale' ? (
+				<PeakReadout
+					label={hourLabel(peakHour)}
+					value={byHour[peakHour] ?? 0}
+					frame={frameLabel}
+				/>
+			) : (
+				<PeakReadout
+					label={`${WEEKDAYS[peak.day] ?? 'Unknown'} ${hourLabel(peak.hour)}`}
+					value={peak.pageviews}
+					frame={frameLabel}
+				/>
+			)}
+			<div className="min-h-0 flex-1">{chart}</div>
+		</div>
+	);
 }
 
 function CalendarBody({
 	series,
+	density,
+	local,
 }: {
 	series: readonly { t: number; pageviews: number }[];
+	density: TileDensity;
+	local: boolean;
 }): ReactElement {
 	const { range, setCustomRange, selection } = useDashboard();
 	const counts = useMemo(() => dailyCounts(series), [series]);
+	const days = useMemo(() => {
+		const first = utcDayStart(range.start);
+		// `range.end` is exclusive: a range ending at midnight covers up to the previous day.
+		const last = utcDayStart(range.end - 1);
+		const out: (StripBar & { day: number })[] = [];
+		for (let day = first; day <= last; day += CALENDAR_DAY_MS) {
+			const key = utcDayKey(day);
+			out.push({ key, label: key, value: counts.get(day) ?? 0, day });
+		}
+		return out;
+	}, [range.start, range.end, counts]);
+	const busiest = days.reduce<(StripBar & { day: number }) | null>(
+		(top, entry) => (top === null || entry.value > top.value ? entry : top),
+		null,
+	);
+	const total = days.reduce((sum, entry) => sum + entry.value, 0);
+
+	if (density === 'compact') {
+		return (
+			<PeakStrip
+				headline={busiest ? `Busiest ${busiest.key}` : 'No days in range'}
+				frame="UTC"
+				value={busiest?.value ?? 0}
+				bars={days}
+				columnLabel="Date (UTC)"
+				caption={`Pageviews per UTC day, ${formatNumber(total)} across ${days.length} days${
+					busiest && busiest.value > 0
+						? `; busiest was ${busiest.key} with ${formatNumber(busiest.value)}`
+						: ''
+				}.`}
+				onActivate={
+					busiest && busiest.value > 0
+						? () => setCustomRange(busiest.day, busiest.day + CALENDAR_DAY_MS)
+						: undefined
+				}
+				activateLabel="Narrow the range to this day"
+			/>
+		);
+	}
+
 	// A custom range exactly one UTC day wide IS the drilled state — the range control is this
 	// chart's breadcrumb, so there is no second, private notion of "the selected day" to drift.
 	const selectedDay =
 		selection.kind === 'custom' && selection.end - selection.start === CALENDAR_DAY_MS
 			? utcDayStart(selection.start)
 			: null;
-	return (
+	const chart = (
 		<CalendarHeatmap
 			start={range.start}
 			end={range.end}
@@ -155,6 +419,23 @@ function CalendarBody({
 			selectedDay={selectedDay}
 			onSelectDay={(day) => setCustomRange(day, day + CALENDAR_DAY_MS)}
 		/>
+	);
+	// The Hours option is offered on every variant but cannot move a calendar day, so the calendar
+	// says so rather than leaving the control looking broken.
+	const utcNote = local
+		? 'Days stay on UTC here: they line up with the range control and the clock grid, so the local-offset setting does not move them.'
+		: null;
+	const readout =
+		density === 'expanded' && busiest && busiest.value > 0 ? (
+			<PeakReadout label={busiest.key} value={busiest.value} frame="UTC" />
+		) : null;
+	if (!utcNote && !readout) return chart;
+	return (
+		<div className="flex h-full min-h-0 w-full flex-col gap-2">
+			{readout}
+			<div className="min-h-0 flex-1">{chart}</div>
+			{utcNote ? <ChartNote>{utcNote}</ChartNote> : null}
+		</div>
 	);
 }
 
@@ -192,12 +473,16 @@ export const clockBox: TileDef = {
 				.map(([day, pageviews]) => [new Date(day).toISOString().slice(0, 10), pageviews]),
 		};
 	},
-	render: (ctx, _expanded, config) => {
+	render: (ctx, density, config) => {
 		const variant = variantOf(config);
-		if (variant === 'calendar') return <CalendarBody series={ctx.series} />;
+		if (variant === 'calendar')
+			return (
+				<CalendarBody series={ctx.series} density={density} local={wantsLocal(config)} />
+			);
 		return (
 			<ClockBody
 				variant={variant}
+				density={density}
 				local={wantsLocal(config)}
 				filter={{
 					country: ctx.cubeFilter.country,

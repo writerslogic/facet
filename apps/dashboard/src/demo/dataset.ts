@@ -42,6 +42,7 @@ import type {
 	SessionDistributionResponse,
 	Site,
 	StatsResponse,
+	TimelineAnnotationsResponse,
 } from '@facet/shared';
 import { DEMO_SITE_ID } from './constants.js';
 
@@ -402,16 +403,14 @@ function buildRangeStats(
 			0.52,
 		),
 		top_os: scaled(['Windows', 'macOS', 'iOS', 'Android', 'Linux', 'ChromeOS'], visitors, 0.4),
-		top_screens: scaled(
-			['1920×1080', '1440×900', '390×844', '1366×768', '414×896', '2560×1440'],
-			visitors,
-			0.34,
-		),
-		top_languages: scaled(
-			['en-US', 'en-GB', 'de-DE', 'fr-FR', 'es-ES', 'pt-BR'],
-			visitors,
-			0.48,
-		),
+		// IMPORTANT: these are the collector's own allowlisted values, not plausible-looking ones. The
+		// demo is the public argument for the privacy claim, so it must never display a dimension at a
+		// finer grain than the product can store: screen is a width TIER bucketed on-device
+		// (request-meta.ts SCREEN_TIERS), connection an RTT tier, and language the primary subtag only,
+		// because the full Accept-Language list is a strong fingerprint. Exact resolutions and region
+		// subtags here advertised data facet deliberately refuses to collect.
+		top_screens: scaled(['phone', 'laptop', 'desktop', 'tablet', 'ultrawide'], visitors, 0.34),
+		top_languages: scaled(['en', 'de', 'fr', 'es', 'pt', 'ja'], visitors, 0.48),
 		top_regions: scaled(
 			['California', 'Texas', 'New York', 'Maharashtra', 'Bavaria', 'Île-de-France'],
 			visitors,
@@ -422,7 +421,7 @@ function buildRangeStats(
 			visitors,
 			0.28,
 		),
-		top_connections: scaled(['4g', 'wifi', '5g', '3g'], visitors, 0.44),
+		top_connections: scaled(['fast', 'moderate', 'slow'], visitors, 0.44),
 		revenue: { total: revenueTotal, orders, aov, currency: 'USD' },
 		revenue_by_channel: revenueByChannel,
 		attribution,
@@ -488,6 +487,33 @@ export function buildAnomalies(start: number, end: number): AnomaliesResponse {
 					'Pageviews spiked ~2× above the hourly baseline, driven mostly by social referrals.',
 			},
 		],
+	};
+}
+
+/** Fictional operator context for the demo chart, range-filtered exactly like the D1 endpoint. */
+export function buildTimelineAnnotations(start: number, end: number): TimelineAnnotationsResponse {
+	const candidates: TimelineAnnotationsResponse['annotations'] = [
+		{
+			id: 'demo-annotation-release',
+			site_id: DEMO_SITE_ID,
+			label: 'Released the redesigned product page',
+			category: 'release',
+			occurred_at: end - 5 * DAY_MS,
+			created_at: end - 5 * DAY_MS + HOUR_MS,
+		},
+		{
+			id: 'demo-annotation-campaign',
+			site_id: DEMO_SITE_ID,
+			label: 'Newsletter campaign launched',
+			category: 'campaign',
+			occurred_at: end - 2 * DAY_MS,
+			created_at: end - 2 * DAY_MS + HOUR_MS,
+		},
+	];
+	return {
+		annotations: candidates.filter(
+			(annotation) => annotation.occurred_at >= start && annotation.occurred_at < end,
+		),
 	};
 }
 

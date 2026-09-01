@@ -4,6 +4,7 @@
 // all on one plane, spring-interpolated — which is what replaces the old drill-down modal.
 
 import { type RefObject, useEffect, useRef, useState } from 'react';
+import type { TileDensity } from '../components/boxes/types.js';
 import type { SizeKey, Slot } from './tiles.js';
 
 export interface Placement {
@@ -181,6 +182,113 @@ export function useColumns(ref: RefObject<HTMLElement | null>): number {
  */
 export const ROW_FLOOR = '88px';
 
+/**
+ * The per-row minimum while a tile is focused. Previously this was `0`, which is what let a focused
+ * tile crush its neighbours: measured on the shipped default layout, focusing `countries` left the
+ * three KPI tiles 34px tall, i.e. an empty bar with the numeral clipped out entirely, and it bought
+ * the focused tile only 245px in return. Twelve tiles destroyed for very little.
+ *
+ * 64px is lower than ROW_FLOOR because a tile this short no longer draws its resting composition: it
+ * drops to the `compact` density tier, which is a single line of label + value rather than a label
+ * over a 2rem numeral over a badge. The arithmetic, against the compact chrome in BentoTile: 16px of
+ * `p-2` plus 12px clearing the overlaid label leaves 36px, and a one-line row is ~28px. It was 56px
+ * first, which left 8px of body and drew the compact tier into a box too short to show it — the
+ * chrome was being counted as free. Below this there is no rendering left worth showing, so this is a
+ * hard floor and the board scrolls internally rather than going under it.
+ */
+export const FOCUS_ROW_FLOOR = '64px';
+
+/**
+ * The height under which a tile drops to `compact`.
+ *
+ * This is ROW_FLOOR, and deliberately so rather than a second, independently chosen number: ROW_FLOOR is
+ * already the measured height at which the DEFAULT composition fits (label, 2rem numeral, delta badge,
+ * inside the tile's own padding). A tile at or above it can draw that composition, so anything above it
+ * is not compact by definition. Picking a larger threshold by feel — 132px, first attempt — took the
+ * default tier away from tiles that had room for it and left visible dead space.
+ */
+const COMPACT_MAX_HEIGHT = Number.parseInt(ROW_FLOOR, 10);
+
+/**
+ * The density tier for a measured tile box. `focused` wins outright: a focused tile is never compact,
+ * because focusing it is the user asking for its fullest rendering.
+ *
+ * HEIGHT ONLY, deliberately. Width was in this decision at first, and it was the wrong axis: focusing a
+ * tile shrinks the COLUMN tracks too, so a neighbouring ranked list came out 232px wide and 312px tall
+ * and rendered a single compact line above 280px of dead space. A ranked list draws perfectly well in
+ * 232px of width. Narrow-but-tall is a job for the container queries inside each box
+ * (`@max-[15rem]/tile:hidden` and friends, on the `@container/tile` body), which drop individual
+ * elements out of a row; it is not a reason to switch composition.
+ *
+ * IMPORTANT: a zero box is UNMEASURED, not tiny. Layout has not run yet (or, in jsdom, never runs), and
+ * treating 0 as "smaller than the threshold" made every tile render its compact tier — which is wrong on
+ * a real first paint, and is how this first showed up: four suite failures finding the same metric
+ * rendered twice.
+ */
+export function densityFor(width: number, height: number, focused: boolean): TileDensity {
+	if (focused) return 'expanded';
+	if (width <= 0 || height <= 0) return 'default';
+	return height <= COMPACT_MAX_HEIGHT ? 'compact' : 'default';
+}
+
+/** Observe a tile's own box and report which of its three renderings it should draw. Measured rather
+ * than derived from the size token — see the note on TileDensity for why that distinction is the whole
+ * point. Returns `default` until the first measurement so the first paint is never `compact`. */
+export function useTileDensity(ref: RefObject<HTMLElement | null>, focused: boolean): TileDensity {
+	const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const measure = (): void => {
+			const r = el.getBoundingClientRect();
+			setBox((prev) =>
+				prev && Math.abs(prev.w - r.width) < 1 && Math.abs(prev.h - r.height) < 1
+					? prev
+					: { w: r.width, h: r.height },
+			);
+		};
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [ref]);
+	if (!box) return focused ? 'expanded' : 'default';
+	return densityFor(box.w, box.h, focused);
+}
+
+/** The row gap the board renders between tiles (`gap-3`), needed to convert a pixel height into a row
+ * count. Kept next to the arithmetic that uses it rather than inferred from the class. */
+const ROW_GAP_PX = 12;
+
+/**
+ * The shortest row a tile can occupy and still draw its `compact` tier. Distinct from ROW_FLOOR, which
+ * is what the RESTING (`default`) tier needs; a compact tile is one line, so it needs far less. Kept
+ * equal to FOCUS_ROW_FLOOR: both answer the same question, "how short before there is nothing left".
+ */
+const FIT_MIN_ROW_PX = 64;
+
+/** How many rows fit in `height` without any tile going under its compact minimum. This is what caps
+ * the board in fit mode: the honest answer to "no scrolling" is fewer tiles, not smaller ones. */
+export function maxFitRows(height: number): number {
+	if (!Number.isFinite(height) || height <= 0) return Number.POSITIVE_INFINITY;
+	return Math.max(1, Math.floor((height + ROW_GAP_PX) / (FIT_MIN_ROW_PX + ROW_GAP_PX)));
+}
+
+/** The container's measured height in px, or 0 before the first measurement. */
+export function useBoardHeight(ref: RefObject<HTMLElement | null>): number {
+	const [h, setH] = useState(0);
+	useEffect(() => {
+		const el = ref.current;
+		if (!el) return;
+		const measure = (): void => setH(el.clientHeight);
+		measure();
+		const ro = new ResizeObserver(measure);
+		ro.observe(el);
+		return () => ro.disconnect();
+	}, [ref]);
+	return h;
+}
+
 /** True when the container is too narrow for the elastic grid to stay legible — below this the board
  * switches to a full-size box carousel. */
 export function useNarrow(ref: RefObject<HTMLElement | null>, threshold = 680): boolean {
@@ -277,7 +385,38 @@ export function useElasticTracks(
 /** Turn an fr array into a grid-template string. Each track is `minmax(min, Nfr)`: with `min` at 0 a
  * focused track can collapse its neighbours all the way (dramatic elastic focus); with a real `min` (e.g.
  * a row floor at rest) every tile keeps enough size to show its content, and the board scrolls internally
- * once the mins exceed the viewport rather than shrinking tiles to nothing. */
-export function trackTemplate(fr: number[], min = '0'): string {
-	return fr.map((f) => `minmax(${min}, ${f}fr)`).join(' ');
+ * once the mins exceed the viewport rather than shrinking tiles to nothing.
+ *
+ * `min` may be a single value for every track, or one value PER TRACK. The per-track form exists because
+ * a single floor cannot express focus: once the floors sum past the container the `fr` weights distribute
+ * nothing at all, so with one global floor the FOCUSED tile shrinks along with its neighbours instead of
+ * growing. Giving the focused tracks their own larger minimum is what makes expansion survive a board
+ * whose floors already overflow (the shipped default layout is 16 rows, so it always does). */
+export function trackTemplate(fr: number[], min: string | readonly string[] = '0'): string {
+	return fr
+		.map((f, i) => `minmax(${Array.isArray(min) ? (min[i] ?? '0') : (min as string)}, ${f}fr)`)
+		.join(' ');
+}
+
+/**
+ * The height a focused tile is guaranteed, in px, before any `fr` distribution. Split across the rows it
+ * spans and applied as those tracks' minimum.
+ *
+ * A focused tile has to clear its own `expanded` rendering or expanding it is a visible no-op: the three
+ * KPI tiles on the shipped board are one row each, and at the resting 88px floor their expanded layout
+ * (large value over a full area chart plus an Avg/Peak/Low strip) has nowhere to draw. 300px is that
+ * layout's measured need plus the tile's own chrome.
+ */
+const FOCUS_TILE_MIN_PX = 300;
+
+/** Per-row `minmax` minimums for a board in the given focus state. Non-focused rows drop to
+ * FOCUS_ROW_FLOOR (their compact tier), which is what frees the height the focused tile takes. */
+export function rowMinimums(rows: number, focus: Placement | null): string[] {
+	if (!focus) return new Array(rows).fill(ROW_FLOOR);
+	const per = Math.ceil(FOCUS_TILE_MIN_PX / Math.max(1, focus.rowSpan));
+	return Array.from({ length: rows }, (_, i) =>
+		i + 1 >= focus.rowStart && i + 1 < focus.rowStart + focus.rowSpan
+			? `${Math.max(per, Number.parseInt(FOCUS_ROW_FLOOR, 10))}px`
+			: FOCUS_ROW_FLOOR,
+	);
 }

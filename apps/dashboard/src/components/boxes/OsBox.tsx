@@ -14,11 +14,11 @@ export const osBox: TileDef = {
 	variants: LIST_VARIANTS,
 	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('OS', ctx.data.top_os ?? []),
-	render: (ctx, expanded, config) => (
+	render: (ctx, density, config) => (
 		<ListBody
 			title="Operating systems"
 			rows={ctx.data.top_os ?? []}
-			expanded={expanded}
+			density={density}
 			config={config}
 			compare={{ current: ctx.data.top_os ?? [], select: (p) => p.top_os }}
 			drill={drillSpec(ctx, null)}

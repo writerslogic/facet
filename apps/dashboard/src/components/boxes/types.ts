@@ -12,6 +12,7 @@ import type {
 import type { ReactNode } from 'react';
 import type { CubeAxis, CubeFilter, ServerFilter } from '../../lib/cube.js';
 import type { TileEmphasis } from '../BentoTile.js';
+import type { TimelineAnnotationManager } from '../TimelineNotes.js';
 import type { ChartAnnotation } from '../TrafficChart.js';
 
 /** Named grid spans so a slot persists a compact size token rather than raw Tailwind. `kpi` is a short
@@ -24,6 +25,7 @@ export interface TileContext {
 	summary: { pageviews: number; visitors: number; events: number };
 	series: SeriesPoint[];
 	annotations: ChartAnnotation[];
+	annotationManager: TimelineAnnotationManager;
 	deltas: { pv: number | null; vis: number | null; ev: number | null };
 	sparks: { pv: number[]; vis: number[]; ev: number[] };
 	sense: (d: number | null) => 'improvement' | 'regression' | 'neutral';
@@ -69,22 +71,37 @@ export interface TileOption {
 	default: TileConfigValue;
 }
 
-/** A box definition. `render` receives the shared context, whether it is drawing inside the drill-down
- * overlay (so lists can show more rows, the chart can breathe, etc.), and the resolved per-instance
- * `config` (chart style + options). A box lists the `variants`/`options` it supports; the board persists
- * the user's choices per slot and passes them back here. */
+/**
+ * How much room a tile actually has, and therefore which of its three renderings it draws.
+ *
+ * IMPORTANT: resolved from the tile's MEASURED pixel box, never from its `SizeKey`. A size key is a
+ * grid SPAN, and a span says nothing about height: the same `lg` tile is ~245px tall at rest and was
+ * 34px tall while a neighbour was focused, which is how three KPI tiles came to render as empty bars.
+ * Measuring the box collapses two problems into one — a deliberately small tile and a tile squeezed by
+ * a focused neighbour are the same situation and get the same designed answer.
+ *
+ * Every box MUST render something legible and finished at all three tiers. `compact` is not a clipped
+ * `default`; it is a different, smaller composition (see the per-box notes in each box file).
+ */
+export type TileDensity = 'compact' | 'default' | 'expanded';
+
+/** A box definition. `render` receives the shared context, the density tier it must draw at, and the
+ * resolved per-instance `config` (chart style + options). A box lists the `variants`/`options` it
+ * supports; the board persists the user's choices per slot and passes them back here. */
 export interface TileDef {
 	id: string;
 	title: string;
 	/** Default board size key (see SIZES). */
 	size: SizeKey;
-	render: (ctx: TileContext, expanded?: boolean, config?: TileConfig) => ReactNode;
+	render: (ctx: TileContext, density: TileDensity, config?: TileConfig) => ReactNode;
 	/** Optional header control (e.g. the anomaly legend on the traffic chart). */
 	action?: (ctx: TileContext) => ReactNode;
 	/** Whether the box offers an expand affordance to focus it in place and reveal `expanded` detail. */
 	expandable?: boolean;
-	/** The box's raw data as a grid — enables a "view as table" toggle so users can read/copy the numbers. */
-	table?: (ctx: TileContext) => TableData | null;
+	/** The box's raw data as a grid — enables a "view as table" toggle so users can read/copy the numbers.
+	 * Receives `config` because a box whose variant selects WHICH data it shows (attribution's model, say)
+	 * would otherwise export a different number than the one on screen. */
+	table?: (ctx: TileContext, config?: TileConfig) => TableData | null;
 	/** The body renders its own title (KPI boxes), so the surrounding tile omits its header. */
 	selfLabeled?: boolean;
 	/** Surface emphasis — draws the eye to the hero chart/flow and the KPI band. */

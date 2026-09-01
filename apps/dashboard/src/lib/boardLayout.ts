@@ -38,6 +38,56 @@ function sanitize(slots: unknown): Slot[] | null {
 	});
 }
 
+const PREFS_KEY = (siteId: string): string => `facet.boardPrefs.${siteId}`;
+
+/** Per-site board preferences. `scroll` off (the default) makes the Overview fit its viewport, which
+ * caps how many tiles the board can show; on, the board overflows and scrolls internally. */
+export interface BoardPrefs {
+	scroll: boolean;
+}
+
+const DEFAULT_PREFS: BoardPrefs = { scroll: false };
+
+export function readBoardPrefs(siteId: string): BoardPrefs {
+	try {
+		const raw = localStorage.getItem(PREFS_KEY(siteId));
+		if (!raw) return DEFAULT_PREFS;
+		const parsed: unknown = JSON.parse(raw);
+		if (typeof parsed !== 'object' || parsed === null) return DEFAULT_PREFS;
+		const scroll = (parsed as Partial<BoardPrefs>).scroll;
+		return { scroll: typeof scroll === 'boolean' ? scroll : false };
+	} catch {
+		return DEFAULT_PREFS;
+	}
+}
+
+/** Board preferences for a site plus a setter. Persists immediately; falls back to in-memory state when
+ * storage is unavailable, the same way useBoardLayout does. */
+export function useBoardPrefs(siteId: string): {
+	prefs: BoardPrefs;
+	setPrefs: (next: BoardPrefs) => void;
+} {
+	const [prefs, setPrefsState] = useState<BoardPrefs>(() => readBoardPrefs(siteId));
+
+	useEffect(() => {
+		setPrefsState(readBoardPrefs(siteId));
+	}, [siteId]);
+
+	const setPrefs = useCallback(
+		(next: BoardPrefs) => {
+			setPrefsState(next);
+			try {
+				localStorage.setItem(PREFS_KEY(siteId), JSON.stringify(next));
+			} catch {
+				// Private-mode / quota: keep the in-memory preference, just don't persist it.
+			}
+		},
+		[siteId],
+	);
+
+	return { prefs, setPrefs };
+}
+
 /** The persisted (or default) layout for a site, without the hook — for the loading skeleton. */
 export function readBoardLayout(siteId: string): Slot[] {
 	try {

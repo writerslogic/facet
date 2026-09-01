@@ -44,7 +44,7 @@ afterEach(() => {
 describe('pipeline box', () => {
 	it('explains a 501 as the deployment default, not an error', async () => {
 		mockPipeline({ status: 501, body: { error: 'crm_unavailable' } });
-		render(withDashboard(pipelineBox.render({} as never, false)));
+		render(withDashboard(pipelineBox.render({} as never, 'default')));
 
 		expect(
 			await screen.findByText(/CRM extension is not enabled on this deployment/i),
@@ -54,7 +54,7 @@ describe('pipeline box', () => {
 
 	it('tells a signed-out viewer to sign in rather than showing a generic error', async () => {
 		mockPipeline({ status: 401, body: { error: 'unauthenticated' } });
-		render(withDashboard(pipelineBox.render({} as never, false)));
+		render(withDashboard(pipelineBox.render({} as never, 'default')));
 
 		expect(await screen.findByText(/Sign in with your operator account/i)).toBeInTheDocument();
 	});
@@ -81,7 +81,7 @@ describe('pipeline box', () => {
 				],
 			},
 		});
-		render(withDashboard(pipelineBox.render({} as never, false)));
+		render(withDashboard(pipelineBox.render({} as never, 'default')));
 
 		expect(await screen.findByText('$2,500.00')).toBeInTheDocument();
 		expect(screen.getByText(/USD/)).toBeInTheDocument();
@@ -112,7 +112,7 @@ describe('pipeline box', () => {
 				],
 			},
 		});
-		render(withDashboard(pipelineBox.render({} as never, true)));
+		render(withDashboard(pipelineBox.render({} as never, 'expanded')));
 
 		expect(await screen.findByText('USD')).toBeInTheDocument();
 		expect(screen.getByText('EUR')).toBeInTheDocument();
@@ -122,7 +122,7 @@ describe('pipeline box', () => {
 
 	it('says there are no priced deals rather than showing a zero', async () => {
 		mockPipeline({ status: 200, body: { pipeline: [] } });
-		render(withDashboard(pipelineBox.render({} as never, false)));
+		render(withDashboard(pipelineBox.render({} as never, 'default')));
 
 		expect(await screen.findByText('No priced deals yet.')).toBeInTheDocument();
 	});

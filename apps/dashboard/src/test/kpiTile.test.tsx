@@ -34,7 +34,7 @@ describe('KpiTile', () => {
 	});
 
 	it('expanded mode reveals the Avg/Peak/Low detail from the series', () => {
-		render(<KpiTile label="Pageviews" value={744} spark={SPARK} expanded />);
+		render(<KpiTile label="Pageviews" value={744} spark={SPARK} density="expanded" />);
 		expect(screen.getByText('744')).toBeInTheDocument();
 		expect(screen.getByText('Avg')).toBeInTheDocument();
 		expect(screen.getByText('Peak')).toBeInTheDocument();

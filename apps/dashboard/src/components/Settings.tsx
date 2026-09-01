@@ -17,6 +17,7 @@ import { useDashboard } from '../state.js';
 import { AdminTokenGate } from './settings/AdminTokenGate.js';
 import { AlertsPanel } from './settings/AlertsPanel.js';
 import { AppearancePanel } from './settings/AppearancePanel.js';
+import { BoardPanel } from './settings/BoardPanel.js';
 import { ExperimentsPanel } from './settings/ExperimentsPanel.js';
 import { FlagsPanel } from './settings/FlagsPanel.js';
 import { FunnelsPanel } from './settings/FunnelsPanel.js';
@@ -39,7 +40,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
 	{ id: 'identity', label: 'Identity' },
 ];
 
-export function Settings(): ReactElement {
+export function Settings({ onEditLayout }: { onEditLayout: () => void }): ReactElement {
 	const { hasToken, token, forgetToken } = useAdmin();
 	const { activeProfile } = useDashboard();
 	const [siteId, setSiteId] = useState<string>(activeProfile?.siteId ?? '');
@@ -55,6 +56,7 @@ export function Settings(): ReactElement {
 		return (
 			<div className="space-y-6">
 				<AppearancePanel />
+				<BoardPanel onEditLayout={onEditLayout} />
 				<SessionPanel />
 				<AdminTokenGate />
 			</div>
@@ -71,6 +73,7 @@ export function Settings(): ReactElement {
 	return (
 		<div className="space-y-6">
 			<AppearancePanel />
+			<BoardPanel onEditLayout={onEditLayout} />
 			<SessionPanel />
 
 			<div className="surface flex flex-wrap items-center justify-between gap-3 rounded-xl p-4">

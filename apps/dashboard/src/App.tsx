@@ -7,6 +7,7 @@ import type { CubeCell, StatsQuery } from '@facet/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
 import { Suspense, lazy, useEffect, useRef, useState } from 'react';
+import { useAdmin } from './admin.js';
 import { BentoBoard, BentoSkeleton } from './components/BentoBoard.js';
 import { CubeFilterBar, SegmentBar } from './components/CubeFilterBar.js';
 import { ExportButton } from './components/ExportButton.js';
@@ -58,6 +59,11 @@ function TabFallback(): ReactElement {
 		</div>
 	);
 }
+import {
+	useCreateTimelineAnnotation,
+	useDeleteTimelineAnnotation,
+	useTimelineAnnotations,
+} from './hooks/annotations.js';
 import { useAnomalies } from './hooks/anomaly.js';
 import { useCube } from './hooks/cube.js';
 import { SegmentProvider, useSegment } from './hooks/segment.js';
@@ -188,8 +194,17 @@ function onViewTabKey(key: string, current: View, select: (id: View) => void): b
 	return true;
 }
 
-function Overview({ onOpenSettings }: { onOpenSettings: () => void }): ReactElement {
-	const { apiKey, siteId, preset, range } = useDashboard();
+function Overview({
+	onOpenSettings,
+	editing,
+	onEditingChange,
+}: {
+	onOpenSettings: () => void;
+	editing: boolean;
+	onEditingChange: (next: boolean) => void;
+}): ReactElement {
+	const { apiKey, siteId, preset, range, isDemo } = useDashboard();
+	const admin = useAdmin();
 	// The segment is shared state now, read straight from context rather than threaded down: the
 	// Overview is one of eight readers, not its owner.
 	const { segment, toggle } = useSegment();
@@ -235,6 +250,9 @@ function Overview({ onOpenSettings }: { onOpenSettings: () => void }): ReactElem
 	const cube = useCube(apiKey, siteId, range, interval);
 	// Anomalies are layered onto the traffic chart as timeline markers (shared cache with the tab).
 	const anomalies = useAnomalies(apiKey, siteId, range);
+	const timelineAnnotations = useTimelineAnnotations(apiKey, siteId, range);
+	const createAnnotation = useCreateTimelineAnnotation(admin.token, siteId);
+	const deleteAnnotation = useDeleteTimelineAnnotation(admin.token, siteId);
 
 	if (error && isAuthError(error)) {
 		return <AuthErrorBanner />;
@@ -279,10 +297,20 @@ function Overview({ onOpenSettings }: { onOpenSettings: () => void }): ReactElem
 			}
 		: summary;
 	const displaySeries = cubeActive ? cubeSeries(cubeCells, cubeFilter) : data.series;
-	const chartAnnotations = (anomalies.data?.anomalies ?? []).map((a) => ({
-		t: a.bucket,
-		label: a.summary,
-	}));
+	const operatorNotes = timelineAnnotations.data?.annotations ?? [];
+	const chartAnnotations = [
+		...(anomalies.data?.anomalies ?? []).map((anomaly) => ({
+			t: anomaly.bucket,
+			label: anomaly.summary,
+			kind: 'anomaly' as const,
+		})),
+		...operatorNotes.map((note) => ({
+			t: note.occurred_at,
+			label: note.label,
+			kind: 'note' as const,
+			category: note.category,
+		})),
+	].sort((a, b) => a.t - b.t);
 
 	// KPI deltas + sparklines for the bento tiles.
 	const cmpSum = anyFilter ? null : cmp?.summary;
@@ -321,6 +349,32 @@ function Overview({ onOpenSettings }: { onOpenSettings: () => void }): ReactElem
 		summary: displaySummary,
 		series: displaySeries,
 		annotations: chartAnnotations,
+		annotationManager: {
+			notes: operatorNotes,
+			range,
+			canManage: admin.hasToken && !isDemo,
+			readOnlyReason: isDemo ? 'demo' : admin.hasToken ? null : 'missing-admin',
+			isLoading: timelineAnnotations.isLoading,
+			isSaving: createAnnotation.isPending,
+			isDeleting: deleteAnnotation.isPending,
+			loadError:
+				timelineAnnotations.error instanceof Error
+					? timelineAnnotations.error.message
+					: null,
+			mutationError:
+				createAnnotation.error instanceof Error
+					? createAnnotation.error.message
+					: deleteAnnotation.error instanceof Error
+						? deleteAnnotation.error.message
+						: null,
+			create: async (input) => {
+				await createAnnotation.mutateAsync({ site_id: siteId, ...input });
+			},
+			remove: async (id) => {
+				await deleteAnnotation.mutateAsync(id);
+			},
+			requestAdmin: onOpenSettings,
+		},
 		deltas: { pv: dPv, vis: dVis, ev: dEv },
 		sparks: { pv: sparkPv, vis: sparkVis, ev: sparkEv },
 		sense,
@@ -364,6 +418,8 @@ function Overview({ onOpenSettings }: { onOpenSettings: () => void }): ReactElem
 			<BentoBoard
 				ctx={ctx}
 				siteId={siteId}
+				editing={editing}
+				onEditingChange={onEditingChange}
 				footer={
 					slice?.visitorsApproximate ? (
 						<p className="shrink-0 text-xs text-[color:var(--faint)]">
@@ -401,6 +457,9 @@ function Dashboard(): ReactElement {
 	const { apiKey, siteId, preset, range, isDemo, setPreset } = useDashboard();
 	const [view, setView] = useState<View>(initialView);
 	const [showSettings, setShowSettings] = useState(false);
+	// Board layout editing is driven from Settings ("Edit layout"), so the flag lives above both the
+	// Settings panel that turns it on and the Overview that renders it.
+	const [boardEditing, setBoardEditing] = useState(false);
 	const [shortcutsOpen, setShortcutsOpen] = useState(false);
 	// The segment is shared state (see hooks/segment.ts), so it survives tab switches and can be set
 	// from any tab — e.g. "Investigate" on an anomaly focuses the Overview on the culprit segment.
@@ -536,7 +595,13 @@ function Dashboard(): ReactElement {
 					<h1 data-chrome className="sr-only">
 						Settings
 					</h1>
-					<Settings />
+					<Settings
+						onEditLayout={() => {
+							setBoardEditing(true);
+							setShowSettings(false);
+							setView('overview');
+						}}
+					/>
 				</Suspense>
 			) : (
 				<>
@@ -589,7 +654,11 @@ function Dashboard(): ReactElement {
 						<Suspense fallback={<TabFallback />}>
 							{view === 'overview' ? (
 								<div className="flex min-h-0 flex-1 flex-col">
-									<Overview onOpenSettings={() => setShowSettings(true)} />
+									<Overview
+										onOpenSettings={() => setShowSettings(true)}
+										editing={boardEditing}
+										onEditingChange={setBoardEditing}
+									/>
 								</div>
 							) : view === 'explore' ? (
 								<Explore apiKey={apiKey} siteId={siteId} range={range} />

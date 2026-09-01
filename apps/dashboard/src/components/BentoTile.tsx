@@ -22,6 +22,7 @@ import { ColumnSpark, HorizonSpark, RadialGauge } from './KpiViz.js';
 import { Sparkline } from './Sparkline.js';
 import type { DrillSpec } from './boxes/drill.js';
 import { ListBody } from './boxes/shared.js';
+import type { TileDensity } from './boxes/types.js';
 
 /** The "what drove this metric" breakdown revealed when a KPI tile is expanded — its top contributors,
  * clickable to cross-filter the whole board from inside the drill-down. */
@@ -99,6 +100,7 @@ export function BentoTile({
 	onToggleTable,
 	tableActive = false,
 	focused = false,
+	density = 'default',
 	emphasis = 'default',
 	className,
 	bodyClassName,
@@ -112,6 +114,9 @@ export function BentoTile({
 	onToggleTable?: () => void;
 	tableActive?: boolean;
 	focused?: boolean;
+	/** The tile's own density. Governs its CHROME, not its content: at `compact` the shell spends far
+	 * less height on itself so the body has something left. See the note below. */
+	density?: TileDensity;
 	emphasis?: TileEmphasis;
 	className?: string;
 	bodyClassName?: string;
@@ -119,6 +124,7 @@ export function BentoTile({
 }): ReactElement {
 	// The whole board is dark now, so every tile carries light header text + controls.
 	const dark = true;
+	const compact = density === 'compact';
 	const headingId = useId();
 	// The caller signals a scrolling body by passing an overflow utility (see BentoBoard).
 	const scrolls = Boolean(bodyClassName?.includes('overflow-y-auto'));
@@ -143,7 +149,13 @@ export function BentoTile({
 			// anonymous <section> the accessibility tree drops on the floor.
 			aria-labelledby={label ? headingId : undefined}
 			className={cn(
-				'tile-dark facet-glint group relative flex min-h-0 flex-col overflow-hidden rounded-2xl p-4',
+				'tile-dark facet-glint group relative flex min-h-0 flex-col overflow-hidden rounded-2xl',
+				// IMPORTANT: chrome is the whole budget at compact. p-4 plus the header row costs ~56px
+				// before the body starts, which at a 64px tile left it 8px and at the 34px squeezed case
+				// left it nothing — three box reviews independently found their compact rendering drawing
+				// into a zero-height box. Compact therefore halves the padding and moves the label to an
+				// overlay, the same trick the controls above already use for exactly this reason.
+				compact ? 'p-2' : 'p-4',
 				'transition-all duration-300 ease-out',
 				focused ? 'z-20' : 'hover:-translate-y-0.5',
 				onExpand && 'cursor-pointer',
@@ -200,8 +212,21 @@ export function BentoTile({
 					<Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
 				</button>
 			) : null}
-			{label || action ? (
-				<header className="relative z-10 mb-2 flex shrink-0 items-center justify-between gap-2 pr-7">
+			{compact && label ? (
+				<h2
+					id={headingId}
+					className="pointer-events-none absolute left-2.5 top-1.5 z-10 max-w-[60%] truncate font-semibold text-[9px] text-[color:var(--faint)] uppercase leading-none tracking-[0.08em]"
+				>
+					{label}
+				</h2>
+			) : null}
+			{!compact && (label || action) ? (
+				<header
+					className={cn(
+						'relative z-10 mb-2 flex shrink-0 items-center justify-between gap-2',
+						onToggleTable ? 'pr-14' : 'pr-7',
+					)}
+				>
 					{label ? (
 						// h2, not h3: a tile is a top-level section of the Overview, directly under
 						// the view's h1. At h3 every tile label was a skipped level.
@@ -224,7 +249,11 @@ export function BentoTile({
 			    reach traps its content away from keyboard users entirely (WCAG 2.1.1). tabindex only
 			    when it actually scrolls, so the board does not grow a tab stop per tile at rest. */}
 			<div
-				className={cn('@container/tile relative z-10 min-h-0 flex-1', bodyClassName)}
+				className={cn(
+					'@container/tile relative z-10 min-h-0 flex-1',
+					compact && label && 'pt-3',
+					bodyClassName,
+				)}
 				{...(scrolls
 					? { tabIndex: 0, role: 'group', 'aria-label': `${label ?? 'Tile'} contents` }
 					: {})}
@@ -263,7 +292,7 @@ export function KpiTile({
 	spark,
 	stroke = '#6366f1',
 	accent,
-	expanded = false,
+	density = 'default',
 	breakdown,
 	viz = 'spark',
 	gaugeRatio,
@@ -277,8 +306,10 @@ export function KpiTile({
 	stroke?: string;
 	/** The user-chosen data-palette accent; recolours the mini-viz + line + tint. Unset = prism default. */
 	accent?: string;
-	/** Drill-down layout: a large value over a full area chart, plus an Avg/Peak/Low strip. */
-	expanded?: boolean;
+	/** Which of the three renderings to draw. `expanded` is the drill-down layout (a large value over a
+	 * full area chart plus an Avg/Peak/Low strip); `compact` is the one-line readout for a tile too
+	 * short for the stacked label-over-numeral-over-badge form. See TileDensity. */
+	density?: TileDensity;
 	/** Top contributors to this metric, shown beside the chart when expanded (click to cross-filter). */
 	breakdown?: KpiBreakdown;
 	/** The compact mini-viz, chosen per metric so no two KPI tiles look alike. */
@@ -287,6 +318,7 @@ export function KpiTile({
 	gaugeRatio?: number;
 	gaugeLabel?: string;
 }): ReactElement {
+	const expanded = density === 'expanded';
 	const shown = useCountUp(value);
 	const hasSpark = Boolean(spark && spark.length > 1);
 	const hasBreakdown = Boolean(breakdown && breakdown.rows.length > 0);
@@ -393,6 +425,26 @@ export function KpiTile({
 						) : null}
 					</div>
 				) : null}
+			</div>
+		);
+	}
+
+	// Compact: the stacked form needs ~88px (label, 2rem numeral, badge). Under that it clipped the
+	// numeral clean off — three KPI tiles measured 34px tall with a neighbour focused, rendering as
+	// empty bars. One line keeps the label, the number and the delta, which is the whole tile.
+	if (density === 'compact') {
+		return (
+			<div
+				className="flex h-full items-center gap-2 overflow-hidden"
+				style={{ background: tint }}
+			>
+				<span className="shrink-0 font-semibold text-[10px] text-[color:var(--muted)] uppercase leading-none tracking-[0.08em]">
+					{label}
+				</span>
+				<span className="tabular ml-auto shrink-0 font-semibold text-[color:var(--ink)] text-lg leading-none tracking-[-0.02em]">
+					{formatNumber(Math.round(shown))}
+				</span>
+				{chip}
 			</div>
 		);
 	}

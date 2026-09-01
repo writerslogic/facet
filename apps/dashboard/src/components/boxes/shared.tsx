@@ -28,7 +28,7 @@ import { DeltaBadge } from '../Delta.js';
 import { InspectButton, TopList, hueForTitle } from '../TopList.js';
 import { ChartEmpty } from '../charts/ChartChrome.js';
 import { DrillPanel, type DrillSpec, type DrillState, undrillableNote, useDrill } from './drill.js';
-import type { TableData, TileConfig, TileOption, TileVariant } from './types.js';
+import type { TableData, TileConfig, TileDensity, TileOption, TileVariant } from './types.js';
 
 /** A shared "Color" option: pick one of the active palette's data colours for a box; boxes apply it to
  * their chart stroke + surface tint. Palette tokens resolve per theme, so a box stays on-palette. */
@@ -100,22 +100,105 @@ function rowLimitOf(config: TileConfig | undefined): number | undefined {
 	return Number.isFinite(n) ? n : undefined;
 }
 
+/**
+ * The `compact` rendering of a ranked list. Bars need roughly 22px a row plus a title, so under about
+ * 130px a six-row TopList is a stack of clipped slivers. Rather than draw a smaller version of the
+ * wrong thing, answer the single question a ranked list exists to answer: who leads, by how much of
+ * the total, and how many others there are. Fits one line, stays clickable for cross-filtering.
+ */
+function ListCompact({
+	rows,
+	accent,
+	onSelect,
+	activeKey,
+	deltas,
+	format = formatNumber,
+}: {
+	rows: CountRow[];
+	accent?: string;
+	onSelect?: (key: string) => void;
+	activeKey?: string;
+	deltas?: Map<string, Movement>;
+	format?: (value: number) => string;
+}): ReactElement {
+	const top = rows[0];
+	if (!top) return <ChartEmpty reason="range" compact />;
+	let total = 0;
+	for (const r of rows) total += r.count;
+	const share = total > 0 ? Math.round((top.count / total) * 100) : 0;
+	const rest = rows.length - 1;
+	const active = activeKey === top.key;
+
+	const inner = (
+		<>
+			<span
+				aria-hidden="true"
+				className="absolute inset-y-0 left-0 rounded-md opacity-25"
+				style={{ width: `${share}%`, background: accent ?? 'var(--d2)' }}
+			/>
+			<span className="relative min-w-0 truncate font-medium text-[color:var(--ink)] text-xs">
+				{top.key}
+			</span>
+			<span className="relative ml-auto shrink-0 font-semibold text-[color:var(--ink)] text-sm tabular-nums">
+				{format(top.count)}
+			</span>
+			<span className="relative shrink-0 text-[10px] text-[color:var(--muted)] tabular-nums @max-[10rem]/tile:hidden">
+				{share}%
+			</span>
+			<DeltaBadge movement={deltas?.get(top.key)} size="sm" className="relative shrink-0" />
+			{rest > 0 ? (
+				<span className="relative shrink-0 text-[10px] text-[color:var(--faint)] tabular-nums @max-[13rem]/tile:hidden">
+					+{formatNumber(rest)}
+				</span>
+			) : null}
+		</>
+	);
+
+	// IMPORTANT: `my-auto`, not a centring flex container. The tile body scrolls (BentoBoard gives every
+	// expandable tile `overflow-y-auto`), and `justify-center` on a scroller strands overflow ABOVE
+	// scrollTop 0 where no gesture can reach it. An auto margin collapses to zero once the content is
+	// taller than the box, so it centres when there is room and degrades to top-aligned when there is not.
+	// The row is one line by construction: "+N" rides in it rather than on a second line, which is what
+	// used to overrun the 36px compact body by ~19px.
+	const row = 'relative my-auto flex items-center gap-2 overflow-hidden rounded-md px-2 py-1';
+	return onSelect ? (
+		<button
+			type="button"
+			onClick={() => onSelect(top.key)}
+			aria-pressed={active}
+			className={cn(
+				row,
+				'w-full text-left transition hover:bg-[color:rgb(var(--hover))]',
+				active && 'bg-[color:rgb(var(--hover))]',
+			)}
+		>
+			{inner}
+		</button>
+	) : (
+		<div className={row}>{inner}</div>
+	);
+}
+
 export function ListBody({
 	title,
 	rows,
 	onSelect,
 	activeKey,
-	expanded,
+	density = 'default',
 	config,
 	compare,
 	drill: spec,
 	noun,
+	format,
 }: {
 	title: string;
 	rows: CountRow[];
 	onSelect?: (key: string) => void;
 	activeKey?: string;
-	expanded?: boolean;
+	/** Which of the three renderings to draw. See TileDensity — resolved from the tile's measured box,
+	 * so a list gets its compact form both when the user sized it small and when a focused neighbour
+	 * took its height. */
+	density?: TileDensity;
 	config?: TileConfig;
 	/** The same list over the equal-length preceding window. Omitted ⇒ no deltas anywhere in this box. */
 	compare?: CompareSource | null;
@@ -125,6 +208,9 @@ export function ListBody({
 	drill?: DrillSpec;
 	/** Singular noun for a row of this list ("page", "browser"), used in the undrillable note. */
 	noun?: string;
+	/** How to render a row's value, for a list whose `count` is not a count (attribution credit is
+	 * revenue). Applied at EVERY tier so the same figure never changes units across a resize. */
+	format?: (value: number) => string;
 }): ReactElement {
 	const { movements, dropped } = useBreakdownComparison(compare);
 	const drill = useDrill(spec);
@@ -144,52 +230,68 @@ export function ListBody({
 			}
 		: {};
 
-	const list = expanded ? (
-		<ListDetail
-			title={title}
-			rows={rows}
-			onSelect={onSelect}
-			activeKey={activeKey}
-			deltas={movements}
-			dropped={dropped}
-			note={note}
-			inspect={inspect}
-		/>
-	) : config?.variant === 'donut' ? (
-		<DonutList
-			rows={rows}
-			onSelect={onSelect}
-			activeKey={activeKey}
-			accent={accent}
-			limit={limit ?? 5}
-			deltas={movements}
-			inspect={drill.enabled ? drill : undefined}
-			panelId={panelId}
-		/>
-	) : config?.variant === 'table' ? (
-		<MiniTable
-			title={title}
-			rows={rows}
-			activeKey={activeKey}
-			limit={limit}
-			deltas={movements}
-		/>
-	) : (
-		// Default 'bars': the ranked TopList. With no explicit cap it height-fits; a cap disables fit.
-		<TopList
-			bare
-			dark
-			fit={limit === undefined}
-			limit={limit ?? 6}
-			title={title}
-			rows={rows}
-			onSelect={onSelect}
-			activeKey={activeKey}
-			accent={accent}
-			deltas={movements}
-			{...inspect}
-		/>
-	);
+	// Compact bypasses the drill frame entirely: a drill panel cannot open in a box this short, and
+	// offering the affordance would be a control that does nothing.
+	if (density === 'compact') {
+		return (
+			<ListCompact
+				rows={rows}
+				accent={accent}
+				onSelect={onSelect}
+				activeKey={activeKey}
+				deltas={movements}
+				format={format}
+			/>
+		);
+	}
+
+	const list =
+		density === 'expanded' ? (
+			<ListDetail
+				title={title}
+				rows={rows}
+				onSelect={onSelect}
+				activeKey={activeKey}
+				deltas={movements}
+				dropped={dropped}
+				note={note}
+				inspect={inspect}
+			/>
+		) : config?.variant === 'donut' ? (
+			<DonutList
+				rows={rows}
+				onSelect={onSelect}
+				activeKey={activeKey}
+				accent={accent}
+				limit={limit ?? 5}
+				deltas={movements}
+				inspect={drill.enabled ? drill : undefined}
+				panelId={panelId}
+			/>
+		) : config?.variant === 'table' ? (
+			<MiniTable
+				title={title}
+				rows={rows}
+				activeKey={activeKey}
+				limit={limit}
+				deltas={movements}
+			/>
+		) : (
+			// Default 'bars': the ranked TopList. With no explicit cap it height-fits; a cap disables fit.
+			<TopList
+				bare
+				dark
+				fit={limit === undefined}
+				limit={limit ?? 6}
+				title={title}
+				rows={rows}
+				onSelect={onSelect}
+				activeKey={activeKey}
+				accent={accent}
+				deltas={movements}
+				{...inspect}
+			/>
+		);
 
 	if (!drill.enabled) return list;
 	return (
@@ -198,7 +300,7 @@ export function ListBody({
 			spec={spec as DrillSpec}
 			title={title}
 			hue={hue}
-			expanded={Boolean(expanded)}
+			expanded={density === 'expanded'}
 			panelId={panelId}
 		>
 			{list}

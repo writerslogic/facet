@@ -1,5 +1,9 @@
 // Pageviews KPI box: big number + a filled "horizon" skyline sparkline; expands to a full chart + the
-// top pages that drove it (click a page to cross-filter the board).
+// top pages behind it (click a page to cross-filter the board).
+//
+// IMPORTANT: `top_paths` is COUNT(*) over every event on a path (db/stats.ts `topPaths`), so it is not
+// a decomposition of `summary.pageviews` and its rows do not sum to the numeral above them. The
+// measure note repeats that in each row delta's tooltip; nothing else on the tile says it.
 
 import { KpiTile, type KpiVizName } from '../BentoTile.js';
 import { drillSpec } from './drill.js';
@@ -20,7 +24,7 @@ export const pageviewsBox: TileDef = {
 	],
 	options: [ACCENT_OPTION],
 	table: (ctx) => rowsTable('Page', ctx.data.top_paths),
-	render: (ctx, expanded, config) => (
+	render: (ctx, density, config) => (
 		<KpiTile
 			label="Pageviews"
 			value={ctx.summary.pageviews}
@@ -29,7 +33,7 @@ export const pageviewsBox: TileDef = {
 			spark={ctx.sparks.pv}
 			viz={(config?.variant as KpiVizName) ?? 'horizon'}
 			accent={accentOf(config)}
-			expanded={expanded}
+			density={density}
 			breakdown={{
 				title: 'Top pages',
 				rows: ctx.data.top_paths,
@@ -38,6 +42,7 @@ export const pageviewsBox: TileDef = {
 				compare: {
 					current: ctx.data.top_paths ?? [],
 					select: (p) => p.top_paths,
+					note: 'counted over every event on this page, not just its pageviews',
 				},
 				drill: drillSpec(ctx, 'path'),
 			}}

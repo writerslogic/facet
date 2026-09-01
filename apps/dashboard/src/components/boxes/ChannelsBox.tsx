@@ -2,8 +2,8 @@
 //
 // The rows drawn here come from the in-memory cube (pageviews per cell); the comparison is the
 // SERVER's channel breakdown in BOTH windows — never cube-against-server, which would divide one
-// measure by another and call the result a trend. The two measures differ (the server counts every
-// event for a key, the cube counts pageviews), so each badge says so via `note`.
+// measure by another and call the result a trend. The two measures differ (the server counts
+// SESSIONS per channel, the cube counts pageviews), so each badge says so via `note`.
 //
 // Inspecting a row composes that channel from the cube's other axes (device, country) client-side.
 
@@ -19,18 +19,18 @@ export const channelsBox: TileDef = {
 	variants: LIST_VARIANTS,
 	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Channel', ctx.dimRows('channel', ctx.data.channels)),
-	render: (ctx, expanded, config) => (
+	render: (ctx, density, config) => (
 		<ListBody
 			title="Channels"
 			rows={ctx.dimRows('channel', ctx.data.channels)}
 			onSelect={ctx.dimSelect('channel')}
 			activeKey={ctx.cubeFilter.channel}
-			expanded={expanded}
+			density={density}
 			config={config}
 			compare={{
 				current: ctx.data.channels ?? [],
 				select: (p) => p.channels,
-				note: 'measured over all events for this key, not just the pageviews shown',
+				note: 'counted as sessions for this channel, not the pageviews shown',
 			}}
 			drill={drillSpec(ctx, 'channel')}
 		/>

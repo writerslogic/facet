@@ -15,15 +15,20 @@ import {
 	Trash2,
 } from 'lucide-react';
 import { type CSSProperties, type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
-import { readBoardLayout, useBoardLayout } from '../lib/boardLayout.js';
+import { readBoardLayout, useBoardLayout, useBoardPrefs } from '../lib/boardLayout.js';
 import { cn } from '../lib/cn.js';
 import {
+	type Placement,
 	ROW_FLOOR,
+	maxFitRows,
 	packSlots,
+	rowMinimums,
 	trackTemplate,
+	useBoardHeight,
 	useColumns,
 	useElasticTracks,
 	useNarrow,
+	useTileDensity,
 } from '../lib/elasticGrid.js';
 import {
 	CHART_CYCLE,
@@ -58,13 +63,19 @@ export function BentoBoard({
 	ctx,
 	siteId,
 	footer,
+	editing,
+	onEditingChange,
 }: {
 	ctx: TileContext;
 	siteId: string;
 	footer?: ReactElement | null;
+	/** Layout-editing mode. Owned by App and entered from Settings → Overview board → Edit layout, so
+	 * the board no longer carries its own Customize control. */
+	editing: boolean;
+	onEditingChange: (next: boolean) => void;
 }): ReactElement {
 	const { slots, setSlots, reset } = useBoardLayout(siteId);
-	const [editing, setEditing] = useState(false);
+	const { prefs } = useBoardPrefs(siteId);
 	const [focused, setFocused] = useState<string | null>(null);
 	// The slot currently showing its raw-data table (via the box's `table` toggle), if any.
 	const [tableUid, setTableUid] = useState<string | null>(null);
@@ -84,15 +95,37 @@ export function BentoBoard({
 	usePopoverDismiss(adding, () => setAdding(false), addWrapRef, addToggleRef);
 
 	const cols = useColumns(gridRef);
-	const { placements, rowCount } = useMemo(() => packSlots(slots, cols), [slots, cols]);
-	// A stale focus (its tile was removed) resolves to no focus; the grid rests.
-	const focusedIdx = focused ? slots.findIndex((s) => s.uid === focused) : -1;
-	const activeFocus = focusedIdx >= 0 ? focused : null;
-	const { colFr, rowFr } = useElasticTracks(
-		cols,
-		rowCount,
-		focusedIdx >= 0 ? (placements[focusedIdx] ?? null) : null,
+	const boardHeight = useBoardHeight(gridRef);
+	const { placements, rowCount: packedRows } = useMemo(
+		() => packSlots(slots, cols),
+		[slots, cols],
 	);
+
+	// Fit mode (the default) is a promise that the board never scrolls, and the only honest way to keep
+	// it as tiles are added is to show fewer tiles rather than shorter ones — under about 56px a tile has
+	// no rendering left, not even its compact one. Tiles past the cap are withheld and counted, never
+	// silently dropped.
+	const rowCap = prefs.scroll ? Number.POSITIVE_INFINITY : maxFitRows(boardHeight);
+	const visibleCount = useMemo(
+		() =>
+			placements.reduce(
+				(n, p, i) => (p.rowStart + p.rowSpan - 1 <= rowCap ? Math.max(n, i + 1) : n),
+				0,
+			),
+		[placements, rowCap],
+	);
+	const visible = prefs.scroll ? slots : slots.slice(0, visibleCount);
+	const withheld = slots.length - visible.length;
+	const rowCount = prefs.scroll ? packedRows : Math.min(packedRows, rowCap);
+
+	// A stale focus (its tile was removed, or fit mode withheld it) resolves to no focus; the grid rests.
+	const focusedIdx = focused ? visible.findIndex((s) => s.uid === focused) : -1;
+	const activeFocus = focusedIdx >= 0 ? focused : null;
+	const focusPlacement = focusedIdx >= 0 ? (placements[focusedIdx] ?? null) : null;
+	const { colFr, rowFr } = useElasticTracks(cols, rowCount, focusPlacement);
+	// Per-track, not one global floor: see rowMinimums. In fit mode there are no floors at all, because
+	// a floor is what would force a scrollbar the user turned off.
+	const rowMins = prefs.scroll ? rowMinimums(rowCount, focusPlacement) : '0';
 
 	useEffect(() => {
 		if (!focusUid.current) return;
@@ -129,10 +162,6 @@ export function BentoBoard({
 	const openFocus = (uid: string): void => {
 		restoreUid.current = uid;
 		setFocused(uid);
-	};
-	const startEditing = (): void => {
-		setFocused(null);
-		setEditing(true);
 	};
 
 	const move = (from: number, to: number): void => {
@@ -221,7 +250,7 @@ export function BentoBoard({
 								<button
 									type="button"
 									onClick={() => {
-										setEditing(false);
+										onEditingChange(false);
 										setAdding(false);
 									}}
 									className="inline-flex items-center rounded-lg btn-accent px-3 py-1.5 text-xs shadow-card transition"
@@ -229,163 +258,81 @@ export function BentoBoard({
 									Done
 								</button>
 							</>
-						) : (
-							<button
-								type="button"
-								onClick={startEditing}
-								className="inline-flex items-center gap-1.5 rounded-lg border border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] px-2.5 py-1.5 font-medium text-[color:var(--muted)] text-xs shadow-card transition hover:text-[color:var(--ink)]"
-							>
-								<Settings2 className="h-3.5 w-3.5" aria-hidden="true" /> Customize
-							</button>
-						)}
+						) : withheld > 0 ? (
+							<p className="text-[color:var(--faint)] text-xs">
+								{withheld} more {withheld === 1 ? 'tile' : 'tiles'} hidden to fit
+								the window. Turn on board scrolling in Settings to show them.
+							</p>
+						) : null}
 					</div>
 
 					<div
 						ref={gridRef}
 						// Rows divide the viewport as fr tracks with a per-row floor so every tile stays big enough to
 						// show its content; once those floors exceed the height the board scrolls INTERNALLY (the page
-						// never scrolls). A focused tile drops the floor to 0 so its neighbours can collapse for a
-						// dramatic in-place expand.
-						className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
+						// never scrolls). Focusing lowers the floor to FOCUS_ROW_FLOOR rather than removing it: the
+						// neighbours give up their resting composition for their compact one, not their legibility.
+						className={cn(
+							'grid min-h-0 flex-1 gap-3',
+							prefs.scroll ? 'overflow-y-auto' : 'overflow-hidden',
+						)}
 						style={{
 							gridTemplateColumns: trackTemplate(colFr),
-							gridTemplateRows: trackTemplate(rowFr, activeFocus ? '0' : ROW_FLOOR),
+							gridTemplateRows: trackTemplate(rowFr, rowMins),
 						}}
 						role={editing ? 'list' : undefined}
 						aria-label={editing ? 'Board tiles — use arrow keys to reorder' : undefined}
 					>
-						{slots.map((slot, i) => {
+						{visible.map((slot, i) => {
 							const def = TILE_REGISTRY[slot.tileId];
 							const p = placements[i];
 							if (!def || !p) return null;
-							const config = resolveTileConfig(def, slot.config);
-							const isFocused = slot.uid === activeFocus;
-							const showTable = tableUid === slot.uid && Boolean(def.table);
-							const tableData = showTable ? (def.table?.(ctx) ?? null) : null;
-							const dim = activeFocus !== null && !isFocused;
-							const isOver =
-								editing && overIndex === i && dragIndex !== null && dragIndex !== i;
 							return (
-								<div
+								<BoardTile
 									key={slot.uid}
-									ref={(el) => {
+									def={def}
+									slot={slot}
+									index={i}
+									total={visible.length}
+									placement={p}
+									ctx={ctx}
+									editing={editing}
+									focused={slot.uid === activeFocus}
+									anyFocus={activeFocus !== null}
+									showTable={tableUid === slot.uid && Boolean(def.table)}
+									isOver={
+										editing &&
+										overIndex === i &&
+										dragIndex !== null &&
+										dragIndex !== i
+									}
+									dragging={dragIndex === i}
+									registerRef={(el) => {
 										if (el) tileRefs.current.set(slot.uid, el);
 										else tileRefs.current.delete(slot.uid);
 									}}
-									role={editing ? 'listitem' : undefined}
-									aria-label={
-										editing
-											? `${def.title}, position ${i + 1} of ${slots.length}. Use arrow keys to move.`
-											: undefined
+									onExpand={() => openFocus(slot.uid)}
+									onClose={() => setFocused(null)}
+									onToggleTable={() =>
+										setTableUid((u) => (u === slot.uid ? null : slot.uid))
 									}
-									tabIndex={editing ? 0 : undefined}
-									style={
-										{
-											gridColumn: `${p.colStart} / span ${p.colSpan}`,
-											gridRow: `${p.rowStart} / span ${p.rowSpan}`,
-											// Reading order, capped: the board should feel dealt
-											// out, not loaded. Past the tenth tile the delay stops
-											// growing, so the last tile is never late enough to
-											// read as a slow board.
-											'--tile-i': Math.min(i, 9),
-										} as CSSProperties
-									}
-									className={cn(
-										'tile-enter min-h-0 rounded-2xl transition-[opacity,filter] duration-300',
-										isFocused && 'relative z-20',
-										// No focus:outline-none: it suppressed the shell's token focus
-										// outline on the one draggable control that is a bare div.
-										editing && 'cursor-grab',
-										dragIndex === i && 'opacity-40',
-										isOver && 'ring-2 ring-accent-400 ring-offset-2',
-										dim && 'pointer-events-none opacity-40',
-									)}
-									draggable={editing}
+									onConfig={(patch) => setConfig(i, patch)}
+									onMove={(dir) => move(i, i + dir)}
+									onResize={() => resize(i)}
+									onReplace={(id) => replace(i, id)}
+									onRemove={() => remove(i)}
 									onDragStart={() => setDragIndex(i)}
 									onDragEnd={() => {
 										setDragIndex(null);
 										setOverIndex(null);
 									}}
-									onDragOver={(e) => {
-										if (!editing) return;
-										e.preventDefault();
-										setOverIndex(i);
-									}}
-									onDrop={(e) => {
-										e.preventDefault();
+									onDragOver={() => setOverIndex(i)}
+									onDrop={() => {
 										if (dragIndex !== null) move(dragIndex, i);
 										setDragIndex(null);
 										setOverIndex(null);
 									}}
-									onKeyDown={(e) => {
-										if (!editing) return;
-										if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-											e.preventDefault();
-											move(i, i - 1);
-										} else if (
-											e.key === 'ArrowRight' ||
-											e.key === 'ArrowDown'
-										) {
-											e.preventDefault();
-											move(i, i + 1);
-										}
-									}}
-								>
-									<BentoTile
-										label={def.selfLabeled ? undefined : def.title}
-										emphasis={def.emphasis}
-										focused={isFocused}
-										action={
-											editing ? (
-												<TileControls
-													slot={slot}
-													title={def.title}
-													canEarlier={i > 0}
-													canLater={i < slots.length - 1}
-													onMove={(dir) => move(i, i + dir)}
-													onResize={() => resize(i)}
-													onReplace={(id) => replace(i, id)}
-													onRemove={() => remove(i)}
-												/>
-											) : (
-												def.action?.(ctx)
-											)
-										}
-										onExpand={
-											!editing && def.expandable && activeFocus === null
-												? () => openFocus(slot.uid)
-												: undefined
-										}
-										onClose={isFocused ? () => setFocused(null) : undefined}
-										onToggleTable={
-											def.table && !editing
-												? () =>
-														setTableUid((u) =>
-															u === slot.uid ? null : slot.uid,
-														)
-												: undefined
-										}
-										tableActive={showTable}
-										className="h-full"
-										bodyClassName={
-											def.expandable || isFocused || showTable
-												? 'overflow-y-auto'
-												: undefined
-										}
-									>
-										{editing ? (
-											<TileConfigPanel
-												def={def}
-												config={config}
-												onConfig={(patch) => setConfig(i, patch)}
-											/>
-										) : tableData ? (
-											<DataTable data={tableData} />
-										) : (
-											def.render(ctx, isFocused, config)
-										)}
-									</BentoTile>
-								</div>
+								/>
 							);
 						})}
 					</div>
@@ -671,6 +618,175 @@ export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
 					aria-hidden="true"
 				/>
 			))}
+		</div>
+	);
+}
+
+/**
+ * One placed tile. Extracted from the board's map so it can observe its OWN box: the density tier a
+ * box draws at is a function of the pixels it actually got, which the board cannot know for it (the
+ * grid's fr tracks are animating, and a focused neighbour changes every other tile's height).
+ */
+function BoardTile({
+	def,
+	slot,
+	index,
+	total,
+	placement,
+	ctx,
+	editing,
+	focused,
+	anyFocus,
+	showTable,
+	isOver,
+	dragging,
+	registerRef,
+	onExpand,
+	onClose,
+	onToggleTable,
+	onConfig,
+	onMove,
+	onResize,
+	onReplace,
+	onRemove,
+	onDragStart,
+	onDragEnd,
+	onDragOver,
+	onDrop,
+}: {
+	def: TileDef;
+	slot: Slot;
+	index: number;
+	total: number;
+	placement: Placement;
+	ctx: TileContext;
+	editing: boolean;
+	focused: boolean;
+	anyFocus: boolean;
+	showTable: boolean;
+	isOver: boolean;
+	dragging: boolean;
+	registerRef: (el: HTMLDivElement | null) => void;
+	onExpand: () => void;
+	onClose: () => void;
+	onToggleTable: () => void;
+	onConfig: (patch: TileConfig) => void;
+	onMove: (dir: number) => void;
+	onResize: () => void;
+	onReplace: (id: string) => void;
+	onRemove: () => void;
+	onDragStart: () => void;
+	onDragEnd: () => void;
+	onDragOver: () => void;
+	onDrop: () => void;
+}): ReactElement {
+	const ref = useRef<HTMLDivElement>(null);
+	const density = useTileDensity(ref, focused);
+	const config = resolveTileConfig(def, slot.config);
+	const tableData = showTable ? (def.table?.(ctx, config) ?? null) : null;
+
+	return (
+		<div
+			ref={(el) => {
+				ref.current = el;
+				registerRef(el);
+			}}
+			role={editing ? 'listitem' : undefined}
+			aria-label={
+				editing
+					? `${def.title}, position ${index + 1} of ${total}. Use arrow keys to move.`
+					: undefined
+			}
+			tabIndex={editing ? 0 : undefined}
+			data-density={density}
+			style={
+				{
+					gridColumn: `${placement.colStart} / span ${placement.colSpan}`,
+					gridRow: `${placement.rowStart} / span ${placement.rowSpan}`,
+					// Reading order, capped: the board should feel dealt out, not loaded. Past the
+					// tenth tile the delay stops growing, so the last tile is never late enough to
+					// read as a slow board.
+					'--tile-i': Math.min(index, 9),
+				} as CSSProperties
+			}
+			className={cn(
+				'tile-enter min-h-0 rounded-2xl transition-[opacity,filter] duration-300',
+				focused && 'relative z-20',
+				// No focus:outline-none: it suppressed the shell's token focus outline on the one
+				// draggable control that is a bare div.
+				editing && 'cursor-grab',
+				dragging && 'opacity-40',
+				isOver && 'ring-2 ring-accent-400 ring-offset-2',
+				// Recede, but stay READABLE and CLICKABLE. This used to be
+				// `pointer-events-none opacity-40`, which made an unfocused tile both hard to read
+				// and impossible to click — the second half of why you could not expand a different
+				// tile without closing the first one.
+				anyFocus && !focused && 'opacity-75',
+			)}
+			draggable={editing}
+			onDragStart={onDragStart}
+			onDragEnd={onDragEnd}
+			onDragOver={(e) => {
+				if (!editing) return;
+				e.preventDefault();
+				onDragOver();
+			}}
+			onDrop={(e) => {
+				e.preventDefault();
+				onDrop();
+			}}
+			onKeyDown={(e) => {
+				if (!editing) return;
+				if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+					e.preventDefault();
+					onMove(-1);
+				} else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+					e.preventDefault();
+					onMove(1);
+				}
+			}}
+		>
+			<BentoTile
+				label={def.selfLabeled ? undefined : def.title}
+				emphasis={def.emphasis}
+				focused={focused}
+				density={density}
+				action={
+					editing ? (
+						<TileControls
+							slot={slot}
+							title={def.title}
+							canEarlier={index > 0}
+							canLater={index < total - 1}
+							onMove={onMove}
+							onResize={onResize}
+							onReplace={onReplace}
+							onRemove={onRemove}
+						/>
+					) : (
+						def.action?.(ctx)
+					)
+				}
+				// Expandable from ANY position, including while another tile is focused: expanding a
+				// second tile moves the focus rather than being refused. Only the already-focused
+				// tile withholds the control, because it shows Close instead.
+				onExpand={!editing && def.expandable && !focused ? onExpand : undefined}
+				onClose={focused ? onClose : undefined}
+				onToggleTable={def.table && !editing ? onToggleTable : undefined}
+				tableActive={showTable}
+				className="h-full"
+				bodyClassName={
+					def.expandable || focused || showTable ? 'overflow-y-auto' : undefined
+				}
+			>
+				{editing ? (
+					<TileConfigPanel def={def} config={config} onConfig={onConfig} />
+				) : tableData ? (
+					<DataTable data={tableData} />
+				) : (
+					def.render(ctx, density, config)
+				)}
+			</BentoTile>
 		</div>
 	);
 }

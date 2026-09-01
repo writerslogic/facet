@@ -53,7 +53,7 @@ export function BentoCarousel({
 								className="h-full"
 								bodyClassName="overflow-y-auto"
 							>
-								{def.render(ctx, true, resolveTileConfig(def, slot.config))}
+								{def.render(ctx, 'expanded', resolveTileConfig(def, slot.config))}
 							</BentoTile>
 						</div>
 					);
