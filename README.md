@@ -1,10 +1,14 @@
-<!-- Facet: privacy-first, Cloudflare-native analytics + experimentation. Project landing README. -->
+<!-- repo-header:start -->
+<img src="./assets/logo-black.png#gh-light-mode-only" alt="Facet logo" width="120" align="left">
 
-<!-- Header: title + subtitle at left, logo floated right (theme-aware via GitHub's #gh-*-mode-only). -->
-<img align="right" width="150" height="150" hspace="40" alt="Facet logo" src="./assets/logo-black.png#gh-light-mode-only">
-<img align="right" width="150" height="150" hspace="40" alt="Facet logo" src="./assets/logo-white.png#gh-dark-mode-only">
+<h1>Facet</h1>
 
-# Facet
+<p><strong>Privacy-first, cookieless web analytics &amp; experimentation on Cloudflare Workers + D1. Self-hosted, one-command deploy: page views, sessions, funnels, goals, channels, A/B experiments, anomaly detection &amp; ain-English queries. Runs on Cloudflare&#x27;s free tier. No cross-session identity, raw IP never stored. Umami-compatible.</strong></p>
+
+<br clear="left">
+
+[![CI](https://img.shields.io/github/actions/workflow/status/writerslogic/facet/ci.yml?style=flat-square&labelColor=20232a&branch=main&label=CI)](https://github.com/writerslogic/facet/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/writerslogic/facet/codeql.yml?style=flat-square&labelColor=20232a&branch=main&label=CodeQL)](https://github.com/writerslogic/facet/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/writerslogic/facet?style=flat-square&labelColor=20232a&label=OpenSSF)](https://securityscorecards.dev/viewer/?uri=github.com/writerslogic/facet) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14244/badge)](https://www.bestpractices.dev/projects/14244) [![License](https://img.shields.io/github/license/writerslogic/facet?style=flat-square&labelColor=20232a&color=007ec6&label=license)](https://github.com/writerslogic/facet/blob/main/LICENSE) [![Code of Conduct](https://img.shields.io/badge/code%20of%20conduct-Contributor%20Covenant%202.1-6a4c93?style=flat-square&labelColor=20232a)](https://github.com/writerslogic/facet/blob/main/CODE_OF_CONDUCT.md) [![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-Sponsor-EA4AAA?style=flat-square&labelColor=20232a)](https://github.com/sponsors/dcondrey)
+<!-- repo-header:end -->
 
 ### Privacy-first, cookieless web analytics &amp; experimentation
 
@@ -14,15 +18,15 @@ and no cross-session identity to leak.
 <br clear="right">
 
 <p align="center">
-  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/writerslogic/facet"><img alt="Deploy to Cloudflare" src="https://img.shields.io/badge/Deploy%20to-Cloudflare-f38020.svg?logo=cloudflare&logoColor=white"></a>
-  <a href="https://github.com/writerslogic/facet/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/writerslogic/facet/actions/workflows/ci.yml/badge.svg"></a>
-  <a href="https://scorecard.dev/viewer/?uri=github.com/writerslogic/facet"><img alt="OpenSSF Scorecard" src="https://api.securityscorecards.dev/projects/github.com/writerslogic/facet/badge"></a>
+  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/writerslogic/facet"><img alt="Deploy to Cloudflare" src="https://img.shields.io/badge/Deploy%20to-Cloudflare-f38020.svg?logo=cloudflare&logoColor=white&style=flat-square&labelColor=20232a"></a>
+  <a href="https://github.com/writerslogic/facet/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/writerslogic/facet/ci.yml?style=flat-square&labelColor=20232a&branch=main"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/writerslogic/facet"><img alt="OpenSSF Scorecard" src="https://img.shields.io/ossf-scorecard/github.com/writerslogic/facet?style=flat-square&labelColor=20232a"></a>
   <a href="https://www.bestpractices.dev/projects/14244"><img alt="OpenSSF Best Practices" src="https://www.bestpractices.dev/projects/14244/badge"></a>
-  <a href="https://slsa.dev"><img alt="SLSA Build Level 2" src="https://img.shields.io/badge/SLSA-Build%20L2-2ea44f.svg?logo=slsa&logoColor=white"></a>
-  <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.7-blue.svg"></a>
-  <a href="https://workers.cloudflare.com"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg"></a>
-  <a href="https://github.com/writerslogic/facet/blob/main/LICENSING.md"><img alt="License: AGPL-3.0 + commercial" src="https://img.shields.io/badge/License-AGPL--3.0%20%2B%20commercial-blue.svg"></a>
-  <a href="https://orcid.org/0009-0003-1849-2963"><img alt="ORCID" src="https://img.shields.io/badge/ORCID-0009--0003--1849--2963-green.svg"></a>
+  <a href="https://slsa.dev"><img alt="SLSA Build Level 2" src="https://img.shields.io/badge/SLSA-Build%20L2-2ea44f.svg?logo=slsa&logoColor=white&style=flat-square&labelColor=20232a&color=6a4c93"></a>
+  <a href="https://www.typescriptlang.org"><img alt="TypeScript" src="https://img.shields.io/badge/typescript-5.7-blue.svg?style=flat-square&labelColor=20232a"></a>
+  <a href="https://workers.cloudflare.com"><img alt="Cloudflare Workers" src="https://img.shields.io/badge/Cloudflare-Workers%20%2B%20D1-f38020.svg?style=flat-square&labelColor=20232a"></a>
+  <a href="https://github.com/writerslogic/facet/blob/main/LICENSING.md"><img alt="License: AGPL-3.0 + commercial" src="https://img.shields.io/badge/License-AGPL--3.0%20%2B%20commercial-blue.svg?style=flat-square&labelColor=20232a&color=007ec6"></a>
+  <a href="https://orcid.org/0009-0003-1849-2963"><img alt="ORCID" src="https://img.shields.io/badge/ORCID-0009--0003--1849--2963-green.svg?style=flat-square&labelColor=20232a&color=A6CE39"></a>
 </p>
 
 <p align="center">
