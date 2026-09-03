@@ -19,7 +19,8 @@ export function BoardPanel({ onEditLayout }: { onEditLayout: () => void }): Reac
 		<div className="surface rounded-xl p-4">
 			<h2 className="font-semibold text-[color:var(--ink)] text-sm">Overview board</h2>
 			<p className="mt-1 text-[color:var(--muted)] text-xs">
-				How the bento board for this site is arranged. Stored in this browser, per site.
+				Arrange the six essential tiles or add insights from the library. Stored in this
+				browser, per site.
 			</p>
 
 			<label className="mt-3 flex cursor-pointer items-start gap-3 rounded-lg border border-[color:rgb(var(--border))] p-3">
@@ -34,8 +35,8 @@ export function BoardPanel({ onEditLayout }: { onEditLayout: () => void }): Reac
 						Allow the board to scroll
 					</span>
 					<span className="mt-0.5 block text-[color:var(--muted)] text-xs">
-						Off, the board always fits the window, which limits how many tiles it can
-						show. On, it can hold more tiles than fit and scrolls to reach them.
+						Off, the resting board fits the window and offers Show more when needed.
+						Editing always shows every tile. On, the full board scrolls at rest too.
 					</span>
 				</span>
 			</label>

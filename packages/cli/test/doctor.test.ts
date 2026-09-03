@@ -81,7 +81,7 @@ function completedRepo(): { repo: Repo; cloud: CloudState } {
 		repo,
 		cloud: cloudState({
 			databases: [{ uuid: DB_ID, name: 'facet' }],
-			queues: ['facet-ingest'],
+			queues: ['facet-ingest', 'facet-ingest-dlq'],
 			secrets: ['ADMIN_TOKEN'],
 		}),
 	};

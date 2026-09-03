@@ -7,7 +7,7 @@ import { apiFetch } from '../api.js';
 import { siteQueryKey } from '../lib/queryKeys.js';
 import type { Range } from '../state.js';
 
-export function useAnomalies(apiKey: string, siteId: string, range: Range) {
+export function useAnomalies(apiKey: string, siteId: string, range: Range, enabled = true) {
 	return useQuery({
 		queryKey: siteQueryKey('anomalies', siteId, range),
 		queryFn: () =>
@@ -15,6 +15,6 @@ export function useAnomalies(apiKey: string, siteId: string, range: Range) {
 				`/api/stats/anomalies?site_id=${siteId}&start=${range.start}&end=${range.end}`,
 				apiKey,
 			),
-		enabled: Boolean(apiKey && siteId),
+		enabled: Boolean(siteId) && enabled,
 	});
 }

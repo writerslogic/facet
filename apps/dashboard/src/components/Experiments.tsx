@@ -124,17 +124,19 @@ export function adjustedThreshold(comparisons: number, alpha: number = ALPHA): n
 /**
  * Whether the preceding window is a window this experiment was actually RUNNING in.
  *
- * A test created halfway through the selected range has a preceding period in which it did not
- * exist: every variant reads zero there, and a delta computed against it would report a spectacular
- * improvement that is really just the start date. The experiment must therefore have existed for the
- * whole preceding window — `created_at` at or before its start. A zero/absent stamp is not a real
- * start date (the status line already refuses to render it as 1970), so it disqualifies too.
+ * A draft created before a selected range may have started halfway through it. Every variant reads
+ * zero before that point, and a delta computed against it would report a spectacular improvement
+ * that is really just the start date. The experiment must therefore have been active for the whole
+ * preceding window. Migrated active rows predate `started_at`, so their creation time is the safe
+ * fallback; a zero/absent stamp disqualifies comparison.
  *
  * Returning false does more than hide the badges: the comparison query is not even issued.
  */
 export function canComparePeriod(experiment: Experiment | null, before: Range): boolean {
-	if (!experiment || experiment.created_at <= 0) return false;
-	return experiment.created_at <= before.start;
+	if (!experiment) return false;
+	const startedAt =
+		experiment.started_at ?? (experiment.status === 'active' ? experiment.created_at : null);
+	return startedAt !== null && startedAt > 0 && startedAt <= before.start;
 }
 
 /**
@@ -308,34 +310,110 @@ function SampleSizeNote({ variants }: { variants: Variant[] }): ReactElement | n
 }
 
 /**
- * Whether the test is still collecting, and for how long it has run. A p-value is unreadable without
- * it: a "no significant difference" on a stopped experiment is a final answer, on a live one it is a
- * progress report.
+ * Durable lifecycle and its relevant timestamp. A p-value is unreadable without it: a "no
+ * significant difference" on a completed experiment is a final result, while on an active one it
+ * remains a progress report.
  */
 function ExperimentStatus({ experiment }: { experiment: Experiment | null }): ReactElement | null {
 	if (!experiment) return null;
-	// created_at is epoch ms; a zero/absent stamp is not a real start date, so don't render "1970".
-	const startedMs = experiment.created_at > 0 ? experiment.created_at : null;
-	const days = startedMs === null ? null : Math.floor((Date.now() - startedMs) / DAY_MS);
+	const statusLabel =
+		experiment.status === 'active'
+			? 'Running'
+			: experiment.status === 'completed'
+				? 'Completed'
+				: 'Draft';
+	const eventLabel =
+		experiment.status === 'active'
+			? 'started'
+			: experiment.status === 'completed'
+				? 'completed'
+				: 'created';
+	const eventAt =
+		experiment.status === 'active'
+			? (experiment.started_at ?? experiment.created_at)
+			: experiment.status === 'completed'
+				? (experiment.completed_at ?? experiment.created_at)
+				: experiment.created_at;
+	const eventMs = eventAt > 0 ? eventAt : null;
+	const days = eventMs === null ? null : Math.floor((Date.now() - eventMs) / DAY_MS);
 	return (
 		<span className="flex items-center gap-2 text-xs">
 			<span
 				className={`rounded px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
-					experiment.active ? 'badge-pos' : 'badge-neutral'
+					experiment.status === 'active' ? 'badge-pos' : 'badge-neutral'
 				}`}
 			>
-				{experiment.active ? 'Running' : 'Stopped'}
+				{statusLabel}
 			</span>
-			{startedMs !== null ? (
+			{eventMs !== null ? (
 				<span className="flex items-center gap-1 text-[color:var(--muted)]">
 					<Clock className="h-3 w-3" aria-hidden="true" />
 					{days !== null && days >= 0 ? (
-						<>{days === 0 ? 'started today' : `day ${formatNumber(days + 1)}`} · </>
+						<>{days === 0 ? `${eventLabel} today` : `${formatNumber(days)}d ago`} · </>
 					) : null}
-					{formatDay(startedMs)}
+					{formatDay(eventMs)}
 				</span>
 			) : null}
 		</span>
+	);
+}
+
+/** Headline read before the statistical table: volume, blended conversion, leading observed lift,
+ * and collection health. These are descriptive only; the verdict below owns inferential claims. */
+function ExperimentSummary({ variants }: { variants: Variant[] }): ReactElement {
+	const exposures = variants.reduce((total, variant) => total + variant.exposures, 0);
+	const conversions = variants.reduce((total, variant) => total + variant.conversions, 0);
+	const control = variants[0];
+	const leader = variants
+		.slice(1)
+		.filter((variant) => variant.exposures > 0)
+		.sort((a, b) => b.rate - a.rate)[0];
+	const uplift = leader && control ? liftVsControl(leader, control) : null;
+	const health =
+		exposures === 0
+			? 'No data'
+			: variants.some((variant) => variant.exposures === 0)
+				? 'Missing arm'
+				: Math.min(...variants.map((variant) => variant.exposures)) < MIN_RATE_EXPOSURES
+					? 'Collecting'
+					: 'Balanced read';
+	const items = [
+		{ label: 'Total exposures', value: formatNumber(exposures), detail: 'Across all variants' },
+		{
+			label: 'Total conversions',
+			value: formatNumber(conversions),
+			detail:
+				exposures > 0
+					? `${formatPercent(conversions / exposures)} blended rate`
+					: 'No exposure base',
+		},
+		{
+			label: 'Leading observed uplift',
+			value:
+				uplift == null
+					? '—'
+					: `${leader?.key ?? 'Challenger'} ${uplift > 0 ? '+' : ''}${(uplift * 100).toFixed(1)}%`,
+			detail: leader ? `${leader.key} vs control · descriptive` : 'No measured challenger',
+		},
+		{ label: 'Data health', value: health, detail: 'Read warnings below before deciding' },
+	];
+	return (
+		<dl
+			className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
+			aria-label="Experiment summary"
+		>
+			{items.map((item) => (
+				<div key={item.label} className="surface rounded-2xl p-5">
+					<dt className="text-[11px] font-semibold uppercase tracking-wide text-[color:var(--faint)]">
+						{item.label}
+					</dt>
+					<dd className="mt-2 font-semibold text-2xl text-[color:var(--ink)] tabular-nums">
+						{item.value}
+					</dd>
+					<p className="mt-1 text-xs text-[color:var(--muted)]">{item.detail}</p>
+				</div>
+			))}
+		</dl>
 	);
 }
 
@@ -691,10 +769,10 @@ export function Experiments({
 						className="input mt-1 block w-full rounded-lg px-3 py-1.5 text-sm"
 					>
 						{expList.map((exp) => (
-							// A stopped test is still worth reading, but you should know before you
-							// pick it that its numbers have stopped moving.
+							// A non-active test is still worth reading, but its lifecycle should be
+							// visible before selection because its numbers are not currently moving.
 							<option key={exp.id} value={exp.id}>
-								{exp.active ? exp.name : `${exp.name} (stopped)`}
+								{exp.status === 'active' ? exp.name : `${exp.name} (${exp.status})`}
 							</option>
 						))}
 					</select>
@@ -722,6 +800,8 @@ export function Experiments({
 			</div>
 
 			{freshness.data?.pending ? <PendingNotice /> : null}
+
+			{result.data ? <ExperimentSummary variants={result.data.variants} /> : null}
 
 			<section className="surface rounded-xl p-5">
 				<div className="mb-3 flex flex-wrap items-center justify-between gap-2">

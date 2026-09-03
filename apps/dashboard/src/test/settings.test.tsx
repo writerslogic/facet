@@ -1,6 +1,6 @@
 // Settings admin area. Entering an admin token enables Settings; create refreshes the list;
-// delete confirms then removes; the admin token lives in sessionStorage (never localStorage) and
-// never appears in a non-admin request; "forget token" clears it. The gate verifies the token with
+// delete confirms then removes; the admin token lives only in memory and never appears in a
+// non-admin request. The gate verifies the token with
 // the deployment before storing it, and a freshly issued API key is scoped to the site it was issued
 // for and never persisted unless the operator explicitly asks for it.
 
@@ -233,16 +233,10 @@ describe('Settings admin area', () => {
 		expect(screen.getByRole('heading', { name: 'Sites' })).toBeInTheDocument();
 	});
 
-	it('stores the admin token in sessionStorage, never localStorage', async () => {
+	it('keeps the admin token out of both Web Storage areas', async () => {
 		await openSettingsWithToken();
-		expect(sessionStorage.getItem('facet.adminToken')).toBe(ADMIN_TOKEN);
-		// Not in localStorage under any key.
-		const localValues: (string | null)[] = [];
-		for (let i = 0; i < localStorage.length; i++) {
-			localValues.push(localStorage.getItem(localStorage.key(i) ?? ''));
-		}
-		expect(localValues).not.toContain(ADMIN_TOKEN);
-		expect(localStorage.getItem('facet.adminToken')).toBeNull();
+		expect(allStoredValues()).not.toContain(ADMIN_TOKEN);
+		expect(sessionStorage.getItem('facet.adminToken')).toBeNull();
 	});
 
 	it('never sends the admin token to a non-admin request URL or header', async () => {
@@ -386,10 +380,9 @@ describe('Settings admin area', () => {
 	it('flags a rotated token once instead of failing panel by panel', async () => {
 		// A token accepted at unlock, then rotated on the deployment: every panel would otherwise
 		// show its own bare "invalid_admin_token" with no hint of the shared cause.
-		sessionStorage.setItem('facet.adminToken', ADMIN_TOKEN);
+		await openSettingsWithToken();
 		adminAuthFails = true;
-		renderApp();
-		fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+		fireEvent.click(screen.getByRole('tab', { name: 'Goals' }));
 		await waitFor(() =>
 			expect(screen.getByText(/rejected this admin token/i)).toBeInTheDocument(),
 		);

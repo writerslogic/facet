@@ -7,7 +7,6 @@ import {
 	type CountRow,
 	DimensionSeriesQuerySchema,
 	type StatsFilter,
-	type StatsQueryInput,
 	StatsQuerySchema,
 	type StatsResponse,
 } from '@facet/shared';
@@ -44,7 +43,7 @@ import {
 	attribution,
 	channels,
 	cohortRetention,
-	cube,
+	cubeStats,
 	engagement,
 	realtime,
 	revenue,
@@ -67,15 +66,15 @@ import {
 	topScreens,
 } from '../db/stats.js';
 import type { AppEnv } from '../env.js';
+import {
+	assertStatsRange as assertRange,
+	statsInterval as intervalFor,
+	statsFilter as toStatsFilter,
+} from '../features/analytics/query.js';
+import { recordStatsRead } from '../features/analytics/telemetry.js';
 import { aiRunner, answerQuestion } from '../lib/ai.js';
 import { requireSiteAccess } from '../lib/auth.js';
-import {
-	DAY_MS,
-	EXPORT_MAX_ROWS,
-	HOUR_MS,
-	MAX_RANGE_DAYS,
-	REALTIME_WINDOW_MS,
-} from '../lib/constants.js';
+import { EXPORT_MAX_ROWS, REALTIME_WINDOW_MS } from '../lib/constants.js';
 import { toCsv } from '../lib/csv.js';
 import { renderDigest } from '../lib/digest.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
@@ -90,41 +89,6 @@ import {
 
 export const statsRoutes = new Hono<AppEnv>();
 
-/** Reject an empty range or one exceeding the maximum queryable span. */
-function assertRange(start: number, end: number): void {
-	if (end <= start) {
-		throw new ApiError('bad_range', 400);
-	}
-	if (end - start > MAX_RANGE_DAYS * DAY_MS) {
-		throw new ApiError('range_too_large', 400);
-	}
-}
-
-/** The bucket granularity for a range: whatever the caller asked for, else hour for a short window
- * and day for a long one. Shared by every time-bucketed read so they all bucket identically. */
-function intervalFor(query: StatsQueryInput): 'hour' | 'day' {
-	return query.interval ?? (query.end - query.start <= 48 * HOUR_MS ? 'hour' : 'day');
-}
-
-/** Validate a stats query against the key's site + range, returning the internal filter. */
-function toStatsFilter(query: StatsQueryInput, siteId: string): StatsFilter {
-	if (query.site_id !== siteId) {
-		throw new ApiError('site_mismatch', 403);
-	}
-	assertRange(query.start, query.end);
-	return {
-		siteId: query.site_id,
-		hostname: query.hostname,
-		start: query.start,
-		end: query.end,
-		path: query.path,
-		referrer: query.referrer,
-		country: query.country,
-		device: query.device,
-		channel: query.channel,
-	};
-}
-
 statsRoutes.get(
 	'/stats',
 	requireSiteAccess,
@@ -133,6 +97,7 @@ statsRoutes.get(
 		const query = c.req.valid('query');
 		const f = toStatsFilter(query, c.get('siteId'));
 		const interval = intervalFor(query);
+		const started = performance.now();
 		const [
 			summaryResult,
 			seriesResult,
@@ -198,6 +163,7 @@ statsRoutes.get(
 			attribution: attributionResult,
 			meta: freshness,
 		};
+		recordStatsRead('full', { durationMs: performance.now() - started, statements: 21 });
 		return c.json(body);
 	},
 );
@@ -212,7 +178,9 @@ statsRoutes.get(
 		const query = c.req.valid('query');
 		const f = toStatsFilter(query, c.get('siteId'));
 		const interval = intervalFor(query);
-		return c.json({ interval, cells: await cube(c.env, f, interval) });
+		const read = await cubeStats(c.env, f, interval);
+		recordStatsRead('cube', read.metrics);
+		return c.json(read.data);
 	},
 );
 

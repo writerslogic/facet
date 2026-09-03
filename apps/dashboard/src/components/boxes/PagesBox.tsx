@@ -12,16 +12,10 @@
 // `data.summary.pageviews` it can exceed 100%.
 
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, LIST_VARIANTS, ListBody, rowsTable } from './shared.js';
+import { ListBody, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 export const pagesBox: TileDef = {
-	id: 'pages',
-	title: 'Top pages',
-	size: 'lg',
-	expandable: true,
-	variants: LIST_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Page', ctx.data.top_paths),
 	render: (ctx, density, config) => (
 		<ListBody

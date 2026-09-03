@@ -15,7 +15,7 @@ import type { CountRow } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { exactHint, formatKpi, formatNumber } from '../../lib/format.js';
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, LIST_VARIANTS, ListBody, accentOf, rowsTable } from './shared.js';
+import { ListBody, accentOf, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 /** The width scale, narrowest first: the order the compact bar stacks in. Mirrors the tracker's
@@ -144,12 +144,6 @@ function TierMix({
 }
 
 export const screensBox: TileDef = {
-	id: 'screens',
-	title: 'Screen size',
-	size: 'lg',
-	expandable: true,
-	variants: LIST_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Screen', ctx.data.top_screens ?? []),
 	render: (ctx, density, config) => {
 		const rows = ctx.data.top_screens ?? [];

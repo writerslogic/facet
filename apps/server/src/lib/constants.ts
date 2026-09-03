@@ -9,20 +9,6 @@ export const SALT_BYTES = 32 as const;
 /** Default rolling retention window for raw events, in days. */
 export const DEFAULT_RAW_RETENTION_DAYS = 90 as const;
 
-/**
- * Default retention for the CRM audit log, in days.
- *
- * Deliberately longer than the raw-event window, because it answers a different question about
- * different people. Raw events are visitors' data and the short window IS the privacy measure; audit
- * entries are a record of what the deployment's own operators did with contact data, and an access
- * log that expires before the misuse it evidences is noticed has protected nobody. A year covers an
- * annual review and the interval in which a complaint or a breach is normally traced.
- *
- * Bounded rather than kept forever, because "we never delete it" is not a retention policy and an
- * append-only table with no ceiling is a growth defect however small each row is.
- */
-export const DEFAULT_CRM_AUDIT_RETENTION_DAYS = 365 as const;
-
 /** CORS max-age for preflight responses, in seconds. */
 export const CORS_MAX_AGE = 86400 as const;
 
@@ -58,14 +44,6 @@ export const EXPORT_MAX_ROWS = 1000 as const;
 
 /** Trailing window for the realtime "active visitors" metric, in milliseconds (5 minutes). */
 export const REALTIME_WINDOW_MS = 300_000 as const;
-
-/**
- * Largest body a CRM write may carry. The global `bodyLimit` is path-scoped to `/api/collect`, so
- * without this the one route group that stores personal data was the one with no ceiling at all.
- * Generous against the field bounds — a contact's `notes` alone may be 4000 characters — because this
- * is a backstop against an unbounded upload, not a second copy of the wire schema.
- */
-export const CRM_MAX_BODY_BYTES = 16_384 as const;
 
 /**
  * How many values one `IN (...)` list may carry.

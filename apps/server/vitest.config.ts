@@ -5,9 +5,8 @@ import { defineConfig } from 'vitest/config';
 export default defineConfig(async () => {
 	const [migrations, crmMigrations] = await Promise.all([
 		readD1Migrations(fileURLToPath(new URL('./migrations', import.meta.url))),
-		// The optional CRM extension lives in its own D1 database, so its migrations are a separate
-		// set applied to a separate binding. Both are injected here: the suite has to exercise the
-		// bound path, and the unbound path is exercised by handing the app an env with CRM_DB removed.
+		// The CRM foundation lives in its own D1 database, so its engine-level tests need a separate
+		// migration set and binding.
 		readD1Migrations(fileURLToPath(new URL('./migrations-crm', import.meta.url))),
 	]);
 

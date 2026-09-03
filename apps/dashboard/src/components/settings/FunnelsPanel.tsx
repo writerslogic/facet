@@ -1,9 +1,14 @@
 // Funnels panel: create a funnel with 2–10 ordered steps (type + match value), list, and delete.
 
-import type { FunnelStep } from '@facet/shared';
-import { Plus, X } from 'lucide-react';
+import type { Funnel, FunnelStep } from '@facet/shared';
+import { ChevronDown, ChevronUp, Pencil, Plus, X } from 'lucide-react';
 import { type FormEvent, type ReactElement, useState } from 'react';
-import { useAdminFunnels, useCreateFunnel, useDeleteFunnel } from '../../hooks/admin.js';
+import {
+	useAdminFunnels,
+	useCreateFunnel,
+	useDeleteFunnel,
+	useUpdateFunnel,
+} from '../../hooks/admin.js';
 import { CardSkeletons, EmptyState, ErrorState } from '../StatusStates.js';
 import { BlockedReason, ConfirmDelete, Field, FormControls, MutationStatus, Panel } from './kit.js';
 
@@ -18,52 +23,94 @@ export function FunnelsPanel({
 }): ReactElement {
 	const funnels = useAdminFunnels(token, siteId);
 	const create = useCreateFunnel(token, siteId);
+	const update = useUpdateFunnel(token, siteId);
 	const remove = useDeleteFunnel(token, siteId);
 
+	const [editingId, setEditingId] = useState<string | null>(null);
 	const [name, setName] = useState('');
 	const [steps, setSteps] = useState<FunnelStep[]>([emptyStep(), emptyStep()]);
 
 	const filledSteps = steps.filter((s) => s.match_value.trim());
-	const canSubmit = Boolean(name.trim() && filledSteps.length >= 2 && filledSteps.length <= 10);
-	// Blank steps are dropped silently on submit, so say which requirement is unmet before the click.
+	const allStepsFilled = filledSteps.length === steps.length;
+	const canSubmit = Boolean(
+		name.trim() && allStepsFilled && filledSteps.length >= 2 && filledSteps.length <= 10,
+	);
 	const blocked = canSubmit
 		? null
 		: !name.trim()
 			? 'Enter a name for this funnel.'
-			: `Fill in at least 2 steps — ${filledSteps.length} of ${steps.length} have a match value.`;
+			: `Fill every ordered step — ${filledSteps.length} of ${steps.length} have a match value.`;
+	const busy = create.isPending || update.isPending;
+
+	function resetEditor(): void {
+		setEditingId(null);
+		setName('');
+		setSteps([emptyStep(), emptyStep()]);
+	}
+
+	function startEditing(funnel: Funnel): void {
+		setEditingId(funnel.id);
+		setName(funnel.name);
+		setSteps(funnel.steps.map((step) => ({ ...step })));
+	}
 
 	function updateStep(index: number, patch: Partial<FunnelStep>): void {
 		setSteps((prev) => prev.map((s, i) => (i === index ? { ...s, ...patch } : s)));
 	}
 
+	function moveStep(index: number, offset: -1 | 1): void {
+		setSteps((previous) => {
+			const destination = index + offset;
+			if (destination < 0 || destination >= previous.length) return previous;
+			const next = [...previous];
+			const current = next[index];
+			const target = next[destination];
+			if (!current || !target) return previous;
+			next[index] = target;
+			next[destination] = current;
+			return next;
+		});
+	}
+
 	function onSubmit(event: FormEvent): void {
 		event.preventDefault();
 		if (!canSubmit) return;
-		create.mutate(
-			{
-				site_id: siteId,
-				name: name.trim(),
-				steps: filledSteps.map((s) => ({
-					type: s.type,
-					match_value: s.match_value.trim(),
-				})),
-			},
-			{
-				onSuccess: () => {
-					setName('');
-					setSteps([emptyStep(), emptyStep()]);
-				},
-			},
-		);
+		const body = {
+			site_id: siteId,
+			name: name.trim(),
+			steps: filledSteps.map((step) => ({
+				type: step.type,
+				match_value: step.match_value.trim(),
+			})),
+		};
+		if (editingId) {
+			update.mutate({ id: editingId, body }, { onSuccess: resetEditor });
+		} else {
+			create.mutate(body, { onSuccess: resetEditor });
+		}
 	}
 
 	return (
 		<Panel
 			title="Funnels"
-			description="An ordered path through your site. Drop-off is measured between consecutive steps; empty steps are ignored."
+			description="An ordered path through your site. Drop-off is measured between consecutive steps; every step must be complete."
 		>
+			<div className="mb-3 flex items-center justify-between gap-3">
+				<p className="font-medium text-sm text-[color:var(--ink)]">
+					{editingId ? 'Edit funnel' : 'Create funnel'}
+				</p>
+				{editingId ? (
+					<button
+						type="button"
+						onClick={resetEditor}
+						className="btn-ghost rounded-lg px-2.5 py-1 text-xs"
+					>
+						Cancel editing
+					</button>
+				) : null}
+			</div>
 			<form onSubmit={onSubmit}>
-				<FormControls busy={create.isPending} className="space-y-3">
+				<FormControls busy={busy} className="space-y-3">
 					<Field
 						id="funnel-name"
 						label="Name"
@@ -116,6 +163,26 @@ export function FunnelsPanel({
 									placeholder={step.type === 'event' ? 'add_to_cart' : '/cart'}
 									className="input min-w-0 flex-1 rounded-lg px-3 py-1.5 text-sm"
 								/>
+								<div className="flex shrink-0 items-center">
+									<button
+										type="button"
+										disabled={index === 0}
+										onClick={() => moveStep(index, -1)}
+										aria-label={`Move step ${index + 1} up`}
+										className="rounded-md p-1 text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] disabled:opacity-30"
+									>
+										<ChevronUp className="h-4 w-4" aria-hidden="true" />
+									</button>
+									<button
+										type="button"
+										disabled={index === steps.length - 1}
+										onClick={() => moveStep(index, 1)}
+										aria-label={`Move step ${index + 1} down`}
+										className="rounded-md p-1 text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] disabled:opacity-30"
+									>
+										<ChevronDown className="h-4 w-4" aria-hidden="true" />
+									</button>
+								</div>
 								{steps.length > 2 ? (
 									<button
 										type="button"
@@ -148,17 +215,23 @@ export function FunnelsPanel({
 							disabled={!canSubmit}
 							className="btn-accent rounded-lg px-4 py-1.5 text-sm transition"
 						>
-							Create funnel
+							{editingId ? 'Save funnel' : 'Create funnel'}
 						</button>
 						<BlockedReason reason={blocked} />
 					</div>
 				</FormControls>
 			</form>
 			<MutationStatus
-				isPending={create.isPending}
-				error={create.error}
-				success={create.isSuccess ? 'Funnel created.' : null}
-				pendingLabel="Creating funnel…"
+				isPending={busy}
+				error={create.error ?? update.error}
+				success={
+					create.isSuccess
+						? 'Funnel created.'
+						: update.isSuccess
+							? 'Funnel updated.'
+							: null
+				}
+				pendingLabel={editingId ? 'Saving funnel…' : 'Creating funnel…'}
 			/>
 
 			<div className="mt-5">
@@ -184,11 +257,21 @@ export function FunnelsPanel({
 										{f.steps.length} steps
 									</p>
 								</div>
-								<ConfirmDelete
-									onConfirm={() => remove.mutate(f.id)}
-									consequence={`Delete "${f.name}"? Its drop-off report goes with it.`}
-									busy={remove.isPending}
-								/>
+								<div className="flex shrink-0 items-center gap-1">
+									<button
+										type="button"
+										onClick={() => startEditing(f)}
+										aria-label={`Edit ${f.name}`}
+										className="btn-ghost rounded-lg p-1.5"
+									>
+										<Pencil className="h-4 w-4" aria-hidden="true" />
+									</button>
+									<ConfirmDelete
+										onConfirm={() => remove.mutate(f.id)}
+										consequence={`Delete "${f.name}"? Its drop-off report goes with it.`}
+										busy={remove.isPending}
+									/>
+								</div>
 							</li>
 						))}
 					</ul>

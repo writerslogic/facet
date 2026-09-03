@@ -32,7 +32,7 @@ import { ErrorState, Skeleton } from '../StatusStates.js';
 import { BrushRange } from '../charts/BrushRange.js';
 import { ChartEmpty } from '../charts/ChartChrome.js';
 import { MultiLine } from '../charts/MultiLine.js';
-import type { TileConfig, TileDef, TileDensity, TileOption, TileVariant } from './types.js';
+import type { TileConfig, TileDef, TileDensity } from './types.js';
 
 const DIMENSION_LABEL: Record<SeriesDimension, string> = {
 	path: 'Page',
@@ -46,47 +46,6 @@ const DIMENSION_CHOICES = Object.entries(DIMENSION_LABEL).map(([value, label]) =
 	value,
 	label,
 }));
-
-const VARIANTS: TileVariant[] = [
-	{ id: 'focus', label: 'Focus lines' },
-	{ id: 'brush', label: 'Brush + zoom' },
-];
-
-const OPTIONS: TileOption[] = [
-	{
-		key: 'dimension',
-		label: 'Split by',
-		type: 'select',
-		choices: DIMENSION_CHOICES,
-		default: 'path',
-	},
-	{
-		key: 'metric',
-		label: 'Metric',
-		type: 'select',
-		// Pageviews and events only. `/api/stats/timeseries` returns no visitors field: a
-		// per-(key, bucket) distinct-visitor count is non-additive along both axes, so a line chart
-		// that invites summing it would be wrong in its most common reading. Nothing here synthesises
-		// one from what is returned.
-		choices: [
-			{ value: 'pageviews', label: 'Pageviews' },
-			{ value: 'events', label: 'Events' },
-		],
-		default: 'pageviews',
-	},
-	{
-		key: 'lines',
-		label: 'Lines',
-		type: 'select',
-		// The endpoint's own bound is 1–8 and it 400s outside it rather than clamping.
-		choices: [
-			{ value: '3', label: 'Top 3' },
-			{ value: '5', label: 'Top 5' },
-			{ value: '8', label: 'Top 8' },
-		],
-		default: '5',
-	},
-];
 
 function dimensionOf(config: TileConfig | undefined): SeriesDimension {
 	const value = config?.dimension;
@@ -273,12 +232,6 @@ function TrendsBody({
 }
 
 export const trendsBox: TileDef = {
-	id: 'trends',
-	title: 'Trends by dimension',
-	size: 'wide',
-	expandable: true,
-	variants: VARIANTS,
-	options: OPTIONS,
 	// No `table`: the "view as table" toggle is fed from the board's shared context, and this box's
 	// data is its own read — a pure `table(ctx, config)` cannot reach it. The sr-only table inside
 	// each rendering carries the numbers instead.

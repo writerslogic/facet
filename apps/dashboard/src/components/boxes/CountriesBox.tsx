@@ -19,10 +19,8 @@ import { type CompareSource, useBreakdownComparison } from '../../hooks/compare.
 import { WorldMap } from '../WorldMap.js';
 import { ChartEmpty } from '../charts/ChartChrome.js';
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, ListBody, rowsTable } from './shared.js';
-import type { TileContext, TileDef, TileVariant } from './types.js';
-
-const MEASURE_NOTE = 'measured over all events for this country, not just the pageviews shown';
+import { ListBody, rowsTable } from './shared.js';
+import type { TileContext, TileDef } from './types.js';
 
 /** The cube folds every country outside its top 30 — and every unattributed hit — into `'other'`
  * (`cube()` in the server's db/stats). It is not a country: the choropleth has no shape for it, the
@@ -37,14 +35,6 @@ function countryRows(ctx: TileContext): CountRow[] {
 		.dimRows('country', ctx.data.top_countries)
 		.filter((r) => r.key.toLowerCase() !== CUBE_OTHER);
 }
-
-/** Map first (the shipped default), then the drillable ranked-list styles. */
-const COUNTRY_VARIANTS: TileVariant[] = [
-	{ id: 'map', label: 'Map' },
-	{ id: 'bars', label: 'Bars' },
-	{ id: 'donut', label: 'Donut' },
-	{ id: 'table', label: 'Table' },
-];
 
 /** The map plus its per-country movements, read from the comparison the Overview already fetched. */
 function ComparedWorldMap({
@@ -63,19 +53,12 @@ function ComparedWorldMap({
 }
 
 export const countriesBox: TileDef = {
-	id: 'countries',
-	title: 'Countries',
-	size: 'lg',
-	expandable: true,
-	variants: COUNTRY_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Country', countryRows(ctx)),
 	render: (ctx, density, config) => {
 		const rows = countryRows(ctx);
 		const compare: CompareSource = {
 			current: ctx.data.top_countries ?? [],
 			select: (p) => p.top_countries,
-			note: MEASURE_NOTE,
 		};
 		if (rows.length === 0 && ctx.summary.pageviews > 0) {
 			// IMPORTANT: not `reason="range"`. Every row here is ISO-coded, so a site whose traffic

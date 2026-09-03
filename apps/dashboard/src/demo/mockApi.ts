@@ -198,13 +198,6 @@ function exportResponse(url: URL): Response {
 function route(url: URL, method: string, body: unknown): Response | null {
 	const p = url.pathname;
 
-	// The demo has no CRM database, which the real Worker reports before it authenticates anything —
-	// including for a write. Answered ahead of the read-only guard so the CRM tab shows its
-	// "extension not enabled" explanation rather than a 403 that would read as a permissions problem.
-	if (p === '/api/crm' || p.startsWith('/api/crm/')) {
-		return json({ error: 'crm_unavailable' }, 501);
-	}
-
 	// No SESSION_SECRET on a static demo, so there is no operator session to report — the same 503
 	// the real /api/auth routes answer with when account auth is not configured.
 	if (p.startsWith('/api/auth/')) {
@@ -281,6 +274,68 @@ function route(url: URL, method: string, body: unknown): Response | null {
 	switch (p) {
 		case '/api/stats':
 			return json(buildStats(start, end, interval, parseFilter(url)));
+		case '/api/stats/core': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({ summary: stats.summary, series: stats.series });
+		}
+		case '/api/stats/summary': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({ summary: stats.summary });
+		}
+		case '/api/stats/content': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({ top_paths: stats.top_paths, top_events: stats.top_events });
+		}
+		case '/api/stats/acquisition': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({ top_referrers: stats.top_referrers });
+		}
+		case '/api/stats/technology': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({
+				top_browsers: stats.top_browsers ?? [],
+				top_os: stats.top_os ?? [],
+				top_screens: stats.top_screens ?? [],
+				top_languages: stats.top_languages ?? [],
+				top_regions: stats.top_regions ?? [],
+				top_networks: stats.top_networks ?? [],
+				top_connections: stats.top_connections ?? [],
+			});
+		}
+		case '/api/stats/engagement': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({ engagement: stats.engagement });
+		}
+		case '/api/stats/revenue': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({
+				revenue: stats.revenue,
+				revenue_by_channel: stats.revenue_by_channel,
+			});
+		}
+		case '/api/stats/freshness': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({ meta: stats.meta });
+		}
+		case '/api/stats/realtime-context': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({
+				top_paths: stats.top_paths,
+				top_referrers: stats.top_referrers,
+				top_events: stats.top_events,
+				top_countries: stats.top_countries,
+				top_devices: stats.top_devices,
+				channels: stats.channels,
+			});
+		}
+		case '/api/stats/attribution': {
+			const stats = buildStats(start, end, interval, parseFilter(url));
+			return json({
+				revenue: stats.revenue,
+				revenue_by_channel: stats.revenue_by_channel,
+				attribution: stats.attribution,
+			});
+		}
 		case '/api/stats/breakdown': {
 			const dimension = url.searchParams.get('dimension') ?? '';
 			// The real route validates `dimension` against the picklist and 400s on anything else,
@@ -304,8 +359,24 @@ function route(url: URL, method: string, body: unknown): Response | null {
 				),
 			);
 		}
-		case '/api/stats/cube':
-			return json(buildCube(start, end, interval));
+		case '/api/stats/cube': {
+			const filter = parseFilter(url);
+			const response = buildCube(start, end, interval);
+			if (!filter.path && !filter.referrer) return json(response);
+			const base = buildStats(start, end, interval);
+			const scoped = buildStats(start, end, interval, filter);
+			const factor =
+				base.summary.pageviews > 0 ? scoped.summary.pageviews / base.summary.pageviews : 0;
+			return json({
+				...response,
+				cells: response.cells.map((cell) => ({
+					...cell,
+					pageviews: Math.round(cell.pageviews * factor),
+					events: Math.round(cell.events * factor),
+					visitors: Math.round(cell.visitors * factor),
+				})),
+			});
+		}
 		case '/api/stats/anomalies':
 			return json(buildAnomalies(start, end));
 		case '/api/annotations':
@@ -374,13 +445,8 @@ function route(url: URL, method: string, body: unknown): Response | null {
 	return json({ error: 'not_found' }, 404);
 }
 
-/** Install the demo interceptor + seed a demo admin token so the Settings tab shows populated. Idempotent. */
+/** Install the demo interceptor. AdminProvider supplies an in-memory demo token. Idempotent. */
 export function installDemoApi(): void {
-	try {
-		sessionStorage.setItem('facet.adminToken', 'demo-read-only');
-	} catch {
-		// sessionStorage unavailable — Settings will just show its token gate.
-	}
 	const originalFetch = window.fetch.bind(window);
 	window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
 		const req = input instanceof Request ? input : null;

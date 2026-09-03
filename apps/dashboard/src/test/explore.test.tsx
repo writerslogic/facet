@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Explore, GROUPS, LABELS, rankRows } from '../components/Explore.js';
+import { SegmentProvider } from '../hooks/segment.js';
 
 const SITE = '11111111-1111-4111-8111-111111111111';
 
@@ -30,7 +31,9 @@ function renderPanel(response: BreakdownResponse) {
 	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 	return render(
 		<QueryClientProvider client={client}>
-			<Explore apiKey="clk_x" siteId={SITE} range={{ start: 0, end: 1 }} />
+			<SegmentProvider>
+				<Explore apiKey="clk_x" siteId={SITE} range={{ start: 0, end: 1 }} />
+			</SegmentProvider>
 		</QueryClientProvider>,
 	);
 }
@@ -101,6 +104,15 @@ describe('Explore', () => {
 		});
 		expect(screen.getByRole('table', { name: /raw data/ })).toBeInTheDocument();
 		expect(screen.getByText('Top-three concentration')).toBeInTheDocument();
+	});
+
+	it('cross-filters from chart labels through the shared URL-restorable segment', async () => {
+		renderPanel(body('d1', false));
+		fireEvent.click(await screen.findByRole('button', { name: '/pricing' }));
+
+		await waitFor(() => {
+			expect(new URLSearchParams(window.location.search).get('path')).toBe('/pricing');
+		});
 	});
 
 	it('explains when a search has no match in the bounded result set', async () => {

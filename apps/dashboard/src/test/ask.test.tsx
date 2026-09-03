@@ -17,7 +17,8 @@ import {
 } from '../components/AskPanel.js';
 import { clockLabel, setClockMode } from '../lib/datetime.js';
 
-const { mutateMock, state } = vi.hoisted(() => ({
+const { cancelMock, mutateMock, state } = vi.hoisted(() => ({
+	cancelMock: vi.fn(),
 	mutateMock: vi.fn(),
 	state: {
 		isPending: false as boolean,
@@ -32,6 +33,7 @@ vi.mock('../hooks/query.js', async () => {
 		...actual,
 		useNlQuery: () => ({
 			mutate: mutateMock,
+			cancel: cancelMock,
 			isPending: state.isPending,
 			error: state.error,
 			data: state.data,
@@ -158,6 +160,8 @@ describe('AskPanel', () => {
 		renderPanel();
 		expect(screen.getByText(/Translating the question/)).toBeInTheDocument();
 		expect(screen.getByText(/Running that query over your aggregates/)).toBeInTheDocument();
+		fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+		expect(cancelMock).toHaveBeenCalledOnce();
 	});
 });
 
@@ -220,7 +224,14 @@ describe('Ask helpers', () => {
 	});
 
 	it('maps every server error code for this endpoint to a remedy', () => {
-		for (const code of ['ai_unavailable', 'bad_request', 'bad_range', 'site_mismatch']) {
+		for (const code of [
+			'ai_unavailable',
+			'bad_request',
+			'bad_range',
+			'site_mismatch',
+			'request_cancelled',
+			'request_timeout',
+		]) {
 			expect(errorHint(code)).not.toContain(code);
 		}
 		expect(errorHint('kaboom')).toContain('kaboom');

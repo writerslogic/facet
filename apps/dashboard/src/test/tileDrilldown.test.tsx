@@ -3,7 +3,7 @@
 // The cases here pin the three things that make this honest rather than merely interactive:
 //   1. inspecting is not filtering — the panel opens and the global segment is untouched;
 //   2. a drill COMPOSES with an active segment (`segment ∪ drill path`), and picks its transport from
-//      that union — the cube when it can answer, /api/stats when the scope names a path/referrer;
+//      that union — the cube when it can answer, narrow slices when the scope names a path/referrer;
 //   3. visitors is reported as an upper bound exactly when it is one, and as a count when it is not.
 //
 // The numbers below are computed by hand from CELLS so a regression in the slicing shows up as a wrong
@@ -22,13 +22,13 @@ const SITE = '11111111-1111-4111-8111-111111111111';
 
 const statsMock = vi.fn();
 
-// Mocked wholesale so no case here opens a real request: `useCompareStats` is what the shared compare
-// hook reads (returning nothing ⇒ no deltas, which keeps these assertions about the drill), and
-// `useStats` is the one the server-side panel calls, so the case below can read the query it built.
+// No case here opens a real request. The server-side panel's requirement-aware reader is mocked so
+// the path case can inspect the composed query it built.
 vi.mock('../hooks/stats.js', () => ({
-	useStats: (...args: unknown[]) => statsMock(...args),
-	useCompareStats: () => ({ data: undefined }),
 	useFreshness: () => ({ data: null }),
+}));
+vi.mock('../features/overview/hooks.js', () => ({
+	useOverviewData: (...args: unknown[]) => statsMock(...args),
 }));
 
 /**
@@ -114,7 +114,7 @@ beforeEach(() => {
 	statsMock.mockReturnValue({
 		data: undefined,
 		error: null,
-		isPending: true,
+		isLoading: true,
 		isPlaceholderData: false,
 	});
 	localStorage.clear();

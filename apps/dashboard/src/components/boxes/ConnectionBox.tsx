@@ -16,7 +16,7 @@ import type { CountRow } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { formatCompact, formatNumber } from '../../lib/format.js';
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, LIST_VARIANTS, ListBody, rowsTable } from './shared.js';
+import { ListBody, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 /** The scale, best first: the row order, and the order the compact bar stacks in. Mirrors
@@ -123,12 +123,6 @@ function TierBar({ rows }: { rows: readonly CountRow[] }): ReactElement {
 }
 
 export const connectionBox: TileDef = {
-	id: 'connection',
-	title: 'Connection',
-	size: 'lg',
-	expandable: true,
-	variants: LIST_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Connection', ordered(ctx.data.top_connections ?? [])),
 	render: (ctx, density, config) => {
 		const rows = ordered(ctx.data.top_connections ?? []);

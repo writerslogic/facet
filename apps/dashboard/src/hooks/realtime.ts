@@ -3,13 +3,18 @@
 // Auto-refresh pauses while the page is hidden (via useVisible) so a backgrounded tab stops hammering
 // the endpoint, and can also be paused explicitly so a number you are reading stops moving under you.
 
-import type { RealtimeSnapshot, StatsQuery, StatsResponse, StatsSummary } from '@facet/shared';
+import type {
+	RealtimeContextResponse,
+	RealtimeSnapshot,
+	StatsQuery,
+	StatsSummary,
+	StatsSummaryResponse,
+} from '@facet/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import { apiFetch, qs } from '../api.js';
 import { siteQueryKey } from '../lib/queryKeys.js';
 import { EMPTY_SEGMENT, type Segment, segmentParams } from '../lib/segment.js';
-import { useStats } from './stats.js';
 
 /** Poll cadence for the snapshot. Exported so the view can render a countdown that is actually true. */
 export const REFETCH_MS = 15_000;
@@ -37,7 +42,7 @@ export function useRealtime(apiKey: string, siteId: string, paused = false) {
 	return useQuery({
 		queryKey: siteQueryKey('realtime', siteId),
 		queryFn: () => apiFetch<RealtimeSnapshot>(`/api/stats/realtime?site_id=${siteId}`, apiKey),
-		enabled: Boolean(apiKey && siteId) && live,
+		enabled: Boolean(siteId) && live,
 		refetchInterval: live ? REFETCH_MS : false,
 		// Keep trying after a transient edge/network failure; the view also exposes an immediate retry.
 		// TanStack bounds the retry sequence, while the poll interval provides automatic recovery after
@@ -49,19 +54,16 @@ export function useRealtime(apiKey: string, siteId: string, paused = false) {
 }
 
 /**
- * Live breakdowns for the same trailing window as the snapshot, from the standard stats endpoint.
+ * Live breakdowns for the same trailing window as the snapshot, from the narrow context endpoint.
  *
- * This is `useStats` with a readiness gate, not a second implementation of it. Before the first
- * snapshot lands there is no window yet, and `start=0&end=0` is rejected by the server with
- * `bad_range` (400) — so the range itself is passed as the hook's `enabled`.
+ * Before the first snapshot lands there is no window yet, and `start=0&end=0` is rejected by the
+ * server with `bad_range` (400), so the range itself is part of the hook's readiness gate.
  *
- * The window is bucketed to the minute upstream, so the query key rolls once a minute; `useStats`'s
- * site-scoped `placeholderData` is what carries the previous rows across that roll instead of
- * blanking all four lists to a skeleton every 60s.
+ * The window is bucketed to the minute upstream, so the query key rolls once a minute; site-scoped
+ * placeholder data carries the previous rows across that roll instead of blanking the lists.
  *
- * `segment` is forwarded verbatim. Unlike the snapshot endpoint next door, `/api/stats` really does
- * narrow on all five dimensions (toStatsFilter → buildFilteredEventWhere), so these four lists are
- * the one part of the Realtime tab that can honour an active segment — and they do.
+ * `segment` is forwarded verbatim. Unlike the snapshot endpoint next door, the context read narrows
+ * its event-backed lists through the standard stats filter.
  */
 export function useRealtimeBreakdown(
 	apiKey: string,
@@ -78,7 +80,14 @@ export function useRealtimeBreakdown(
 		interval: 'hour',
 		...segmentParams(segment),
 	};
-	return useStats(apiKey, query, Boolean(siteId) && end > start && enabled);
+	return useQuery({
+		queryKey: siteQueryKey('realtime-context', siteId, query),
+		queryFn: () =>
+			apiFetch<RealtimeContextResponse>(`/api/stats/realtime-context?${qs(query)}`, apiKey),
+		enabled: Boolean(siteId) && end > start && enabled,
+		placeholderData: (previous, previousQuery) =>
+			previousQuery?.queryKey[1] === siteId ? previous : undefined,
+	});
 }
 
 /**
@@ -93,8 +102,8 @@ export function useRecentActivity(apiKey: string, siteId: string, enabled: boole
 		queryKey: siteQueryKey('realtime-recent', siteId, bucket),
 		queryFn: async (): Promise<StatsSummary> => {
 			const end = Date.now();
-			const res = await apiFetch<StatsResponse>(
-				`/api/stats?${qs({
+			const res = await apiFetch<StatsSummaryResponse>(
+				`/api/stats/summary?${qs({
 					site_id: siteId,
 					start: end - RECENT_MS,
 					end,
@@ -104,7 +113,7 @@ export function useRecentActivity(apiKey: string, siteId: string, enabled: boole
 			);
 			return res.summary;
 		},
-		enabled: Boolean(apiKey && siteId) && enabled,
+		enabled: Boolean(siteId) && enabled,
 		staleTime: HOUR_MS,
 	});
 }

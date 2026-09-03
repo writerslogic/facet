@@ -23,6 +23,7 @@ const SOURCES = {
 	anomalySql: 'apps/server/src/db/anomaly.ts',
 	sessions: 'apps/server/src/lib/sessions.ts',
 	statsRoutes: 'apps/server/src/routes/stats.ts',
+	analyticsQuery: 'apps/server/src/features/analytics/query.ts',
 	funnelRoutes: 'apps/server/src/routes/funnels.ts',
 	flagRoutes: 'apps/server/src/routes/flags.ts',
 	registry: 'apps/server/src/routes/registry.ts',

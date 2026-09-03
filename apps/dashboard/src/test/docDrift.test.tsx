@@ -257,9 +257,9 @@ const CONSTANT_CLAIMS: ConstantClaim[] = [
 	{
 		claim: 'the stats interval defaults to hour for ranges within the hourly threshold',
 		shownIn: `${DOCS_TSX} › "API reference"`,
-		decidedBy: 'apps/server/src/routes/stats.ts › interval fallback (`<= N * HOUR_MS`)',
+		decidedBy: 'apps/server/src/features/analytics/query.ts › statsInterval',
 		phrases: () => {
-			const hours = /<= (\d+) \* HOUR_MS/.exec(readSource('statsRoutes'))?.[1];
+			const hours = /<= (\d+) \* HOUR_MS/.exec(readSource('analyticsQuery'))?.[1];
 			return [`ranges of ${hours} hours or less`];
 		},
 	},
@@ -465,9 +465,13 @@ const PREDICATE_CLAIMS: PredicateClaim[] = [
 	{
 		claim: 'bounce rate is bounces divided by sessions over materialized sessions',
 		shownIn: `${DOCS_TSX} › "What the metrics mean" › Bounce rate`,
-		decidedBy: 'apps/server/src/db/stats.ts › engagement',
+		decidedBy: 'apps/server/src/db/stats.ts › engagementQuery + mapEngagement',
 		docSays: ['Share of sessions with one pageview or fewer'],
-		implementation: () => blockAfter('statsSql', 'export async function engagement('),
+		implementation: () =>
+			[
+				blockAfter('statsSql', 'function engagementQuery('),
+				blockAfter('statsSql', 'function mapEngagement('),
+			].join('\n'),
 		requires: ['bounce_rate: Number(row?.bounces ?? 0) / sessions', 'eventSessions'],
 	},
 	{
@@ -492,12 +496,12 @@ const PREDICATE_CLAIMS: PredicateClaim[] = [
 	{
 		claim: 'the Channels breakdown counts SESSIONS and omits the internal channel',
 		shownIn: `${DOCS_TSX} › "What the metrics mean" › Channels`,
-		decidedBy: 'apps/server/src/db/stats.ts › channels',
+		decidedBy: 'apps/server/src/db/stats.ts › channelsQuery',
 		docSays: [
 			'The breakdown counts sessions, not events, and omits internal',
 			'its total is externally-acquired sessions, not all sessions',
 		],
-		implementation: () => blockAfter('statsSql', 'export async function channels('),
+		implementation: () => blockAfter('statsSql', 'function channelsQuery('),
 		requires: ['schema.eventSessions', "ne(schema.eventSessions.channel, 'internal')"],
 	},
 	{
@@ -543,9 +547,9 @@ const PREDICATE_CLAIMS: PredicateClaim[] = [
 	{
 		claim: 'session-derived analytics materialize on an hourly cron',
 		shownIn: `${DOCS_TSX} › "What the metrics mean" › Sessions, and "Troubleshooting"`,
-		decidedBy: 'apps/server/src/db/stats.ts › sessionFreshness',
+		decidedBy: 'apps/server/src/db/stats.ts › mapFreshness',
 		docSays: ['materialized by an hourly cron', 'materialize on an hourly cron'],
-		implementation: () => blockAfter('statsSql', 'export async function sessionFreshness('),
+		implementation: () => blockAfter('statsSql', 'function mapFreshness('),
 		requires: ["materialization: 'hourly'"],
 	},
 	{

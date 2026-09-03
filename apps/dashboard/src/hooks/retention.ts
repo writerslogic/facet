@@ -16,7 +16,7 @@ export function useRetention(apiKey: string, siteId: string, range: Range, perio
 				`/api/stats/retention?site_id=${siteId}&start=${range.start}&end=${range.end}&period=${period}`,
 				apiKey,
 			),
-		enabled: Boolean(apiKey && siteId),
+		enabled: Boolean(siteId),
 		// Flipping weekly/daily is a re-read of the same triangle, so keep the current one on screen
 		// rather than collapsing the whole tab back to a skeleton for one round trip. Scoped to the
 		// same site: a site swap must NOT show the previous site's cohorts under the new label.

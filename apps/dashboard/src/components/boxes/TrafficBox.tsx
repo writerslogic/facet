@@ -23,8 +23,8 @@ import {
 	type TrafficVariant,
 } from '../TrafficChart.js';
 import { ChartEmpty } from '../charts/ChartChrome.js';
-import { ACCENT_OPTION, accentOf } from './shared.js';
-import type { TileConfig, TileConfigValue, TileDef, TileOption, TileVariant } from './types.js';
+import { accentOf } from './shared.js';
+import type { TileConfig, TileConfigValue, TileDef } from './types.js';
 
 // Timeline management is only visible after the hero tile expands. Keep its forms, category rail,
 // and delete-confirmation UI out of the Overview's first-interaction bundle.
@@ -33,29 +33,6 @@ const TimelineNotes = lazy(() =>
 );
 
 const DAY_MS = 86_400_000;
-
-/** Hero chart styles + options, chosen per-instance in Customize mode. */
-const TRAFFIC_VARIANTS: TileVariant[] = [
-	{ id: 'area', label: 'Area' },
-	{ id: 'line', label: 'Line' },
-	{ id: 'bars', label: 'Bars' },
-	{ id: 'smooth', label: 'Smooth' },
-];
-
-const TRAFFIC_OPTIONS: TileOption[] = [
-	{
-		key: 'scale',
-		label: 'Scale',
-		type: 'select',
-		choices: [
-			{ value: 'linear', label: 'Linear' },
-			{ value: 'log', label: 'Log' },
-		],
-		default: 'linear',
-	},
-	{ key: 'trend', label: 'Trend line', type: 'toggle', default: false },
-	ACCENT_OPTION,
-];
 
 /** A slot's persisted config is arbitrary stored strings, so both style fields are narrowed rather
  * than asserted — an unknown value falls back to the option's own default. */
@@ -295,13 +272,6 @@ function TrafficDetail({
 }
 
 export const trafficBox: TileDef = {
-	id: 'traffic',
-	title: 'Traffic over time',
-	size: 'xl',
-	emphasis: 'hero',
-	expandable: true,
-	variants: TRAFFIC_VARIANTS,
-	options: TRAFFIC_OPTIONS,
 	table: (ctx) => {
 		// An hourly range collapsed to 24 rows all stamped with the same date until the column carried
 		// the hour. UTC either way: the attribute-grade instant, not the reader's clock.

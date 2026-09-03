@@ -278,11 +278,15 @@ function BreakdownChart({
 	metric,
 	previous,
 	dimension,
+	filterKey,
+	onFilter,
 }: {
 	rows: BreakdownRow[];
 	metric: ExploreMetric;
 	previous: ReadonlyMap<string, BreakdownRow>;
 	dimension: BreakdownDimension;
+	filterKey?: SegmentKey;
+	onFilter: (key: SegmentKey, value: string) => void;
 }): ReactElement {
 	const shown = rows.slice(0, CHART_ROWS);
 	const max = shown.reduce((peak, row) => {
@@ -307,12 +311,23 @@ function BreakdownChart({
 							<span className="w-5 shrink-0 text-right text-[color:var(--faint)] tabular-nums">
 								{index + 1}
 							</span>
-							<span
-								className="truncate text-[color:var(--ink)]"
-								title={rowLabel(row)}
-							>
-								{rowLabel(row)}
-							</span>
+							{filterKey && row.key !== '' ? (
+								<button
+									type="button"
+									onClick={() => onFilter(filterKey, row.key)}
+									className="truncate text-left text-[color:var(--ink)] hover:underline"
+									title={`Cross-filter by ${rowLabel(row)}`}
+								>
+									{rowLabel(row)}
+								</button>
+							) : (
+								<span
+									className="truncate text-[color:var(--ink)]"
+									title={rowLabel(row)}
+								>
+									{rowLabel(row)}
+								</span>
+							)}
 						</div>
 						<div className="relative h-7 overflow-hidden rounded-md bg-[color:rgb(var(--hover))]">
 							{prior > 0 ? (
@@ -609,6 +624,8 @@ export function Explore({
 									metric={metric}
 									previous={previousRows}
 									dimension={dimension}
+									filterKey={filterKey}
+									onFilter={toggle}
 								/>
 							) : (
 								<BreakdownTable

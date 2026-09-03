@@ -102,9 +102,11 @@ describe('POST /api/auth/verify → GET /api/auth/me', () => {
 		const me = (await meRes.json()) as {
 			user: { email: string };
 			memberships: { role: string }[];
+			sites: unknown[];
 		};
 		expect(me.user.email).toBe(email);
 		expect(me.memberships[0]?.role).toBe('owner');
+		expect(me.sites).toEqual([]);
 	});
 
 	it('rejects an invalid token with 401', async () => {
@@ -216,6 +218,10 @@ describe('requireSiteAccess (session RBAC on /api/stats)', () => {
 		const memberCookie = `${SESSION_COOKIE}=${await signSession(member.id, secret, now, member.sessionEpoch)}`;
 		const ok = await app.request(`/api/stats${q}`, { headers: { cookie: memberCookie } }, env);
 		expect(ok.status).toBe(200);
+		const me = (await (
+			await app.request('/api/auth/me', { headers: { cookie: memberCookie } }, env)
+		).json()) as { sites: { id: string; name: string; role: string }[] };
+		expect(me.sites).toEqual([{ id: siteId, name: 'S', domain: 's.test', role: 'owner' }]);
 
 		// A user with no membership on this site's team is blocked.
 		const outsider = await upsertUserByEmail(env, 'outsider@example.com', now);

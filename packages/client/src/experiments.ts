@@ -2,7 +2,7 @@
 // in localStorage (`facet.exp`) that is NEVER sent to the server as identity. The server only
 // receives an aggregate `$exposure` event carrying { flag, variant }. Zero dependencies.
 
-import { localId } from './id.js';
+import { eventId, localId } from './id.js';
 import { getConfig, sendEvent } from './index.js';
 import { isOptedOut } from './optout.js';
 
@@ -31,6 +31,7 @@ let fetching = false;
 const exposed = new Set<string>();
 const inflight = new Set<string>();
 const retryAt = new Map<string, number>();
+const exposureIds = new Map<string, string>();
 
 // IMPORTANT: bounds concurrent in-flight exposures, so an unreachable collector cannot fan out one
 // request per known flag at once. Flags past the cap are picked up by a later assignment() call.
@@ -54,11 +55,14 @@ function recordExposure(flagKey: string, chosen: string): void {
 	if (held !== undefined && held > Date.now()) return;
 	if (inflight.size >= MAX_INFLIGHT_EXPOSURES) return;
 	inflight.add(flagKey);
-	void sendEvent('$exposure', { flag: flagKey, variant: chosen }, true).then((ok) => {
+	const id = exposureIds.get(flagKey) ?? eventId();
+	if (id) exposureIds.set(flagKey, id);
+	void sendEvent('$exposure', { flag: flagKey, variant: chosen }, true, id).then((ok) => {
 		inflight.delete(flagKey);
 		if (ok) {
 			exposed.add(flagKey);
 			retryAt.delete(flagKey);
+			exposureIds.delete(flagKey);
 		} else retryAt.set(flagKey, Date.now() + EXPOSURE_RETRY_MS);
 	});
 }

@@ -1,7 +1,7 @@
 // queryKeyReferencesSite is what App.tsx's site-switch effect uses to evict a leaving site's
 // cached queries. It only works because siteQueryKey guarantees the site id lands as a literal
 // key element — the one behavior worth pinning is that guarantee, for both a flat scope and a
-// nested one (e.g. CRM's `['crm', 'contacts']`), and that an unrelated key never false-matches.
+// nested one (e.g. `['stats', 'content']`), and that an unrelated key never false-matches.
 
 import { describe, expect, it } from 'vitest';
 import { queryKeyReferencesSite, siteQueryKey } from '../lib/queryKeys.js';
@@ -17,16 +17,16 @@ describe('siteQueryKey / queryKeyReferencesSite', () => {
 	});
 
 	it('places the site id right after a nested scope', () => {
-		expect(siteQueryKey(['crm', 'contacts'], 'site-1', { q: '' })).toEqual([
-			'crm',
-			'contacts',
+		expect(siteQueryKey(['stats', 'content'], 'site-1', { q: '' })).toEqual([
+			'stats',
+			'content',
 			'site-1',
 			{ q: '' },
 		]);
 	});
 
 	it('matches a key built by the factory for that site', () => {
-		const key = siteQueryKey(['crm', 'deals'], 'site-1', { offset: 0 });
+		const key = siteQueryKey(['stats', 'acquisition'], 'site-1', { interval: 'day' });
 		expect(queryKeyReferencesSite(key, 'site-1')).toBe(true);
 	});
 

@@ -68,7 +68,10 @@ describe('experimentResult', () => {
 				{ key: 'control', weight: 1 },
 				{ key: 'blue', weight: 1 },
 			],
+			status: 'active' as const,
 			active: true,
+			started_at: T0,
+			completed_at: null,
 			created_at: T0,
 		};
 

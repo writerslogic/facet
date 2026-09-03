@@ -112,6 +112,7 @@ describe('funnel report', () => {
 		const body = (await res.json()) as {
 			steps: { index: number; match_value: string; count: number }[];
 			overall_rate: number;
+			time_to_convert_ms: number | null;
 		};
 		// step0 (/a): v1,v2,v3,v4 -> 4. step1 (/b): v1,v2 -> 2. step2 (checkout): v1 -> 1.
 		expect(body.steps).toEqual([
@@ -120,5 +121,6 @@ describe('funnel report', () => {
 			{ index: 2, match_value: 'checkout', count: 1 },
 		]);
 		expect(body.overall_rate).toBe(1 / 4);
+		expect(body.time_to_convert_ms).toBe(2 * MIN);
 	});
 });

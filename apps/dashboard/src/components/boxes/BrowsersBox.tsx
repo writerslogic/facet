@@ -18,7 +18,7 @@ import type { CountRow } from '@facet/shared';
 import type { ReactElement } from 'react';
 import { formatNumber } from '../../lib/format.js';
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, LIST_VARIANTS, ListBody, accentOf, rowsTable } from './shared.js';
+import { ListBody, accentOf, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 /** The families `browserFamily` can emit that are Blink builds. Safari and Firefox are engines of
@@ -159,12 +159,6 @@ function EngineMix({
 }
 
 export const browsersBox: TileDef = {
-	id: 'browsers',
-	title: 'Browsers',
-	size: 'lg',
-	expandable: true,
-	variants: LIST_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Browser', ctx.data.top_browsers ?? []),
 	render: (ctx, density, config) => {
 		const rows = ctx.data.top_browsers ?? [];

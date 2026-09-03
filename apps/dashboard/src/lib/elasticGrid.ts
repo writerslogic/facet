@@ -1,9 +1,9 @@
 // The elastic-grid engine behind the bento board. Instead of CSS auto-flow with span classes, the board
 // places every tile explicitly (so it knows which column/row tracks each tile occupies) and drives the
-// grid's `fr` tracks from state. Expanding a tile inflates the tracks it spans and collapses the rest —
-// all on one plane, spring-interpolated — which is what replaces the old drill-down modal.
+// grid's `fr` tracks. Expanding a tile inflates the tracks it spans and collapses the rest on one plane;
+// CSS interpolates the single state change instead of React publishing geometry every animation frame.
 
-import { type RefObject, useEffect, useRef, useState } from 'react';
+import { type RefObject, useEffect, useState } from 'react';
 import type { TileDensity } from '../components/boxes/types.js';
 import type { SizeKey, Slot } from './tiles.js';
 
@@ -16,8 +16,8 @@ export interface Placement {
 
 type Span = readonly [cols: number, rows: number];
 
-// Column/row spans per size at the two column counts the board uses. Derived from the SIZES class table:
-// the 6-column spans match the `lg:` grid, the 2-column spans match the base (mobile) grid.
+// Column/row spans per size at the three column counts the board uses. The 4-column tier keeps a useful
+// ~160px minimum cell at tablet/small-desktop widths instead of jumping straight from 2 to 6 columns.
 const SPAN_LG: Record<SizeKey, Span> = {
 	kpi: [2, 1],
 	sm: [1, 2],
@@ -38,6 +38,16 @@ const SPAN_SM: Record<SizeKey, Span> = {
 	wide: [2, 2],
 	xl: [2, 2],
 };
+const SPAN_MD: Record<SizeKey, Span> = {
+	kpi: [1, 1],
+	sm: [1, 2],
+	md: [2, 2],
+	lg: [2, 2],
+	short: [2, 1],
+	tall: [2, 3],
+	wide: [4, 3],
+	xl: [3, 3],
+};
 
 /** Place slots into a `cols`-wide grid with greedy first-fit — the same sparse algorithm CSS grid uses for
  * auto-placement, so the packed result matches what the browser produced from the old span classes. Returns
@@ -46,7 +56,7 @@ export function packSlots(
 	slots: Slot[],
 	cols: number,
 ): { placements: Placement[]; rowCount: number } {
-	const spans = cols >= 6 ? SPAN_LG : SPAN_SM;
+	const spans = cols >= 6 ? SPAN_LG : cols >= 4 ? SPAN_MD : SPAN_SM;
 	const occ: boolean[][] = [];
 	const ensureRow = (r: number): void => {
 		while (occ.length <= r) occ.push(new Array(cols).fill(false));
@@ -148,13 +158,20 @@ function fillGaps(placements: Placement[], cols: number, rowCount: number): void
 	}
 }
 
-/** The column count for a container width — mirrors the Tailwind `lg` breakpoint the board shipped with. */
+/** The column count for a container width. Six columns need a genuinely wide canvas; the intermediate
+ * tier avoids squeezing six chart tracks into the roughly 1050px available inside a 1120px window. */
+export function columnsForWidth(width: number): number {
+	if (width >= 1200) return 6;
+	if (width >= 680) return 4;
+	return 2;
+}
+
 export function useColumns(ref: RefObject<HTMLElement | null>): number {
 	const [cols, setCols] = useState(6);
 	useEffect(() => {
 		const el = ref.current;
 		if (!el) return;
-		const measure = (): void => setCols(el.clientWidth >= 1024 ? 6 : 2);
+		const measure = (): void => setCols(columnsForWidth(el.clientWidth));
 		measure();
 		const ro = new ResizeObserver(measure);
 		ro.observe(el);
@@ -235,25 +252,21 @@ export function densityFor(width: number, height: number, focused: boolean): Til
  * than derived from the size token — see the note on TileDensity for why that distinction is the whole
  * point. Returns `default` until the first measurement so the first paint is never `compact`. */
 export function useTileDensity(ref: RefObject<HTMLElement | null>, focused: boolean): TileDensity {
-	const [box, setBox] = useState<{ w: number; h: number } | null>(null);
+	const [density, setDensity] = useState<TileDensity>(focused ? 'expanded' : 'default');
 	useEffect(() => {
 		const el = ref.current;
 		if (!el) return;
 		const measure = (): void => {
 			const r = el.getBoundingClientRect();
-			setBox((prev) =>
-				prev && Math.abs(prev.w - r.width) < 1 && Math.abs(prev.h - r.height) < 1
-					? prev
-					: { w: r.width, h: r.height },
-			);
+			const next = densityFor(r.width, r.height, focused);
+			setDensity((previous) => (previous === next ? previous : next));
 		};
 		measure();
 		const ro = new ResizeObserver(measure);
 		ro.observe(el);
 		return () => ro.disconnect();
-	}, [ref]);
-	if (!box) return focused ? 'expanded' : 'default';
-	return densityFor(box.w, box.h, focused);
+	}, [ref, focused]);
+	return focused ? 'expanded' : density;
 }
 
 /** The row gap the board renders between tiles (`gap-3`), needed to convert a pixel height into a row
@@ -274,6 +287,18 @@ export function maxFitRows(height: number): number {
 	return Math.max(1, Math.floor((height + ROW_GAP_PX) / (FIT_MIN_ROW_PX + ROW_GAP_PX)));
 }
 
+/** Number of leading slots whose complete placement fits within a resting row cap. Kept as a pure
+ * function so the live board and its loading skeleton cannot drift into different silhouettes. */
+export function fitVisibleCount(placements: readonly Placement[], rowCap: number): number {
+	return placements.reduce(
+		(count, placement, index) =>
+			placement.rowStart + placement.rowSpan - 1 <= rowCap
+				? Math.max(count, index + 1)
+				: count,
+		0,
+	);
+}
+
 /** The container's measured height in px, or 0 before the first measurement. */
 export function useBoardHeight(ref: RefObject<HTMLElement | null>): number {
 	const [h, setH] = useState(0);
@@ -290,7 +315,7 @@ export function useBoardHeight(ref: RefObject<HTMLElement | null>): number {
 }
 
 /** True when the container is too narrow for the elastic grid to stay legible — below this the board
- * switches to a full-size box carousel. */
+ * switches to a prioritized vertical feed. */
 export function useNarrow(ref: RefObject<HTMLElement | null>, threshold = 680): boolean {
 	const [narrow, setNarrow] = useState(false);
 	useEffect(() => {
@@ -317,69 +342,17 @@ function axisTarget(count: number, start: number | null, span: number): number[]
 	);
 }
 
-function reducedMotion(): boolean {
-	return (
-		typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches
-	);
-}
-
-// easeOutBack: eases to the target with a small overshoot so the settle reads as a spring rather than a slide.
-function springEase(p: number): number {
-	const c1 = 1.70158;
-	const c3 = c1 + 1;
-	return 1 + c3 * (p - 1) ** 3 + c1 * (p - 1) ** 2;
-}
-
-const SPRING_MS = 440;
-
-/** Spring-animate the column/row fr arrays toward the focused target. Display state is seeded from the
- * target so the first paint is already correct (tests and no-JS render see a valid grid synchronously);
- * only later focus changes animate. A change in track count (the layout itself changed) snaps rather than
- * tweening, since interpolating between different-length arrays is meaningless. */
+/** Resolve the focused track weights once per render. CSS interpolates compatible grid templates, so
+ * React and every observing chart no longer receive a state update on every animation frame. */
 export function useElasticTracks(
 	cols: number,
 	rows: number,
 	focus: Placement | null,
 ): { colFr: number[]; rowFr: number[] } {
-	const target = {
-		cols: axisTarget(cols, focus ? focus.colStart : null, focus?.colSpan ?? 0),
-		rows: axisTarget(rows, focus ? focus.rowStart : null, focus?.rowSpan ?? 0),
+	return {
+		colFr: axisTarget(cols, focus ? focus.colStart : null, focus?.colSpan ?? 0),
+		rowFr: axisTarget(rows, focus ? focus.rowStart : null, focus?.rowSpan ?? 0),
 	};
-	const [colFr, setColFr] = useState(target.cols);
-	const [rowFr, setRowFr] = useState(target.rows);
-	const disp = useRef({ cols: colFr, rows: rowFr });
-	disp.current = { cols: colFr, rows: rowFr };
-	const raf = useRef(0);
-	const key = `${cols}:${rows}:${focus ? `${focus.colStart}/${focus.colSpan}-${focus.rowStart}/${focus.rowSpan}` : 'rest'}`;
-
-	// biome-ignore lint/correctness/useExhaustiveDependencies: `key` encodes every input the animation reads; the target arrays are recomputed from it each run
-	useEffect(() => {
-		if (
-			disp.current.cols.length !== target.cols.length ||
-			disp.current.rows.length !== target.rows.length ||
-			reducedMotion()
-		) {
-			setColFr(target.cols);
-			setRowFr(target.rows);
-			return;
-		}
-		const fromCols = disp.current.cols.slice();
-		const fromRows = disp.current.rows.slice();
-		const start = performance.now();
-		const lerp = (from: number[], to: number[], e: number): number[] =>
-			from.map((v, i) => Math.max(0.05, v + ((to[i] ?? v) - v) * e));
-		const tick = (t: number): void => {
-			const p = Math.min(1, (t - start) / SPRING_MS);
-			const e = springEase(p);
-			setColFr(lerp(fromCols, target.cols, e));
-			setRowFr(lerp(fromRows, target.rows, e));
-			if (p < 1) raf.current = requestAnimationFrame(tick);
-		};
-		raf.current = requestAnimationFrame(tick);
-		return () => cancelAnimationFrame(raf.current);
-	}, [key]);
-
-	return { colFr, rowFr };
 }
 
 /** Turn an fr array into a grid-template string. Each track is `minmax(min, Nfr)`: with `min` at 0 a

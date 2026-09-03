@@ -3,9 +3,9 @@
 // deduped within the window — no cookies, no persistent id.
 //
 // The counters alone answered "how many", never "what/where", so this also renders the live
-// breakdowns for the same trailing window (pages, referrers, countries, devices) from the regular
-// stats endpoint, plus a rolling sparkline accumulated from successive polls so a trend is visible
-// without any new server surface.
+// breakdowns for the same trailing window (pages, events, referrers, countries, devices, channels)
+// from the narrow realtime-context endpoint, plus a rolling sparkline accumulated from successive
+// polls so a trend is visible.
 
 import type { CountRow } from '@facet/shared';
 import { ArrowDownRight, ArrowUpRight, CheckCircle2, Minus, Pause, Play } from 'lucide-react';
@@ -228,11 +228,11 @@ export function Realtime({
 
 	const isEmpty = Boolean(data) && data?.visitors === 0 && data?.pageviews === 0;
 
-	// Live breakdowns over the same trailing window, from the standard stats endpoint. Skipped while
+	// Live breakdowns over the same trailing window, from the narrow context endpoint. Skipped while
 	// the window is empty: the same window that reported zero pageviews cannot have any top rows.
 	const until = data ? Math.floor(data.until / BUCKET_MS) * BUCKET_MS : 0;
 	const windowMs = data?.window_ms ?? 0;
-	// The segment reaches the breakdowns (which /api/stats can narrow) but not the counters above
+	// The segment reaches the breakdowns but not the counters above
 	// (which come from an endpoint that takes site_id and nothing else) — SegmentNotice says so.
 	const breakdown = useRealtimeBreakdown(
 		apiKey,

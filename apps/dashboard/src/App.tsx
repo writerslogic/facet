@@ -25,7 +25,6 @@ const AllSites = lazy(() =>
 const Anomalies = lazy(() =>
 	import('./components/Anomalies.js').then((m) => ({ default: m.Anomalies })),
 );
-const Crm = lazy(() => import('./components/Crm.js').then((m) => ({ default: m.Crm })));
 const AskPanel = lazy(() =>
 	import('./components/AskPanel.js').then((m) => ({ default: m.AskPanel })),
 );
@@ -59,15 +58,17 @@ function TabFallback(): ReactElement {
 		</div>
 	);
 }
+import { useOverviewData } from './features/overview/hooks.js';
+import { comparisonRequirements, requirementsForLayout } from './features/overview/requirements.js';
 import {
 	useCreateTimelineAnnotation,
 	useDeleteTimelineAnnotation,
 	useTimelineAnnotations,
 } from './hooks/annotations.js';
 import { useAnomalies } from './hooks/anomaly.js';
-import { useCube } from './hooks/cube.js';
+import { PreviousPeriodProvider } from './hooks/compare.js';
 import { SegmentProvider, useSegment } from './hooks/segment.js';
-import { useCompareStats, useStats } from './hooks/stats.js';
+import { useBoardLayout } from './lib/boardLayout.js';
 import { cn } from './lib/cn.js';
 import {
 	type CubeAxis,
@@ -102,7 +103,6 @@ type View =
 	| 'retention'
 	| 'experiments'
 	| 'anomalies'
-	| 'crm'
 	| 'ask'
 	| 'docs';
 
@@ -167,7 +167,6 @@ const TABS: { id: View; label: string }[] = [
 	{ id: 'retention', label: 'Retention' },
 	{ id: 'experiments', label: 'Experiments' },
 	{ id: 'anomalies', label: 'Anomalies' },
-	{ id: 'crm', label: 'CRM' },
 	{ id: 'ask', label: 'Ask' },
 	{ id: 'docs', label: 'Documentation' },
 ];
@@ -211,6 +210,10 @@ function Overview({
 	const cubeFilter: CubeFilter = toCubeFilter(segment);
 	const serverFilter: ServerFilter = toServerFilter(segment);
 	const interval = preset === '24h' ? 'hour' : 'day';
+	const { slots } = useBoardLayout(siteId);
+	const requirements = requirementsForLayout(slots);
+	const previousRequirements = comparisonRequirements(slots);
+	const hasTrafficTile = slots.some((slot) => slot.tileId === 'traffic');
 
 	// Server-filter mode: a high-cardinality path/referrer filter is active, so the whole Overview is
 	// re-fetched server-side (the cube can't slice these). Active cube dims (device/country/channel) are
@@ -225,16 +228,17 @@ function Overview({
 		start: range.start,
 		end: range.end,
 		interval,
-		// In server mode the WHOLE segment travels to /api/stats, which applies all five dimensions
+		// In server mode the whole segment travels to each enabled slice, which applies all five dimensions
 		// (toStatsFilter → buildFilteredEventWhere), so a path drill-down and a device slice combine.
 		...(serverMode ? segmentParams(segment) : {}),
 	};
 
 	// Gate on the site too, not just the key: `site_id=` fails StatsQuerySchema's uuid check with a
 	// 400. Every sibling hook already gates on both; this was the odd one out.
-	const { data, isLoading, error, isFetching, refetch } = useStats(
+	const { data, cube, isLoading, error, isFetching, refetch } = useOverviewData(
 		apiKey,
 		query,
+		requirements,
 		Boolean(siteId),
 	);
 	// Always fetch the equal-length preceding period so KPI deltas are always on (no "Compare" toggle
@@ -246,11 +250,15 @@ function Overview({
 		end: range.start,
 		interval,
 	};
-	const compareStats = useCompareStats(apiKey, compareQuery, !anyFilter);
-	const cube = useCube(apiKey, siteId, range, interval);
+	const compareStats = useOverviewData(
+		apiKey,
+		compareQuery,
+		previousRequirements,
+		Boolean(siteId) && !anyFilter,
+	);
 	// Anomalies are layered onto the traffic chart as timeline markers (shared cache with the tab).
-	const anomalies = useAnomalies(apiKey, siteId, range);
-	const timelineAnnotations = useTimelineAnnotations(apiKey, siteId, range);
+	const anomalies = useAnomalies(apiKey, siteId, range, hasTrafficTile);
+	const timelineAnnotations = useTimelineAnnotations(apiKey, siteId, range, hasTrafficTile);
 	const createAnnotation = useCreateTimelineAnnotation(admin.token, siteId);
 	const deleteAnnotation = useDeleteTimelineAnnotation(admin.token, siteId);
 
@@ -285,7 +293,7 @@ function Overview({
 	// render from the sliced cube (no server round-trip); pageviews/events are exact, visitors is an
 	// upper bound flagged below. Engagement is session-derived (not in the cube), so it hides under a
 	// filter rather than showing unfiltered numbers next to filtered ones.
-	const cubeCells = cube.data?.cells ?? EMPTY_CELLS;
+	const cubeCells = cube?.cells ?? EMPTY_CELLS;
 	// In serverMode the fetched `data` is already fully filtered server-side, so use it directly; else
 	// the cube slices client-side. `cubeActive`/`anyFilter` are computed above (they gate the compare fetch).
 	const slice = cubeActive ? sliceCube(cubeCells, cubeFilter) : null;
@@ -336,7 +344,7 @@ function Overview({
 	const toggleServer = (key: keyof ServerFilter) => (value: string) =>
 		toggle(key as SegmentKey, value);
 	const dimRows = (axis: CubeAxis, fallback: typeof data.top_countries) =>
-		!serverMode && hasCube ? cubeBreakdown(cubeCells, cubeFilter, axis) : fallback;
+		hasCube ? cubeBreakdown(cubeCells, cubeFilter, axis) : fallback;
 	const dimSelect = (axis: CubeAxis) => (hasCube || serverMode ? toggleCube(axis) : undefined);
 
 	const filterBar = <CubeFilterBar cells={cubeCells} />;
@@ -415,20 +423,22 @@ function Overview({
 			) : (
 				filterBar
 			)}
-			<BentoBoard
-				ctx={ctx}
-				siteId={siteId}
-				editing={editing}
-				onEditingChange={onEditingChange}
-				footer={
-					slice?.visitorsApproximate ? (
-						<p className="shrink-0 text-xs text-[color:var(--faint)]">
-							Visitors is an upper bound under this slice; pageviews and events are
-							exact.
-						</p>
-					) : null
-				}
-			/>
+			<PreviousPeriodProvider value={anyFilter ? null : (compareStats.data ?? null)}>
+				<BentoBoard
+					ctx={ctx}
+					siteId={siteId}
+					editing={editing}
+					onEditingChange={onEditingChange}
+					footer={
+						slice?.visitorsApproximate ? (
+							<p className="shrink-0 text-xs text-[color:var(--faint)]">
+								Visitors is an upper bound under this slice; pageviews and events
+								are exact.
+							</p>
+						) : null
+					}
+				/>
+			</PreviousPeriodProvider>
 		</div>
 	);
 }
@@ -689,8 +699,6 @@ function Dashboard(): ReactElement {
 									range={range}
 									onInvestigate={investigate}
 								/>
-							) : view === 'crm' ? (
-								<Crm siteId={siteId} />
 							) : view === 'ask' ? (
 								<AskPanel apiKey={apiKey} siteId={siteId} range={range} />
 							) : (

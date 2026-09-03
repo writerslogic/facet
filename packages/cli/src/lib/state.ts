@@ -12,6 +12,7 @@ import {
 	UPSTREAM_ROUTE,
 	getDatabaseId,
 	getDatabaseName,
+	getDeadLetterQueueName,
 	getQueueName,
 	getRoutePattern,
 	getWorkerName,
@@ -92,6 +93,7 @@ export interface LocalState {
 	/** Configured database id, or null when still the placeholder. */
 	dbId: string | null;
 	queueName: string | null;
+	deadLetterQueueName: string | null;
 	queuesEnabled: boolean;
 	routePattern: string | null;
 	/** True when the route is the one the upstream repo ships, which a self-hoster cannot deploy. */
@@ -119,6 +121,7 @@ export function readLocalState(layout: Layout): LocalState {
 		dbName: getDatabaseName(source) ?? 'facet',
 		dbId: getDatabaseId(source),
 		queueName: getQueueName(source),
+		deadLetterQueueName: getDeadLetterQueueName(source),
 		queuesEnabled: hasQueues(source),
 		routePattern,
 		routeIsUpstream: routePattern === UPSTREAM_ROUTE,

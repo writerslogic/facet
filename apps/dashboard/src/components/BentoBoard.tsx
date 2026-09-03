@@ -8,6 +8,7 @@ import {
 	Check,
 	ChevronLeft,
 	ChevronRight,
+	Ellipsis,
 	GripVertical,
 	Plus,
 	RotateCcw,
@@ -15,11 +16,19 @@ import {
 	Trash2,
 } from 'lucide-react';
 import { type CSSProperties, type ReactElement, useEffect, useMemo, useRef, useState } from 'react';
-import { readBoardLayout, useBoardLayout, useBoardPrefs } from '../lib/boardLayout.js';
+import { activeImplementationGroups } from '../features/overview/requirements.js';
+import { loadTileGroup, useTileImplementation } from '../features/overview/runtime.js';
+import {
+	readBoardLayout,
+	readBoardPrefs,
+	useBoardLayout,
+	useBoardPrefs,
+} from '../lib/boardLayout.js';
 import { cn } from '../lib/cn.js';
 import {
 	type Placement,
 	ROW_FLOOR,
+	fitVisibleCount,
 	maxFitRows,
 	packSlots,
 	rowMinimums,
@@ -39,12 +48,12 @@ import {
 	TILE_REGISTRY,
 	type TileConfig,
 	type TileContext,
-	type TileDef,
+	type TileMetadata,
 	newSlotUid,
 	resolveTileConfig,
 } from '../lib/tiles.js';
 import { usePopoverDismiss } from '../lib/usePopoverDismiss.js';
-import { BentoCarousel } from './BentoCarousel.js';
+import { BentoMobileFeed } from './BentoMobileFeed.js';
 import { BentoTile } from './BentoTile.js';
 import { DataTable } from './DataTable.js';
 import { LivePill } from './LivePill.js';
@@ -82,6 +91,9 @@ export function BentoBoard({
 	const [dragIndex, setDragIndex] = useState<number | null>(null);
 	const [overIndex, setOverIndex] = useState<number | null>(null);
 	const [adding, setAdding] = useState(false);
+	// An explicit disclosure is session-local: persisted fit preferences stay untouched, but the reader
+	// gets the complete board immediately and can scroll it for the rest of this visit.
+	const [revealedSite, setRevealedSite] = useState<string | null>(null);
 	// Announced to assistive tech after a keyboard move; the moved tile is re-focused by its uid.
 	const [announce, setAnnounce] = useState('');
 	const focusUid = useRef<string | null>(null);
@@ -100,23 +112,22 @@ export function BentoBoard({
 		() => packSlots(slots, cols),
 		[slots, cols],
 	);
+	const implementationGroups = useMemo(() => activeImplementationGroups(slots), [slots]);
+	useEffect(() => {
+		for (const group of implementationGroups) {
+			if (group !== 'core') void loadTileGroup(group).catch(() => undefined);
+		}
+	}, [implementationGroups]);
 
 	// Fit mode (the default) is a promise that the board never scrolls, and the only honest way to keep
 	// it as tiles are added is to show fewer tiles rather than shorter ones — under about 56px a tile has
-	// no rendering left, not even its compact one. Tiles past the cap are withheld and counted, never
-	// silently dropped.
-	const rowCap = prefs.scroll ? Number.POSITIVE_INFINITY : maxFitRows(boardHeight);
-	const visibleCount = useMemo(
-		() =>
-			placements.reduce(
-				(n, p, i) => (p.rowStart + p.rowSpan - 1 <= rowCap ? Math.max(n, i + 1) : n),
-				0,
-			),
-		[placements, rowCap],
-	);
-	const visible = prefs.scroll ? slots : slots.slice(0, visibleCount);
+	// no rendering left, not even its compact one. Editing and explicit disclosure always render all.
+	const layoutScrolls = prefs.scroll || editing || revealedSite === siteId;
+	const rowCap = layoutScrolls ? Number.POSITIVE_INFINITY : maxFitRows(boardHeight);
+	const visibleCount = useMemo(() => fitVisibleCount(placements, rowCap), [placements, rowCap]);
+	const visible = layoutScrolls ? slots : slots.slice(0, visibleCount);
 	const withheld = slots.length - visible.length;
-	const rowCount = prefs.scroll ? packedRows : Math.min(packedRows, rowCap);
+	const rowCount = layoutScrolls ? packedRows : Math.min(packedRows, rowCap);
 
 	// A stale focus (its tile was removed, or fit mode withheld it) resolves to no focus; the grid rests.
 	const focusedIdx = focused ? visible.findIndex((s) => s.uid === focused) : -1;
@@ -125,7 +136,7 @@ export function BentoBoard({
 	const { colFr, rowFr } = useElasticTracks(cols, rowCount, focusPlacement);
 	// Per-track, not one global floor: see rowMinimums. In fit mode there are no floors at all, because
 	// a floor is what would force a scrollbar the user turned off.
-	const rowMins = prefs.scroll ? rowMinimums(rowCount, focusPlacement) : '0';
+	const rowMins = layoutScrolls ? rowMinimums(rowCount, focusPlacement) : '0';
 
 	useEffect(() => {
 		if (!focusUid.current) return;
@@ -185,10 +196,12 @@ export function BentoBoard({
 		setSlots(slots.map((s, j) => (j === i ? { ...s, config: { ...s.config, ...patch } } : s)));
 	const remove = (i: number): void => setSlots(slots.filter((_, j) => j !== i));
 	const add = (tileId: string): void => {
+		const uid = newSlotUid(tileId);
+		focusUid.current = uid;
 		setSlots([
 			...slots,
 			{
-				uid: newSlotUid(tileId),
+				uid,
 				tileId,
 				size: TILE_REGISTRY[tileId]?.size ?? 'md',
 			},
@@ -201,7 +214,7 @@ export function BentoBoard({
 	return (
 		<div ref={boardRef} className="flex min-h-0 flex-1 flex-col gap-3">
 			{narrow && !editing ? (
-				<BentoCarousel slots={slots} ctx={ctx} />
+				<BentoMobileFeed slots={slots} ctx={ctx} />
 			) : (
 				<>
 					<div className="flex shrink-0 items-center justify-end gap-2">
@@ -259,10 +272,13 @@ export function BentoBoard({
 								</button>
 							</>
 						) : withheld > 0 ? (
-							<p className="text-[color:var(--faint)] text-xs">
-								{withheld} more {withheld === 1 ? 'tile' : 'tiles'} hidden to fit
-								the window. Turn on board scrolling in Settings to show them.
-							</p>
+							<button
+								type="button"
+								onClick={() => setRevealedSite(siteId)}
+								className="inline-flex min-h-9 items-center rounded-lg border border-[color:rgb(var(--border))] px-3 font-medium text-[color:var(--muted)] text-xs transition hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
+							>
+								Show {withheld} more
+							</button>
 						) : null}
 					</div>
 
@@ -273,8 +289,8 @@ export function BentoBoard({
 						// never scrolls). Focusing lowers the floor to FOCUS_ROW_FLOOR rather than removing it: the
 						// neighbours give up their resting composition for their compact one, not their legibility.
 						className={cn(
-							'grid min-h-0 flex-1 gap-3',
-							prefs.scroll ? 'overflow-y-auto' : 'overflow-hidden',
+							'grid min-h-0 flex-1 gap-3 transition-[grid-template-columns,grid-template-rows] duration-300 ease-out motion-reduce:transition-none',
+							layoutScrolls ? 'overflow-y-auto' : 'overflow-hidden',
 						)}
 						style={{
 							gridTemplateColumns: trackTemplate(colFr),
@@ -299,7 +315,8 @@ export function BentoBoard({
 									editing={editing}
 									focused={slot.uid === activeFocus}
 									anyFocus={activeFocus !== null}
-									showTable={tableUid === slot.uid && Boolean(def.table)}
+									showTable={tableUid === slot.uid && Boolean(def.hasTable)}
+									deferContent={layoutScrolls && !editing && i >= 6}
 									isOver={
 										editing &&
 										overIndex === i &&
@@ -370,82 +387,128 @@ function TileControls({
 	onRemove: () => void;
 }): ReactElement {
 	const [open, setOpen] = useState(false);
+	const [replacing, setReplacing] = useState(false);
 	const wrapRef = useRef<HTMLDivElement>(null);
 	const toggleRef = useRef<HTMLButtonElement>(null);
-	usePopoverDismiss(open, () => setOpen(false), wrapRef, toggleRef);
+	usePopoverDismiss(
+		open,
+		() => {
+			setOpen(false);
+			setReplacing(false);
+		},
+		wrapRef,
+		toggleRef,
+	);
+	const itemClass =
+		'flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-left text-[color:var(--ink)] text-sm transition hover:bg-[color:rgb(var(--hover))] disabled:opacity-35';
 	return (
-		<div className="pointer-events-auto flex items-center gap-1">
+		<div className="pointer-events-auto relative" ref={wrapRef}>
 			<button
+				ref={toggleRef}
 				type="button"
-				onClick={() => onMove(-1)}
-				disabled={!canEarlier}
-				aria-label={`Move ${title} earlier`}
-				className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-[color:var(--ink)] disabled:opacity-30"
+				onClick={() => {
+					setOpen((value) => !value);
+					setReplacing(false);
+				}}
+				aria-label={`Configure ${title}`}
+				aria-haspopup="menu"
+				aria-expanded={open}
+				title={`Configure ${title}`}
+				className="flex size-10 items-center justify-center rounded-lg text-[color:var(--faint)] transition hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
 			>
-				<ChevronLeft className="h-3.5 w-3.5" aria-hidden="true" />
+				<Ellipsis className="h-4 w-4" aria-hidden="true" />
 			</button>
-			<button
-				type="button"
-				onClick={() => onMove(1)}
-				disabled={!canLater}
-				aria-label={`Move ${title} later`}
-				className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-[color:var(--ink)] disabled:opacity-30"
-			>
-				<ChevronRight className="h-3.5 w-3.5" aria-hidden="true" />
-			</button>
-			<button
-				type="button"
-				onClick={onResize}
-				aria-label={`Resize ${title}, currently ${SIZE_LABEL[slot.size]}`}
-				className="rounded px-1.5 py-0.5 font-semibold text-[10px] text-[color:var(--faint)] uppercase ring-1 ring-[color:rgb(var(--border))] transition hover:text-[color:var(--ink)]"
-			>
-				{SIZE_LABEL[slot.size]}
-			</button>
-			<div className="relative" ref={wrapRef}>
-				<button
-					ref={toggleRef}
-					type="button"
-					onClick={() => setOpen((v) => !v)}
-					aria-label={`Replace ${title}`}
-					aria-haspopup="true"
-					aria-expanded={open}
-					className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-[color:var(--ink)]"
+			{open ? (
+				<div
+					role="menu"
+					className="absolute right-0 z-30 mt-1 max-h-72 w-56 overflow-y-auto rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-1 shadow-float ring-1 ring-[color:rgb(var(--border))]"
 				>
-					<Settings2 className="h-3.5 w-3.5" aria-hidden="true" />
-				</button>
-				{open ? (
-					<div className="absolute right-0 z-30 mt-1 max-h-64 w-48 overflow-y-auto rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-1 shadow-float ring-1 ring-[color:rgb(var(--border))]">
-						{Object.values(TILE_REGISTRY).map((def) => (
+					{replacing ? (
+						<>
 							<button
-								key={def.id}
 								type="button"
-								aria-current={def.id === slot.tileId}
-								onClick={() => {
-									onReplace(def.id);
-									setOpen(false);
-									toggleRef.current?.focus();
-								}}
-								className={cn(
-									'block w-full rounded-md px-2.5 py-1.5 text-left text-sm transition hover:bg-[color:rgb(var(--hover))]',
-									def.id === slot.tileId
-										? 'font-semibold text-accent-700'
-										: 'text-[color:var(--ink)] hover:text-[color:var(--ink)]',
-								)}
+								role="menuitem"
+								onClick={() => setReplacing(false)}
+								className={itemClass}
 							>
-								{def.title}
+								<ChevronLeft className="h-4 w-4" aria-hidden="true" /> Back
 							</button>
-						))}
-					</div>
-				) : null}
-			</div>
-			<button
-				type="button"
-				onClick={onRemove}
-				aria-label={`Remove ${title}`}
-				className="rounded p-0.5 text-[color:var(--faint)] transition hover:text-neg"
-			>
-				<Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-			</button>
+							{Object.values(TILE_REGISTRY).map((def) => (
+								<button
+									key={def.id}
+									type="button"
+									role="menuitemradio"
+									aria-checked={def.id === slot.tileId}
+									onClick={() => {
+										onReplace(def.id);
+										setOpen(false);
+										setReplacing(false);
+										toggleRef.current?.focus();
+									}}
+									className={cn(
+										itemClass,
+										def.id === slot.tileId && 'font-semibold text-accent-300',
+									)}
+								>
+									{def.title}
+								</button>
+							))}
+						</>
+					) : (
+						<>
+							<button
+								type="button"
+								role="menuitem"
+								onClick={() => onMove(-1)}
+								disabled={!canEarlier}
+								className={itemClass}
+							>
+								<ChevronLeft className="h-4 w-4" aria-hidden="true" /> Move earlier
+							</button>
+							<button
+								type="button"
+								role="menuitem"
+								onClick={() => onMove(1)}
+								disabled={!canLater}
+								className={itemClass}
+							>
+								<ChevronRight className="h-4 w-4" aria-hidden="true" /> Move later
+							</button>
+							<button
+								type="button"
+								role="menuitem"
+								onClick={() => {
+									onResize();
+									setOpen(false);
+								}}
+								className={itemClass}
+							>
+								<Settings2 className="h-4 w-4" aria-hidden="true" /> Resize ·{' '}
+								{SIZE_LABEL[slot.size]}
+							</button>
+							<button
+								type="button"
+								role="menuitem"
+								onClick={() => setReplacing(true)}
+								className={itemClass}
+							>
+								<Settings2 className="h-4 w-4" aria-hidden="true" /> Replace tile
+							</button>
+							<button
+								type="button"
+								role="menuitem"
+								onClick={() => {
+									setOpen(false);
+									onRemove();
+								}}
+								className={cn(itemClass, 'text-neg')}
+							>
+								<Trash2 className="h-4 w-4" aria-hidden="true" /> Remove tile
+							</button>
+						</>
+					)}
+				</div>
+			) : null}
 		</div>
 	);
 }
@@ -503,7 +566,7 @@ function TileConfigPanel({
 	config,
 	onConfig,
 }: {
-	def: TileDef;
+	def: TileMetadata;
 	config: TileConfig;
 	onConfig: (patch: TileConfig) => void;
 }): ReactElement {
@@ -594,19 +657,31 @@ function TileConfigPanel({
  * re-layout flash when data lands. */
 export function BentoSkeleton({ siteId }: { siteId: string }): ReactElement {
 	const slots = readBoardLayout(siteId);
+	const prefs = readBoardPrefs(siteId);
 	const gridRef = useRef<HTMLDivElement>(null);
 	const cols = useColumns(gridRef);
-	const { placements, rowCount } = packSlots(slots, cols);
+	const boardHeight = useBoardHeight(gridRef);
+	const { placements, rowCount: packedRows } = packSlots(slots, cols);
+	const rowCap = prefs.scroll ? Number.POSITIVE_INFINITY : maxFitRows(boardHeight);
+	const visibleCount = fitVisibleCount(placements, rowCap);
+	const visiblePlacements = prefs.scroll ? placements : placements.slice(0, visibleCount);
+	const rowCount = prefs.scroll ? packedRows : Math.min(packedRows, rowCap);
 	return (
 		<div
 			ref={gridRef}
-			className="grid min-h-0 flex-1 gap-3 overflow-y-auto"
+			className={cn(
+				'grid min-h-0 flex-1 gap-3',
+				prefs.scroll ? 'overflow-y-auto' : 'overflow-hidden',
+			)}
 			style={{
 				gridTemplateColumns: trackTemplate(new Array(cols).fill(1)),
-				gridTemplateRows: trackTemplate(new Array(rowCount).fill(1), ROW_FLOOR),
+				gridTemplateRows: trackTemplate(
+					new Array(rowCount).fill(1),
+					prefs.scroll ? ROW_FLOOR : '0',
+				),
 			}}
 		>
-			{placements.map((p, i) => (
+			{visiblePlacements.map((p, i) => (
 				<div
 					// biome-ignore lint/suspicious/noArrayIndexKey: fixed placeholder list with no identity
 					key={i}
@@ -638,6 +713,7 @@ function BoardTile({
 	focused,
 	anyFocus,
 	showTable,
+	deferContent,
 	isOver,
 	dragging,
 	registerRef,
@@ -654,7 +730,7 @@ function BoardTile({
 	onDragOver,
 	onDrop,
 }: {
-	def: TileDef;
+	def: TileMetadata;
 	slot: Slot;
 	index: number;
 	total: number;
@@ -664,6 +740,7 @@ function BoardTile({
 	focused: boolean;
 	anyFocus: boolean;
 	showTable: boolean;
+	deferContent: boolean;
 	isOver: boolean;
 	dragging: boolean;
 	registerRef: (el: HTMLDivElement | null) => void;
@@ -683,7 +760,33 @@ function BoardTile({
 	const ref = useRef<HTMLDivElement>(null);
 	const density = useTileDensity(ref, focused);
 	const config = resolveTileConfig(def, slot.config);
-	const tableData = showTable ? (def.table?.(ctx, config) ?? null) : null;
+	const { implementation, error: implementationError } = useTileImplementation(
+		def.id,
+		def.implementationGroup,
+	);
+	const tableData = showTable ? (implementation?.table?.(ctx, config) ?? null) : null;
+	const [contentReady, setContentReady] = useState(!deferContent);
+	useEffect(() => {
+		if (!deferContent || focused || editing || showTable) {
+			setContentReady(true);
+			return;
+		}
+		const element = ref.current;
+		if (!element || typeof IntersectionObserver === 'undefined') {
+			setContentReady(true);
+			return;
+		}
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (!entries.some((entry) => entry.isIntersecting)) return;
+				setContentReady(true);
+				observer.disconnect();
+			},
+			{ rootMargin: '300px 0px' },
+		);
+		observer.observe(element);
+		return () => observer.disconnect();
+	}, [deferContent, editing, focused, showTable]);
 
 	return (
 		<div
@@ -747,6 +850,7 @@ function BoardTile({
 			}}
 		>
 			<BentoTile
+				title={def.title}
 				label={def.selfLabeled ? undefined : def.title}
 				emphasis={def.emphasis}
 				focused={focused}
@@ -764,7 +868,7 @@ function BoardTile({
 							onRemove={onRemove}
 						/>
 					) : (
-						def.action?.(ctx)
+						implementation?.action?.(ctx)
 					)
 				}
 				// Expandable from ANY position, including while another tile is focused: expanding a
@@ -772,19 +876,29 @@ function BoardTile({
 				// tile withholds the control, because it shows Close instead.
 				onExpand={!editing && def.expandable && !focused ? onExpand : undefined}
 				onClose={focused ? onClose : undefined}
-				onToggleTable={def.table && !editing ? onToggleTable : undefined}
+				onToggleTable={def.hasTable && !editing ? onToggleTable : undefined}
 				tableActive={showTable}
-				className="h-full"
-				bodyClassName={
-					def.expandable || focused || showTable ? 'overflow-y-auto' : undefined
-				}
+				className={cn('h-full', editing && 'overflow-visible')}
+				bodyClassName={focused || showTable ? 'overflow-y-auto' : undefined}
 			>
 				{editing ? (
 					<TileConfigPanel def={def} config={config} onConfig={onConfig} />
 				) : tableData ? (
 					<DataTable data={tableData} />
+				) : !contentReady || (!implementation && !implementationError) ? (
+					<div
+						className="h-full animate-pulse rounded-xl bg-[color:rgb(var(--hover))]"
+						aria-hidden="true"
+					/>
+				) : implementationError ? (
+					<p
+						role="alert"
+						className="flex h-full items-center text-[color:var(--muted)] text-xs"
+					>
+						Could not load this tile.
+					</p>
 				) : (
-					def.render(ctx, density, config)
+					implementation?.render(ctx, density, config)
 				)}
 			</BentoTile>
 		</div>

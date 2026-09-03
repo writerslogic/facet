@@ -117,6 +117,7 @@ async function getJson<T>(
 ): Promise<Fetched<T>> {
 	try {
 		const res = await fetchImpl(url, {
+			credentials: 'same-origin',
 			headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
 		});
 		if (res.status === 404) return { kind: 'missing' };

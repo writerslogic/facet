@@ -3,16 +3,10 @@
 // Not drillable: OS is not a filterable dimension in the API (see BrowsersBox).
 
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, LIST_VARIANTS, ListBody, rowsTable } from './shared.js';
+import { ListBody, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 export const osBox: TileDef = {
-	id: 'os',
-	title: 'Operating systems',
-	size: 'lg',
-	expandable: true,
-	variants: LIST_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('OS', ctx.data.top_os ?? []),
 	render: (ctx, density, config) => (
 		<ListBody

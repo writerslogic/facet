@@ -79,7 +79,10 @@ function experiments(active = true) {
 						{ key: 'control', weight: 1 },
 						{ key: 'blue', weight: 1 },
 					],
+					status: active ? ('active' as const) : ('completed' as const),
 					active,
+					started_at: Date.now() - 3 * 86_400_000,
+					completed_at: active ? null : Date.now(),
 					created_at: Date.now() - 3 * 86_400_000,
 				},
 			],
@@ -264,14 +267,14 @@ describe('Experiments', () => {
 	it('shows the experiment running state and age', () => {
 		renderExperiments();
 		expect(screen.getByText('Running')).toBeInTheDocument();
-		expect(screen.getByText(/day 4/)).toBeInTheDocument();
+		expect(screen.getByText(/3d ago/)).toBeInTheDocument();
 	});
 
-	it('marks a stopped experiment in the status and the selector', () => {
+	it('marks a completed experiment in the status and the selector', () => {
 		experimentsMock.mockReturnValue(experiments(false));
 		renderExperiments();
-		expect(screen.getByText('Stopped')).toBeInTheDocument();
-		expect(screen.getByRole('option', { name: 'CTA color (stopped)' })).toBeInTheDocument();
+		expect(screen.getByText('Completed')).toBeInTheDocument();
+		expect(screen.getByRole('option', { name: 'CTA color (completed)' })).toBeInTheDocument();
 	});
 
 	it('distinguishes a variant with no exposures from a losing one', () => {

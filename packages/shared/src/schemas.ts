@@ -20,6 +20,9 @@ export const PropsSchema = v.pipe(
 );
 
 export const CollectPayloadSchema = v.object({
+	// A client-minted id makes an exact request retry idempotent across Worker isolates and queue
+	// redelivery. Optional for compatibility with older tracker bundles.
+	event_id: v.optional(v.pipe(v.string(), v.uuid())),
 	site_id: v.pipe(v.string(), v.uuid()),
 	hostname: v.pipe(v.string(), v.minLength(1), v.maxLength(253)),
 	path: v.pipe(
@@ -48,6 +51,8 @@ export const CollectPayloadSchema = v.object({
 // First-party server-to-server event: beacon shape minus site_id (taken from the API key), plus
 // optional ip/user_agent to attribute the end-user's visit.
 export const ServerEventSchema = v.object({
+	// Callers should reuse this id when retrying an event after an ambiguous network failure.
+	event_id: v.optional(v.pipe(v.string(), v.uuid())),
 	hostname: v.pipe(v.string(), v.minLength(1), v.maxLength(253)),
 	path: v.pipe(
 		v.string(),
@@ -313,11 +318,15 @@ export const ExperimentVariantSchema = v.object({
 	weight: v.pipe(v.number(), v.finite(), v.minValue(0)),
 });
 
+export const ExperimentStatusSchema = v.picklist(['draft', 'active', 'completed']);
+
 export const ExperimentSchema = v.object({
 	site_id: v.pipe(v.string(), v.uuid()),
 	name: v.pipe(v.string(), v.minLength(1), v.maxLength(100)),
 	flag_key: v.pipe(v.string(), v.minLength(1), v.maxLength(60)),
 	variants: v.pipe(v.array(ExperimentVariantSchema), v.minLength(2), v.maxLength(8)),
+	status: v.optional(ExperimentStatusSchema),
+	/** Deprecated request compatibility; new clients should send `status`. */
 	active: v.optional(v.boolean()),
 });
 

@@ -2,11 +2,10 @@
 // tokens, and team roles. This is entirely separate from the cookieless VISITOR model — these are the
 // humans who log in to view analytics. No password is ever stored; only a SHA-256 of a one-time token.
 
-import { and, eq, gte, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, gte, isNull, sql } from 'drizzle-orm';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { Env } from '../env.js';
-import { chunked } from './constants.js';
 import { constantTimeEqualHex, randomHex, sha256Hex } from './crypto.js';
 
 /** The session cookie name, shared by the auth routes and the site-access middleware. */
@@ -301,46 +300,6 @@ export async function upsertUserByEmail(
 	return { id: userId, email: e, sessionEpoch: 0 };
 }
 
-/**
- * Emails for a set of operator ids, keyed by id.
- *
- * Exists for the CRM audit log, which stores `actor_user_id` because that is the stable identifier
- * and because a log that copied an email would still hold it after the account was closed. An id
- * nothing can resolve is not accountability, though, so the reader resolves it — and only the reader,
- * so the resolution follows the account rather than being frozen at write time.
- *
- * An id with no row simply does not appear: a closed account leaves entries that name it and cannot
- * be given a name back, which is the honest answer rather than an invented one.
- *
- * CHUNKED at `D1_MAX_IN_PARAMS`. One audit page can carry up to 100 distinct actors, and D1's ceiling
- * is exactly 100 bound parameters — so a full page would sit precisely on the cliff, and stay correct
- * only while two unrelated limits keep their current relationship. This takes the same margin every
- * other `IN` list in the codebase takes instead.
- */
-export async function emailsByUserId(env: Env, userIds: string[]): Promise<Map<string, string>> {
-	const byId = new Map<string, string>();
-	const unique = [...new Set(userIds)];
-	for (const batch of chunked(unique)) {
-		const rows = await db(env)
-			.select({ id: schema.users.id, email: schema.users.email })
-			.from(schema.users)
-			.where(inArray(schema.users.id, batch));
-		for (const row of rows) byId.set(row.id, row.email);
-	}
-	return byId;
-}
-
-/** Whether a user id resolves to a row. Used to validate a foreign key across the CRM/analytics DB
- * boundary — D1 cannot enforce it as a constraint, so a caller-supplied id is checked here instead. */
-export async function userExists(env: Env, userId: string): Promise<boolean> {
-	const row = await db(env)
-		.select({ id: schema.users.id })
-		.from(schema.users)
-		.where(eq(schema.users.id, userId))
-		.get();
-	return Boolean(row);
-}
-
 /** A user's team memberships (team id + role). */
 export async function userMemberships(
 	env: Env,
@@ -356,6 +315,31 @@ export async function userMemberships(
 	return rows
 		.filter((r) => isRole(r.role))
 		.map((r) => ({ teamId: r.teamId, role: r.role as Role }));
+}
+
+export interface SessionSite {
+	id: string;
+	name: string;
+	domain: string;
+	role: Role;
+}
+
+/** Sites visible to a signed-in operator, with the role inherited from each owning team. */
+export async function userSites(env: Env, userId: string): Promise<SessionSite[]> {
+	const rows = await db(env)
+		.select({
+			id: schema.sites.id,
+			name: schema.sites.name,
+			domain: schema.sites.domain,
+			role: schema.memberships.role,
+		})
+		.from(schema.memberships)
+		.innerJoin(schema.sites, eq(schema.sites.teamId, schema.memberships.teamId))
+		.where(eq(schema.memberships.userId, userId))
+		.orderBy(asc(schema.sites.name), asc(schema.sites.id));
+	return rows
+		.filter((row) => isRole(row.role))
+		.map((row) => ({ ...row, role: row.role as Role }));
 }
 
 /**

@@ -28,25 +28,7 @@ import { DeltaBadge } from '../Delta.js';
 import { InspectButton, TopList, hueForTitle } from '../TopList.js';
 import { ChartEmpty } from '../charts/ChartChrome.js';
 import { DrillPanel, type DrillSpec, type DrillState, undrillableNote, useDrill } from './drill.js';
-import type { TableData, TileConfig, TileDensity, TileOption, TileVariant } from './types.js';
-
-/** A shared "Color" option: pick one of the active palette's data colours for a box; boxes apply it to
- * their chart stroke + surface tint. Palette tokens resolve per theme, so a box stays on-palette. */
-export const ACCENT_OPTION: TileOption = {
-	key: 'accent',
-	label: 'Color',
-	type: 'color',
-	choices: [
-		{ value: 'auto', label: 'Auto (prism)' },
-		{ value: 'var(--d1)', label: 'Indigo' },
-		{ value: 'var(--d2)', label: 'Violet' },
-		{ value: 'var(--d3)', label: 'Fuchsia' },
-		{ value: 'var(--c4)', label: 'Cyan' },
-		{ value: 'var(--c5)', label: 'Amber' },
-		{ value: 'var(--pos)', label: 'Green' },
-	],
-	default: 'auto',
-};
+import type { TableData, TileConfig, TileDensity } from './types.js';
 
 /** The explicit accent colour chosen for a box, or `undefined` for "auto" (keep the box's prism default).
  * A box passes this straight to a viz's `accent` prop — undefined means "use the built-in ramp". */
@@ -67,30 +49,6 @@ export function rowsTable(nameCol: string, rows: CountRow[]): TableData {
 		]),
 	};
 }
-
-/** The chart styles a dimension list can wear (declared by every list box). */
-export const LIST_VARIANTS: TileVariant[] = [
-	{ id: 'bars', label: 'Bars' },
-	{ id: 'donut', label: 'Donut' },
-	{ id: 'table', label: 'Table' },
-];
-
-/** The customization options a dimension list exposes: how many rows to show, and an accent colour. */
-export const LIST_OPTIONS: TileOption[] = [
-	{
-		key: 'rows',
-		label: 'Rows',
-		type: 'select',
-		choices: [
-			{ value: 'auto', label: 'Auto' },
-			{ value: '5', label: 'Top 5' },
-			{ value: '8', label: 'Top 8' },
-			{ value: '12', label: 'Top 12' },
-		],
-		default: 'auto',
-	},
-	ACCENT_OPTION,
-];
 
 /** The row cap chosen for a list, or `undefined` for "auto" (height-fit bars, sensible default elsewhere). */
 function rowLimitOf(config: TileConfig | undefined): number | undefined {

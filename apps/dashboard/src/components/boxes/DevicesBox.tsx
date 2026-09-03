@@ -17,7 +17,7 @@ import type { ReactElement } from 'react';
 import { cn } from '../../lib/cn.js';
 import { ChartEmpty } from '../charts/ChartChrome.js';
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, LIST_VARIANTS, ListBody, accentOf, rowsTable } from './shared.js';
+import { ListBody, accentOf, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 /** Hue per device key, keyed rather than positional so the bar and legend keep the same colours when
@@ -142,12 +142,6 @@ function DeviceMix({
 }
 
 export const devicesBox: TileDef = {
-	id: 'devices',
-	title: 'Devices',
-	size: 'lg',
-	expandable: true,
-	variants: LIST_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Device', ctx.dimRows('device', ctx.data.top_devices)),
 	render: (ctx, density, config) => {
 		const rows = ctx.dimRows('device', ctx.data.top_devices);
@@ -172,7 +166,6 @@ export const devicesBox: TileDef = {
 				compare={{
 					current: ctx.data.top_devices ?? [],
 					select: (p) => p.top_devices,
-					note: 'measured over all events for this key, not just the pageviews shown',
 				}}
 				drill={drillSpec(ctx, 'device')}
 			/>

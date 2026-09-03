@@ -721,9 +721,12 @@ describe('cron alerting', () => {
 		await webhookDestination();
 		await seedSite(1);
 
+		const attemptTimes = [NOW, NOW + 6 * 60_000, NOW + 17 * 60_000];
 		for (let run = 1; run <= 3; run++) {
 			const { calls, fetchImpl } = recorder('reject');
-			await expect(runAlerts(env as Env, NOW, fetchImpl)).resolves.toBeUndefined();
+			await expect(
+				runAlerts(env as Env, attemptTimes[run - 1] ?? NOW, fetchImpl),
+			).resolves.toBeUndefined();
 			expect(calls).toHaveLength(1);
 			const rows = await deliveryRows();
 			expect(rows).toHaveLength(1);
@@ -733,9 +736,31 @@ describe('cron alerting', () => {
 
 		// Attempts exhausted: a permanently broken endpoint stops costing work every hour.
 		const fourth = recorder('reject');
-		await runAlerts(env as Env, NOW, fourth.fetchImpl);
+		await runAlerts(env as Env, NOW + 30 * 60_000, fourth.fetchImpl);
 		expect(fourth.calls).toHaveLength(0);
 		expect((await deliveryRows())[0]?.attempts).toBe(3);
+	});
+
+	it('reuses the stored alert fact on a later successful retry', async () => {
+		await webhookDestination();
+		await seedSite(1);
+		const first = recorder('http500');
+		await runAlerts(env as Env, NOW, first.fetchImpl);
+		const original = JSON.parse(String(first.calls[0]?.init.body)) as AnomalyAlertPayload;
+
+		const beforeBackoff = recorder();
+		await runAlerts(env as Env, NOW + 4 * 60_000, beforeBackoff.fetchImpl);
+		expect(beforeBackoff.calls).toHaveLength(0);
+
+		const retried = recorder();
+		await runAlerts(env as Env, NOW + 6 * 60_000, retried.fetchImpl);
+		expect(retried.calls).toHaveLength(1);
+		const payload = JSON.parse(String(retried.calls[0]?.init.body)) as AnomalyAlertPayload;
+		expect(payload.dedupe_key).toBe(original.dedupe_key);
+		expect(payload.anomaly).toEqual(original.anomaly);
+		expect(payload.delivery_id).not.toBe(original.delivery_id);
+		expect(payload).toMatchObject({ attempt: 2, issued_at: NOW + 6 * 60_000 });
+		expect((await deliveryRows())[0]).toMatchObject({ status: 'delivered', attempts: 2 });
 	});
 
 	it('treats a non-2xx response as a failure rather than a delivery', async () => {

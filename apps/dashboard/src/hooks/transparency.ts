@@ -56,7 +56,8 @@ export interface ProofRef {
 /** GET that treats 404 as a null result (checkpoint absent / bucket not yet logged), not an error. */
 async function fetchMaybe<T>(path: string, apiKey: string): Promise<T | null> {
 	const res = await fetch(path, {
-		headers: { Authorization: `Bearer ${apiKey}` },
+		credentials: 'same-origin',
+		headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
 	});
 	if (res.status === 404) return null;
 	if (!res.ok) {
@@ -74,9 +75,9 @@ export function useCheckpoint(apiKey: string) {
 		// Keyed by apiKey so a profile switch fetches the new deployment's checkpoint rather than serving
 		// the previous one from cache (the checkpoint is a per-deployment artifact). Every VerifiedMetric on
 		// a page uses the same apiKey, so the intended dedupe within a profile is preserved.
-		queryKey: ['transparency-checkpoint', apiKey],
+		queryKey: ['transparency-checkpoint'],
 		queryFn: () => fetchMaybe<SignedCheckpoint>('/api/transparency/checkpoint', apiKey),
-		enabled: Boolean(apiKey),
+		enabled: true,
 		staleTime: 5 * 60 * 1000,
 	});
 }
@@ -97,7 +98,7 @@ export function useInclusionProof(apiKey: string, siteId: string, ref: ProofRef 
 			});
 			return fetchMaybe<InclusionProof>(`/api/transparency/inclusion?${params}`, apiKey);
 		},
-		enabled: Boolean(apiKey && siteId && ref),
+		enabled: Boolean(siteId && ref),
 		staleTime: 5 * 60 * 1000,
 	});
 }
@@ -125,7 +126,7 @@ export function useProvenance(
 			const { runProvenance } = await import('../lib/provenance.js');
 			return runProvenance({ apiKey, siteId, ref, claim });
 		},
-		enabled: enabled && Boolean(apiKey),
+		enabled: enabled && Boolean(siteId),
 		retry: false,
 		staleTime: 5 * 60 * 1000,
 	});

@@ -23,6 +23,7 @@ import {
 	signSession,
 	upsertUserByEmail,
 	userMemberships,
+	userSites,
 } from '../lib/accounts.js';
 import { requireAdmin } from '../lib/auth.js';
 import { requireSameOrigin } from '../lib/csrf.js';
@@ -164,7 +165,11 @@ authRoutes.get('/me', async (c) => {
 	if (!user) {
 		throw new ApiError('unauthenticated', 401);
 	}
-	return c.json({ user, memberships: await userMemberships(c.env, user.id) });
+	const [memberships, sites] = await Promise.all([
+		userMemberships(c.env, user.id),
+		userSites(c.env, user.id),
+	]);
+	return c.json({ user, memberships, sites });
 });
 
 authRoutes.post('/logout', requireSameOrigin, (c) => {

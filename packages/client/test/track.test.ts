@@ -40,6 +40,7 @@ describe('track', () => {
 		expect(sent[0]?.url).toBe('https://analytics.example.com/api/collect');
 		const body = JSON.parse(sent[0]?.body ?? '{}') as Record<string, unknown>;
 		expect(body.site_id).toBe(SITE);
+		expect(body.event_id).toMatch(/^[0-9a-f-]{36}$/);
 		expect(body.hostname).toBe('shop.example.com');
 		expect(body.path).toBe('/pricing');
 		expect(body.name).toBe('signup');

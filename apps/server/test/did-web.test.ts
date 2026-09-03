@@ -101,9 +101,8 @@ describe('GET /.well-known/facet-privacy.json', () => {
 		};
 		expect(manifest.deployment.privacy.storesRawIp).toBe(false);
 		expect(manifest.deployment.schemaHash).toMatch(/^[0-9a-f]{64}$/);
-		// The test env binds CRM_DB, so the manifest carries the CRM claims and the pd: namespace
-		// those terms need in order to resolve. Both shapes are pinned in dpv.test.ts; what this
-		// asserts is that the served document tracks the binding rather than a constant.
+		// The test env binds CRM_DB, so the manifest carries the pseudonymous CRM claims and the pd:
+		// namespace those terms need in order to resolve.
 		expect(manifest.dpv['dpv:hasPurpose']).toEqual([
 			'dpv:ServiceOptimisation',
 			'dpv:CustomerRelationshipManagement',

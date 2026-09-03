@@ -164,9 +164,8 @@ export async function resolvePolicy(env: Env, siteId: string): Promise<IdentityP
 	return { tier, window };
 }
 
-/** The `identity_salts` key for one site's window. Declared once because the consent grant, the
- * revoke, and the CRM's linkage check must all name the same string; three copies of a template
- * literal is three chances for one of them to drift and silently stop resolving. */
+/** The `identity_salts` key for one site's window. Consent grant, ingest, and revoke all use this one
+ * representation so the privacy boundary cannot drift between call sites. */
 export function saltScope(siteId: string, window: SaltWindow, key: string): string {
 	return `${siteId}:${window}:${key}`;
 }

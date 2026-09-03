@@ -115,12 +115,8 @@ adminRoutes.patch(
 );
 
 /**
- * End every session an operator holds. The lever the CRM audit log points at.
- *
- * The log names the operator whose session read the contact table; without this, the only person who
- * could act on that was the operator themselves, which is precisely the wrong person when the
- * question is whether their session was stolen. `/api/auth/logout-everywhere` is the self-service
- * form of the same call.
+ * End every session an operator holds. `/api/auth/logout-everywhere` is the self-service form of the
+ * same call; this admin path handles a session the operator cannot safely revoke themselves.
  *
  * Behind `ADMIN_TOKEN` rather than a team role, and that is a deliberate limit rather than an
  * oversight. Team admins have no user-management surface at all today — they cannot list their

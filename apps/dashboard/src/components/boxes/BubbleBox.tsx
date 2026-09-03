@@ -290,24 +290,6 @@ function SegmentsBody({
 }
 
 export const bubbleBox: TileDef = {
-	id: 'segments',
-	title: 'Segments',
-	// Same reason as the clock: a packed field needs area on both axes, not a wide letterbox.
-	size: 'tall',
-	expandable: true,
-	options: [
-		{
-			key: 'axis',
-			label: 'Dimension',
-			type: 'select',
-			choices: [
-				{ value: 'channel', label: 'Channel' },
-				{ value: 'device', label: 'Device' },
-				{ value: 'country', label: 'Country' },
-			],
-			default: 'channel',
-		},
-	],
 	table: (ctx, config) => {
 		const axis = axisOf(config);
 		const split = rangeSplit(ctx.data.series, ctx.flowCells);

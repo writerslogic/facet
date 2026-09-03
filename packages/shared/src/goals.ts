@@ -44,4 +44,6 @@ export interface FunnelStepCount {
 export interface FunnelReportResult {
 	steps: FunnelStepCount[];
 	overall_rate: number;
+	/** Median elapsed time from the first matched step to completion; null with no completions. */
+	time_to_convert_ms?: number | null;
 }

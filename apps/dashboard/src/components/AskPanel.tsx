@@ -103,6 +103,10 @@ export function errorHint(message: string): string {
 			return 'The API key was rejected. Check the key on the active profile in Settings.';
 		case 'request_failed':
 			return 'The request did not reach the server. Check your connection and ask again.';
+		case 'request_cancelled':
+			return 'The question was cancelled. No answer was recorded; you can edit it and ask again.';
+		case 'request_timeout':
+			return 'The question timed out after 20 seconds. Try a shorter range or ask again.';
 		default:
 			return `Something went wrong: ${message}`;
 	}
@@ -253,7 +257,8 @@ function IntentReadout({ intent, range }: { intent: QueryIntent; range: Range })
 				That is the model's only output — a query shape picked from a fixed list, validated
 				before it runs. The numbers above are computed from your own aggregates over{' '}
 				<span className="text-[color:var(--ink)]">{formatWindow(range)}</span>. No SQL is
-				ever generated from the question.
+				ever generated from the question. Source: Facet's site-scoped aggregate stats
+				helpers; CRM records and contact fields are never added to the model request.
 			</p>
 		</div>
 	);
@@ -431,13 +436,22 @@ export function AskPanel({
 				// A bare "Thinking…" hides where the time goes and, worse, hides that the model step is
 				// only a translation step. Naming both stages makes the boundary legible while waiting.
 				<div className="surface rounded-xl p-5" aria-live="polite" aria-busy="true">
-					<p className="inline-flex items-center gap-2 font-medium text-[color:var(--ink)] text-sm">
-						<Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-						{/* The input holds exactly what was submitted (run() writes it back), so it
-						    names the in-flight question — `context` still points at the previous
-						    answer until this one lands. */}
-						Answering "{question}"
-					</p>
+					<div className="flex items-start justify-between gap-3">
+						<p className="inline-flex items-center gap-2 font-medium text-[color:var(--ink)] text-sm">
+							<Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+							{/* The input holds exactly what was submitted (run() writes it back), so it
+							    names the in-flight question — `context` still points at the previous
+							    answer until this one lands. */}
+							Answering "{question}"
+						</p>
+						<button
+							type="button"
+							onClick={mutation.cancel}
+							className="btn-ghost rounded-lg px-2.5 py-1 text-xs font-medium"
+						>
+							Cancel
+						</button>
+					</div>
 					<ol
 						data-chrome
 						className="mt-2 space-y-1 text-[color:var(--muted)] text-xs marker:text-[color:var(--faint)]"

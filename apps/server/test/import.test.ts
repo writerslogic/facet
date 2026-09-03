@@ -123,6 +123,25 @@ describe('POST /api/import', () => {
 		expect(count?.n).toBe(2);
 	});
 
+	it('refuses to rewrite a daily rollup already committed to the transparency log', async () => {
+		const start = Date.parse(`${new Date(day).toISOString().slice(0, 10)}T00:00:00.000Z`);
+		await env.DB.prepare(
+			'INSERT INTO mmr_leaves (leaf_no, node_index, rollup_key, leaf_hash) VALUES (?, ?, ?, ?)',
+		)
+			.bind(0, 0, `${siteId}|legacy.example.com|${start}|day`, '00'.repeat(32))
+			.run();
+
+		const res = await post({ site_id: siteId, events: [event()] });
+		expect(res.status).toBe(409);
+		expect((await res.json()) as { error: string }).toMatchObject({
+			error: 'signed_history_conflict',
+		});
+		const count = await env.DB.prepare('SELECT COUNT(*) AS n FROM events WHERE site_id = ?')
+			.bind(siteId)
+			.first<{ n: number }>();
+		expect(count?.n).toBe(0);
+	});
+
 	// Regression: `isBot('')` is true, so an import carrying no user-agents would otherwise be dropped
 	// in full and reported as a successful import of nothing.
 	it('keeps rows that carry no user-agent, and still drops a declared bot', async () => {

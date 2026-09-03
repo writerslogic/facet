@@ -9,16 +9,10 @@
 
 import { ChartEmpty } from '../charts/ChartChrome.js';
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, LIST_VARIANTS, ListBody, rowsTable } from './shared.js';
+import { ListBody, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 export const referrersBox: TileDef = {
-	id: 'referrers',
-	title: 'Referrers',
-	size: 'lg',
-	expandable: true,
-	variants: LIST_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Referrer', ctx.data.top_referrers),
 	render: (ctx, density, config) => {
 		const rows = ctx.data.top_referrers;

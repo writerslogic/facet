@@ -328,7 +328,7 @@ function mockApi(): void {
 					? { anomalies: [] }
 					: path.includes('/api/stats/retention')
 						? { period: 'week', cohorts: [], note: 'n' }
-						: path.includes('/api/stats/realtime')
+						: path.includes('/api/stats/realtime?')
 							? { window_ms: 300000, visitors: 3, pageviews: 9, until: Date.now() }
 							: emptyStats;
 			return { ok: true, json: async () => body };
@@ -388,12 +388,15 @@ describe('a segment follows the reader across tabs', () => {
 		fireEvent.click(screen.getByRole('tab', { name: 'Realtime' }));
 		await waitFor(() =>
 			expect(
-				requested.some((u) => u.startsWith('/api/stats?') && u.includes('device=mobile')),
+				requested.some(
+					(u) =>
+						u.startsWith('/api/stats/realtime-context?') && u.includes('device=mobile'),
+				),
 			).toBe(true),
 		);
 		// The snapshot endpoint takes site_id only; sending a filter it ignores would be a lie in the
 		// network tab as much as on screen.
-		expect(requested.filter((u) => u.includes('/api/stats/realtime')).join()).not.toContain(
+		expect(requested.filter((u) => u.includes('/api/stats/realtime?')).join()).not.toContain(
 			'device=',
 		);
 	});

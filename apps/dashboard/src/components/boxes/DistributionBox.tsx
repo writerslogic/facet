@@ -263,14 +263,6 @@ function DistributionBody({
 }
 
 export const distributionBox: TileDef = {
-	id: 'distribution',
-	title: 'Session distribution',
-	size: 'lg',
-	expandable: true,
-	variants: [
-		{ id: 'duration', label: 'Duration' },
-		{ id: 'pageviews', label: 'Pages per session' },
-	],
 	// No `table`: this box's numbers are not on `ctx`, they come from its own request. The chart
 	// already ships every statistic and every bin in its sr-only table, so a second, empty grid here
 	// would be worse than none.

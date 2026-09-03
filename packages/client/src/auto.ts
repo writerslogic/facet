@@ -59,10 +59,10 @@ function boot(): void {
 	if (typeof document === 'undefined') return;
 	const el = document.currentScript as HTMLScriptElement | null;
 	setOptOutScript(el);
-	const siteId = el?.getAttribute('data-site-id') ?? undefined;
+	const siteId = el?.getAttribute('data-site-id');
 	if (!siteId) return;
 
-	let host = el?.getAttribute('data-host') ?? '';
+	let host = el?.getAttribute('data-host') || '';
 	if (!host && el?.src) {
 		try {
 			host = new URL(el.src).origin;

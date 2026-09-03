@@ -22,7 +22,6 @@ import { and, eq, sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import * as v from 'valibot';
 import { getEvalFlags, listActiveFlags, listFlags } from '../db/catalog.js';
-import { uniqueConstraintText } from '../db/crm.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
@@ -31,6 +30,7 @@ import { isGpcOptOut } from '../lib/gpc.js';
 import { validationErrorHook } from '../lib/http.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, country, device } from '../lib/request-meta.js';
+import { uniqueConstraintText } from '../lib/sqlite.js';
 
 const UuidSchema = v.pipe(v.string(), v.uuid());
 

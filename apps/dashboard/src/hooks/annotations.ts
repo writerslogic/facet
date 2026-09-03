@@ -12,7 +12,12 @@ import { apiFetch } from '../api.js';
 import { siteQueryKey } from '../lib/queryKeys.js';
 import type { Range } from '../state.js';
 
-export function useTimelineAnnotations(apiKey: string, siteId: string, range: Range) {
+export function useTimelineAnnotations(
+	apiKey: string,
+	siteId: string,
+	range: Range,
+	enabled = true,
+) {
 	return useQuery({
 		queryKey: siteQueryKey('annotations', siteId, range),
 		queryFn: () =>
@@ -20,7 +25,7 @@ export function useTimelineAnnotations(apiKey: string, siteId: string, range: Ra
 				`/api/annotations?site_id=${siteId}&start=${range.start}&end=${range.end}`,
 				apiKey,
 			),
-		enabled: Boolean(apiKey && siteId),
+		enabled: Boolean(siteId) && enabled,
 	});
 }
 

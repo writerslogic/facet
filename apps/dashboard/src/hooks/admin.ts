@@ -117,6 +117,15 @@ export function useCreateFunnel(token: string, siteId: string) {
 	});
 }
 
+export function useUpdateFunnel(token: string, siteId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({ id, body }: { id: string; body: FunnelInput }) =>
+			adminPatch<{ funnel: Funnel }>(`/api/funnels/${id}`, token, body),
+		onSuccess: () => qc.invalidateQueries({ queryKey: ['admin', 'funnels', siteId] }),
+	});
+}
+
 export function useDeleteFunnel(token: string, siteId: string) {
 	const qc = useQueryClient();
 	return useMutation({
@@ -143,6 +152,18 @@ export function useCreateExperiment(token: string, siteId: string) {
 	return useMutation({
 		mutationFn: (body: ExperimentInput) =>
 			adminPost<{ experiment: Experiment }>('/api/experiments', token, body),
+		onSuccess: () =>
+			qc.invalidateQueries({
+				queryKey: ['admin', 'experiments', siteId],
+			}),
+	});
+}
+
+export function useUpdateExperiment(token: string, siteId: string) {
+	const qc = useQueryClient();
+	return useMutation({
+		mutationFn: ({ id, body }: { id: string; body: ExperimentInput }) =>
+			adminPatch<{ experiment: Experiment }>(`/api/experiments/${id}`, token, body),
 		onSuccess: () =>
 			qc.invalidateQueries({
 				queryKey: ['admin', 'experiments', siteId],

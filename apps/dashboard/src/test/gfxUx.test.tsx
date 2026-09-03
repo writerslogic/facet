@@ -40,7 +40,10 @@ const EXPS = [
 			{ key: 'control', weight: 1 },
 			{ key: 'blue', weight: 1 },
 		],
+		status: 'active' as const,
 		active: true,
+		started_at: 0,
+		completed_at: null,
 		created_at: 0,
 	},
 	{
@@ -52,7 +55,10 @@ const EXPS = [
 			{ key: 'control', weight: 1 },
 			{ key: 'bold', weight: 1 },
 		],
+		status: 'active' as const,
 		active: true,
+		started_at: 0,
+		completed_at: null,
 		created_at: 0,
 	},
 ];

@@ -11,7 +11,7 @@
 import type { CountRow } from '@facet/shared';
 import { uiLocale } from '../../lib/datetime.js';
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, LIST_VARIANTS, ListBody, rowsTable } from './shared.js';
+import { ListBody, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 let namerLocale: string | undefined | null = null;
@@ -57,12 +57,6 @@ function namedRows(rows: readonly CountRow[] | undefined, primaryOnly: boolean):
 }
 
 export const languagesBox: TileDef = {
-	id: 'languages',
-	title: 'Languages',
-	size: 'lg',
-	expandable: true,
-	variants: LIST_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Language', namedRows(ctx.data.top_languages, false)),
 	render: (ctx, density, config) => {
 		// Compact is a single truncating line, so the label has to be one word wide: "American English"

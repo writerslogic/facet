@@ -15,7 +15,7 @@ export function useExperiments(apiKey: string, siteId: string) {
 				`/api/stats/experiments?${new URLSearchParams({ site_id: siteId })}`,
 				apiKey,
 			),
-		enabled: Boolean(apiKey && siteId),
+		enabled: Boolean(siteId),
 		// The catalog only changes when someone edits it in Settings, so don't re-fetch it every
 		// time the tab regains focus while a reader is comparing variants.
 		staleTime: 60_000,
@@ -46,7 +46,7 @@ export function useExperimentResult(
 	return useQuery({
 		queryKey: siteQueryKey('experiment-result', siteId, experimentId, goal?.id, range),
 		queryFn: () => apiFetch<ExperimentResult>(`/api/stats/experiment?${params}`, apiKey),
-		enabled: Boolean(apiKey && siteId && experimentId && goal) && enabled,
+		enabled: Boolean(siteId && experimentId && goal) && enabled,
 		// A date-range change re-queries the same experiment + goal: keep the current table on screen
 		// instead of dropping to a skeleton (the view dims it while it is stale). Deliberately scoped
 		// to the same site, experiment AND goal — showing one experiment's or one goal's rates under

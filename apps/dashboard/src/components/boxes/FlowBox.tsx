@@ -24,11 +24,6 @@ function routes(ctx: TileContext): Route[] {
 }
 
 export const flowBox: TileDef = {
-	id: 'flow',
-	title: 'Traffic flow',
-	size: 'tall',
-	emphasis: 'flow',
-	expandable: true,
 	table: (ctx) => ({
 		columns: ['From', 'To', 'Pageviews'],
 		rows: routes(ctx).map((r) => [r.from, r.to, r.pageviews]),

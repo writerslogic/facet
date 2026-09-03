@@ -6,6 +6,18 @@ import { useCallback, useEffect, useState } from 'react';
 import { DEFAULT_LAYOUT, SIZES, type Slot, TILE_REGISTRY, newSlotUid } from './tiles.js';
 
 const KEY = (siteId: string): string => `facet.board.${siteId}`;
+const LAYOUT_EVENT = 'facet:board-layout';
+
+interface LayoutEventDetail {
+	siteId: string;
+	slots: Slot[];
+}
+
+function announceLayout(siteId: string, slots: Slot[]): void {
+	window.dispatchEvent(
+		new CustomEvent<LayoutEventDetail>(LAYOUT_EVENT, { detail: { siteId, slots } }),
+	);
+}
 
 function sanitize(slots: unknown): Slot[] | null {
 	if (!Array.isArray(slots)) return null;
@@ -40,8 +52,8 @@ function sanitize(slots: unknown): Slot[] | null {
 
 const PREFS_KEY = (siteId: string): string => `facet.boardPrefs.${siteId}`;
 
-/** Per-site board preferences. `scroll` off (the default) makes the Overview fit its viewport, which
- * caps how many tiles the board can show; on, the board overflows and scrolls internally. */
+/** Per-site board preferences. `scroll` off keeps the resting Overview at a glance; editing and an
+ * explicit Show more disclosure still render the complete layout in a board-owned scroller. */
 export interface BoardPrefs {
 	scroll: boolean;
 }
@@ -110,11 +122,18 @@ export function useBoardLayout(siteId: string): {
 
 	useEffect(() => {
 		setSlotsState(readBoardLayout(siteId));
+		const onLayout = (event: Event): void => {
+			const detail = (event as CustomEvent<LayoutEventDetail>).detail;
+			if (detail.siteId === siteId) setSlotsState(detail.slots);
+		};
+		window.addEventListener(LAYOUT_EVENT, onLayout);
+		return () => window.removeEventListener(LAYOUT_EVENT, onLayout);
 	}, [siteId]);
 
 	const setSlots = useCallback(
 		(next: Slot[]) => {
 			setSlotsState(next);
+			announceLayout(siteId, next);
 			try {
 				localStorage.setItem(KEY(siteId), JSON.stringify(next));
 			} catch {
@@ -126,6 +145,7 @@ export function useBoardLayout(siteId: string): {
 
 	const reset = useCallback(() => {
 		setSlotsState(DEFAULT_LAYOUT);
+		announceLayout(siteId, DEFAULT_LAYOUT);
 		try {
 			localStorage.removeItem(KEY(siteId));
 		} catch {

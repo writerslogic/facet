@@ -3,7 +3,7 @@
 // and no dead cells (gap-fill), wide tiles span the grid, and a narrow grid clamps oversized tiles.
 
 import { describe, expect, it } from 'vitest';
-import { packSlots, trackTemplate } from '../lib/elasticGrid.js';
+import { columnsForWidth, fitVisibleCount, packSlots, trackTemplate } from '../lib/elasticGrid.js';
 import { DEFAULT_LAYOUT, type Slot } from '../lib/tiles.js';
 
 /** True if any two placements share a cell — the packer must never overlap tiles. */
@@ -64,9 +64,25 @@ describe('packSlots', () => {
 		expect(placements[0]?.colSpan).toBe(6);
 	});
 
-	it('packs into more rows on the narrow (2-col) grid — the board shrinks them to fit', () => {
-		const { rowCount } = packSlots(DEFAULT_LAYOUT, 2);
-		expect(rowCount).toBeGreaterThan(6);
+	it('keeps the hero and KPI stack intact on the intermediate four-column grid', () => {
+		const { placements, rowCount } = packSlots(DEFAULT_LAYOUT, 4);
+		expect(hasOverlap(placements)).toBe(false);
+		expect(placements[0]).toEqual({ colStart: 1, colSpan: 3, rowStart: 1, rowSpan: 3 });
+		expect(placements.slice(1, 4).map((placement) => placement.colStart)).toEqual([4, 4, 4]);
+		expect(rowCount).toBe(5);
+	});
+
+	it('selects two, four, and six columns from minimum usable widths', () => {
+		expect(columnsForWidth(390)).toBe(2);
+		expect(columnsForWidth(768)).toBe(4);
+		expect(columnsForWidth(1120)).toBe(4);
+		expect(columnsForWidth(1440)).toBe(6);
+	});
+
+	it('counts only complete leading placements within a fit cap', () => {
+		const { placements } = packSlots(DEFAULT_LAYOUT, 4);
+		expect(fitVisibleCount(placements, 3)).toBe(4);
+		expect(fitVisibleCount(placements, 5)).toBe(DEFAULT_LAYOUT.length);
 	});
 });
 

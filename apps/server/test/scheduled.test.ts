@@ -105,6 +105,31 @@ describe('runScheduled', () => {
 		expect(await count('SELECT COUNT(*) AS n FROM events WHERE created_at = ?', OLD)).toBe(0);
 	});
 
+	it('does not make an independent job wait behind a slow one', async () => {
+		const order: string[] = [];
+		const jobs: ScheduledJob[] = [
+			{
+				name: 'slow',
+				cadence: '1h',
+				run: async () => {
+					order.push('slow-start');
+					await new Promise((resolve) => setTimeout(resolve, 20));
+					order.push('slow-end');
+				},
+			},
+			{
+				name: 'fast',
+				cadence: '1h',
+				run: async () => {
+					order.push('fast');
+				},
+			},
+		];
+
+		await runScheduled(fakeEvent(NOW), env, jobs);
+		expect(order).toEqual(['slow-start', 'fast', 'slow-end']);
+	});
+
 	it('catches a daily job up exactly once after three missed days', async () => {
 		let runs = 0;
 		const jobs: ScheduledJob[] = [

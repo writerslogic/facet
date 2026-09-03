@@ -16,6 +16,20 @@ describe('app shell', () => {
 		expect(res.status).toBe(401);
 	});
 
+	it('GET /api/ready detects orphaned relational rows before FK enforcement', async () => {
+		await env.DB.prepare('INSERT INTO api_key_scopes (api_key_id, scope) VALUES (?, ?)')
+			.bind('missing-key', 'read')
+			.run();
+		const res = await createApp().request(
+			'/api/ready',
+			{ headers: { Authorization: 'Bearer test-admin-token' } },
+			env,
+		);
+		expect(res.status).toBe(503);
+		const body = await res.json<{ checks: Record<string, boolean> }>();
+		expect(body.checks.referentialIntegrity).toBe(false);
+	});
+
 	it('sets X-Content-Type-Options: nosniff on every response, including errors and the SPA shell', async () => {
 		const app = createApp();
 		// A happy-path c.json response.

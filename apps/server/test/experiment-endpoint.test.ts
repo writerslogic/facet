@@ -2,6 +2,7 @@
 // config (no auth), enumerate via the API-key catalog, and assert the /stats/experiment result.
 
 import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { createApp } from '../src/app.js';
 import { db } from '../src/db/queries.js';
@@ -94,9 +95,17 @@ describe('experiments endpoints', () => {
 		);
 		expect(created.status).toBe(201);
 		const { experiment } = (await created.json()) as {
-			experiment: { id: string; active: boolean; variants: unknown[] };
+			experiment: {
+				id: string;
+				status: string;
+				active: boolean;
+				started_at: number | null;
+				variants: unknown[];
+			};
 		};
+		expect(experiment.status).toBe('active');
 		expect(experiment.active).toBe(true);
+		expect(experiment.started_at).not.toBeNull();
 		expect(experiment.variants).toHaveLength(2);
 
 		// Public flag config, no auth.
@@ -111,6 +120,60 @@ describe('experiments endpoints', () => {
 		};
 		expect(flags).toHaveLength(1);
 		expect(flags[0]?.flag_key).toBe('cta');
+
+		// Running allocation is immutable: silently changing keys or weights would rebucket visitors
+		// while the result table still treated the run as one experiment.
+		const locked = await app.request(
+			`/api/experiments/${experiment.id}`,
+			{
+				method: 'PATCH',
+				headers: {
+					Authorization: ADMIN,
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify({
+					site_id: siteId,
+					name: 'CTA changed',
+					flag_key: 'cta',
+					variants: [
+						{ key: 'control', weight: 1 },
+						{ key: 'blue', weight: 2 },
+					],
+					active: true,
+				}),
+			},
+			env,
+		);
+		expect(locked.status).toBe(409);
+		expect(await locked.json()).toMatchObject({ error: 'allocation_locked' });
+
+		// Completing a run is terminal and removes it from the public bucketing config.
+		const completeBody = {
+			site_id: siteId,
+			name: 'CTA',
+			flag_key: 'cta',
+			variants: [
+				{ key: 'control', weight: 1 },
+				{ key: 'blue', weight: 1 },
+			],
+			status: 'completed',
+		};
+		const completed = await app.request(
+			`/api/experiments/${experiment.id}`,
+			{
+				method: 'PATCH',
+				headers: {
+					Authorization: ADMIN,
+					'content-type': 'application/json',
+				},
+				body: JSON.stringify(completeBody),
+			},
+			env,
+		);
+		expect(completed.status).toBe(200);
+		expect(await completed.json()).toMatchObject({
+			experiment: { status: 'completed', active: false },
+		});
 
 		// A malformed site_id is rejected by query validation before any lookup.
 		const malformed = await app.request('/api/experiments/active?site_id=nope', {}, env);
@@ -182,6 +245,97 @@ describe('experiments endpoints', () => {
 		expect(del.status).toBe(200);
 	});
 
+	it('persists strict draft, active, and completed lifecycle transitions', async () => {
+		const { siteId } = await setup();
+		const config = {
+			site_id: siteId,
+			name: 'Lifecycle',
+			flag_key: 'lifecycle',
+			variants: [
+				{ key: 'control', weight: 1 },
+				{ key: 'variant', weight: 1 },
+			],
+		};
+		const created = await app.request(
+			'/api/experiments',
+			{
+				method: 'POST',
+				headers: { Authorization: ADMIN, 'content-type': 'application/json' },
+				body: JSON.stringify({ ...config, status: 'draft' }),
+			},
+			env,
+		);
+		const { experiment: draft } = (await created.json()) as {
+			experiment: { id: string; status: string; active: boolean; started_at: number | null };
+		};
+		expect(draft).toMatchObject({ status: 'draft', active: false, started_at: null });
+
+		const edited = await app.request(
+			`/api/experiments/${draft.id}`,
+			{
+				method: 'PATCH',
+				headers: { Authorization: ADMIN, 'content-type': 'application/json' },
+				body: JSON.stringify({ ...config, name: 'Lifecycle v2', status: 'draft' }),
+			},
+			env,
+		);
+		expect(edited.status).toBe(200);
+		expect(await edited.json()).toMatchObject({
+			experiment: { name: 'Lifecycle v2', status: 'draft' },
+		});
+
+		const started = await app.request(
+			`/api/experiments/${draft.id}`,
+			{
+				method: 'PATCH',
+				headers: { Authorization: ADMIN, 'content-type': 'application/json' },
+				body: JSON.stringify({ ...config, name: 'Lifecycle v2', status: 'active' }),
+			},
+			env,
+		);
+		expect(started.status).toBe(200);
+		expect(await started.json()).toMatchObject({
+			experiment: { status: 'active', active: true, completed_at: null },
+		});
+
+		const finished = await app.request(
+			`/api/experiments/${draft.id}`,
+			{
+				method: 'PATCH',
+				headers: { Authorization: ADMIN, 'content-type': 'application/json' },
+				body: JSON.stringify({ ...config, name: 'Lifecycle v2', status: 'completed' }),
+			},
+			env,
+		);
+		expect(finished.status).toBe(200);
+		const row = await db(env)
+			.select()
+			.from(schema.experiments)
+			.where(eq(schema.experiments.id, draft.id))
+			.get();
+		expect(row).toMatchObject({ status: 'completed', active: 0 });
+		expect(row?.started_at).toEqual(expect.any(Number));
+		expect(row?.completed_at).toEqual(expect.any(Number));
+		const publicConfig = await app.request(
+			`/api/experiments/active?site_id=${siteId}`,
+			{},
+			env,
+		);
+		expect(await publicConfig.json()).toMatchObject({ experiments: [] });
+
+		const restart = await app.request(
+			`/api/experiments/${draft.id}`,
+			{
+				method: 'PATCH',
+				headers: { Authorization: ADMIN, 'content-type': 'application/json' },
+				body: JSON.stringify({ ...config, name: 'Lifecycle v2', status: 'active' }),
+			},
+			env,
+		);
+		expect(restart.status).toBe(409);
+		expect(await restart.json()).toMatchObject({ error: 'lifecycle_locked' });
+	});
+
 	it('rejects a 1-variant experiment with 400', async () => {
 		const { siteId } = await setup();
 		const res = await app.request(
@@ -202,5 +356,38 @@ describe('experiments endpoints', () => {
 			env,
 		);
 		expect(res.status).toBe(400);
+	});
+
+	it('rejects duplicate keys and an all-zero allocation', async () => {
+		const { siteId } = await setup();
+		for (const variants of [
+			[
+				{ key: 'same', weight: 1 },
+				{ key: 'same', weight: 1 },
+			],
+			[
+				{ key: 'control', weight: 0 },
+				{ key: 'blue', weight: 0 },
+			],
+		]) {
+			const response = await app.request(
+				'/api/experiments',
+				{
+					method: 'POST',
+					headers: {
+						Authorization: ADMIN,
+						'content-type': 'application/json',
+					},
+					body: JSON.stringify({
+						site_id: siteId,
+						name: 'bad allocation',
+						flag_key: 'bad',
+						variants,
+					}),
+				},
+				env,
+			);
+			expect(response.status).toBe(400);
+		}
 	});
 });

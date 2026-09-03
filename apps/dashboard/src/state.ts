@@ -1,5 +1,5 @@
-// Dashboard state: site credentials live in sessionStorage so closing the tab clears bearer keys.
-// Non-secret presentation preferences may still use localStorage. Ranges are either a
+// Dashboard state: bearer credentials live only in module memory; sessionStorage contains site
+// metadata and presentation state, never keys. Ranges are either a
 // preset (24h/7d/30d/90d) or an explicit custom start/end. All timestamps are unix-ms treated as UTC.
 
 import { subDays } from 'date-fns';
@@ -25,6 +25,9 @@ const PROFILES_STORAGE = 'facet.profiles';
 const ACTIVE_STORAGE = 'facet.activeProfile';
 const LEGACY_KEY_STORAGE = 'facet.key';
 const LEGACY_SITE_STORAGE = 'facet.site';
+
+/** API keys intentionally survive React remounts but not a document reload. */
+const volatileApiKeys = new Map<string, string>();
 
 function storageGet(kind: 'local' | 'session', key: string): string | null {
 	try {
@@ -72,7 +75,7 @@ export type RangeSelection =
 	| { kind: 'preset'; preset: RangePreset }
 	| { kind: 'custom'; start: number; end: number };
 
-/** A saved site connection: a label, the site UUID, and its `clk_` API key. */
+/** A site connection. The key is populated from document memory and is never persisted. */
 export interface Profile {
 	id: string;
 	label: string;
@@ -171,14 +174,31 @@ function readProfiles(): Profile[] {
 		if (raw) {
 			const parsed = JSON.parse(raw) as unknown;
 			if (Array.isArray(parsed)) {
-				return parsed.filter(
-					(p): p is Profile =>
-						typeof p === 'object' &&
-						p !== null &&
-						typeof (p as Profile).id === 'string' &&
-						typeof (p as Profile).siteId === 'string' &&
-						typeof (p as Profile).apiKey === 'string',
-				);
+				const profiles = parsed.flatMap((value): Profile[] => {
+					if (typeof value !== 'object' || value === null) return [];
+					const candidate = value as Partial<Profile>;
+					if (typeof candidate.id !== 'string' || typeof candidate.siteId !== 'string') {
+						return [];
+					}
+					// One-time scrubbing for older builds that wrote plaintext keys to storage. Keep the key
+					// available for this document only, then immediately rewrite metadata without it.
+					if (typeof candidate.apiKey === 'string' && candidate.apiKey) {
+						volatileApiKeys.set(candidate.id, candidate.apiKey);
+					}
+					return [
+						{
+							id: candidate.id,
+							label:
+								typeof candidate.label === 'string'
+									? candidate.label
+									: candidate.siteId,
+							siteId: candidate.siteId,
+							apiKey: volatileApiKeys.get(candidate.id) ?? '',
+						},
+					];
+				});
+				persistProfiles(profiles);
+				return profiles;
 			}
 		}
 	} catch {
@@ -205,7 +225,8 @@ function readProfiles(): Profile[] {
 			siteId: legacySite,
 			apiKey: legacyKey,
 		};
-		storageSet('session', PROFILES_STORAGE, JSON.stringify([migrated]));
+		volatileApiKeys.set(migrated.id, legacyKey);
+		persistProfiles([migrated]);
 		storageSet('session', ACTIVE_STORAGE, migrated.id);
 		storageRemove('local', LEGACY_KEY_STORAGE);
 		storageRemove('local', LEGACY_SITE_STORAGE);
@@ -215,7 +236,15 @@ function readProfiles(): Profile[] {
 }
 
 function persistProfiles(profiles: Profile[]): void {
-	storageSet('session', PROFILES_STORAGE, JSON.stringify(profiles));
+	if (profiles.length === 0) {
+		storageRemove('session', PROFILES_STORAGE);
+		return;
+	}
+	storageSet(
+		'session',
+		PROFILES_STORAGE,
+		JSON.stringify(profiles.map(({ id, label, siteId }) => ({ id, label, siteId }))),
+	);
 }
 
 function readActiveId(profiles: Profile[]): string {
@@ -319,6 +348,7 @@ export function DashboardProvider({
 
 	const addProfile = useCallback((input: { label: string; siteId: string; apiKey: string }) => {
 		const profile: Profile = { id: newId(), ...input };
+		if (profile.apiKey) volatileApiKeys.set(profile.id, profile.apiKey);
 		setProfiles((prev) => {
 			const next = [...prev, profile];
 			persistProfiles(next);
@@ -330,6 +360,10 @@ export function DashboardProvider({
 	}, []);
 
 	const updateProfile = useCallback((id: string, patch: Partial<Omit<Profile, 'id'>>) => {
+		if (patch.apiKey !== undefined) {
+			if (patch.apiKey) volatileApiKeys.set(id, patch.apiKey);
+			else volatileApiKeys.delete(id);
+		}
 		setProfiles((prev) => {
 			const next = prev.map((p) => (p.id === id ? { ...p, ...patch } : p));
 			persistProfiles(next);
@@ -338,6 +372,7 @@ export function DashboardProvider({
 	}, []);
 
 	const removeProfile = useCallback((id: string) => {
+		volatileApiKeys.delete(id);
 		setProfiles((prev) => {
 			const next = prev.filter((p) => p.id !== id);
 			persistProfiles(next);

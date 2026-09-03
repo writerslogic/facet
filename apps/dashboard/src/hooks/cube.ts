@@ -16,7 +16,7 @@ export function useCube(apiKey: string, siteId: string, range: Range, interval: 
 				`/api/stats/cube?${qs({ site_id: siteId, start: range.start, end: range.end, interval })}`,
 				apiKey,
 			),
-		enabled: Boolean(apiKey && siteId),
+		enabled: Boolean(siteId),
 		staleTime: 60_000,
 		// Hold the previous range's cube during a range change so client-side slices keep rendering
 		// instead of falling back to EMPTY_CELLS mid-swap. Scoped to the same site so a site switch

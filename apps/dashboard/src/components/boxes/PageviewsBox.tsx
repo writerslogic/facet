@@ -7,22 +7,10 @@
 
 import { KpiTile, type KpiVizName } from '../BentoTile.js';
 import { drillSpec } from './drill.js';
-import { ACCENT_OPTION, accentOf, rowsTable } from './shared.js';
+import { accentOf, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 export const pageviewsBox: TileDef = {
-	id: 'pageviews',
-	title: 'Pageviews',
-	size: 'kpi',
-	selfLabeled: true,
-	emphasis: 'kpi',
-	expandable: true,
-	variants: [
-		{ id: 'horizon', label: 'Horizon' },
-		{ id: 'spark', label: 'Line' },
-		{ id: 'columns', label: 'Columns' },
-	],
-	options: [ACCENT_OPTION],
 	table: (ctx) => rowsTable('Page', ctx.data.top_paths),
 	render: (ctx, density, config) => (
 		<KpiTile

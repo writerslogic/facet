@@ -20,7 +20,7 @@ export function useBreakdown(
 				`/api/stats/breakdown?${qs(query)}&dimension=${dimension}&limit=${limit}`,
 				apiKey,
 			),
-		enabled: Boolean(apiKey && query.site_id) && query.end > query.start,
+		enabled: Boolean(query.site_id) && query.end > query.start,
 		// Switching dimension re-reads the same range, so keep the current table on screen rather
 		// than collapsing to a skeleton for one round trip. Scoped to the same site: a site swap must
 		// NOT leave the previous site's rows under the new label.

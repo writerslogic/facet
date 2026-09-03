@@ -639,8 +639,8 @@ body {
 	background-image:
 		radial-gradient(48rem 30rem at 12% -10%, rgb(var(--bloom1)), transparent 62%),
 		radial-gradient(40rem 26rem at 100% -6%, rgb(var(--bloom2)), transparent 58%),
-		repeating-linear-gradient(30deg, rgb(var(--accent-rgb) / 0.05) 0 1px, transparent 1px 52px),
-		repeating-linear-gradient(150deg, rgb(var(--accent-rgb) / 0.05) 0 1px, transparent 1px 52px);
+		repeating-linear-gradient(30deg, rgb(var(--accent-rgb) / 0.025) 0 1px, transparent 1px 52px),
+		repeating-linear-gradient(150deg, rgb(var(--accent-rgb) / 0.025) 0 1px, transparent 1px 52px);
 	background-attachment: fixed;
 	background-repeat: no-repeat;
 }
@@ -650,7 +650,7 @@ body {
    The face is lifted clear of the page so tiles read as distinct objects on the near-black board. */
 .tile-dark {
 	background-color: var(--panel);
-	background-image: linear-gradient(160deg, rgb(var(--accent-rgb) / 0.05), transparent 46%);
+	background-image: linear-gradient(160deg, rgb(var(--accent-rgb) / 0.025), transparent 46%);
 	border: 1px solid rgb(var(--border));
 	box-shadow:
 		inset 1px 1px 0 rgb(255 255 255 / 0.06),

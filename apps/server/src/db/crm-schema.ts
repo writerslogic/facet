@@ -1,201 +1,219 @@
-// Drizzle schema for the OPTIONAL CRM database (`CRM_DB`) — a physically separate D1 database from
-// the analytics one in `schema.ts`. Kept separate so that a deployment without the extension has no
-// CRM tables at all, and so that the contact→analytics link cannot be expressed as a foreign key:
-// D1 has no cross-database join, so the link is assembled in the Worker and must pass through the
-// signed-consent check. `drizzle-kit generate --config drizzle.crm.config.ts` emits ./migrations-crm.
+// Privacy-first CRM schema for the optional, physically separate `CRM_DB` D1 database.
 //
-// WHAT IS DIFFERENT ABOUT THIS DATA. Everything in `schema.ts` is either aggregate or a salted
-// one-way hash. A contact is a named person who handed their details over directly, so this file is
-// the deployment's first table of directly-identifying PII. `companies` is the exception within the
-// exception — an organization is a legal person, not a human — but it is here rather than in the
-// analytics database because it exists only to be linked from `contacts`. Two consequences are
-// designed in rather than deferred:
-//   • Contacts are NOT on the raw-event retention schedule (`lib/retention.ts`). A contact is a
-//     business record with its own lifecycle; deleting it is an explicit act, not a cron side effect.
-//     `crm_audit_log` is the one table here that IS on a schedule, on its own longer window, because
-//     it is the one that grows without anybody deciding to add a row.
-//   • No column here caches a derived `visitor_hash`. The ONLY bridge to analytics is
-//     `external_user_id`, resolved at read time through an active `identified` consent record. When
-//     retention purges that record (or its identity salt), the link severs on its own — nothing here
-//     holds a stale copy that would outlive the consent authorizing it.
+// Analytics identities never appear here. A contact exists only after explicit operator
+// materialization, and the operator's identifier is stored only as a site-scoped keyed digest.
+// Every child key carries `site_id`; composite foreign keys make tenant isolation and erasure
+// properties of the database rather than conventions in route handlers.
 
-import { index, integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sql } from 'drizzle-orm';
+import {
+	check,
+	foreignKey,
+	index,
+	integer,
+	primaryKey,
+	sqliteTable,
+	text,
+	uniqueIndex,
+} from 'drizzle-orm/sqlite-core';
 
-/** Contact lifecycle states. Free-form status strings would make the list filter meaningless. */
-export const CONTACT_STATUSES = ['lead', 'active', 'archived'] as const;
+export const CONTACT_LIFECYCLE_STATES = ['lead', 'active', 'churned'] as const;
 
-/**
- * An organization. Unlike a contact this is NOT personal data: it is a legal person, and a name, a
- * domain and a note about a company are not about an identifiable human. What it does do is make a
- * contact's employer a structured attribute rather than something typed into a box, which is why
- * `lib/dpv.ts` names `pd:CurrentEmployment` once this exists.
- *
- * `(site_id, name)` is unique as stored, so two identically-named companies on one site are a
- * data-entry mistake rather than two records. It is an exact match — company names are displayed as
- * typed and lowercasing them for a case-insensitive index would corrupt the display value — so
- * `domain`, which IS normalised, is the case-insensitive identity key.
- */
-export const companies = sqliteTable(
-	'companies',
+export const CONTACT_LEGAL_BASES = [
+	'consent',
+	'contract',
+	'legitimate_interest',
+	'legal_obligation',
+	'vital_interest',
+	'public_task',
+] as const;
+
+export const CRM_TAG_COLOR_TOKENS = [
+	'slate',
+	'violet',
+	'blue',
+	'cyan',
+	'green',
+	'amber',
+	'orange',
+	'rose',
+] as const;
+
+export const crmContacts = sqliteTable(
+	'crm_contacts',
 	{
 		id: text('id').primaryKey(),
 		site_id: text('site_id').notNull(),
-		name: text('name').notNull(),
-		domain: text('domain'),
-		status: text('status').notNull().default('lead'),
-		notes: text('notes'),
-		owner_user_id: text('owner_user_id'),
+		/** HMAC-SHA-256, encoded as lowercase hex. Raw operator identifiers never reach D1. */
+		external_id_hash: text('external_id_hash').notNull(),
+		/** Optional pseudonymous display label. It is never an identity or an analytics join key. */
+		alias: text('alias'),
+		lifecycle_state: text('lifecycle_state').notNull().default('lead'),
+		legal_basis: text('legal_basis').notNull(),
+		origin_source: text('origin_source').notNull(),
+		/** Operator source-event time, distinct from Facet's materialization time. */
+		origin_occurred_at: integer('origin_occurred_at').notNull(),
+		consent_captured_at: integer('consent_captured_at'),
+		score: integer('score').notNull().default(0),
 		created_at: integer('created_at').notNull(),
 		updated_at: integer('updated_at').notNull(),
 	},
 	(t) => [
-		index('idx_companies_site_created').on(t.site_id, t.created_at),
-		index('idx_companies_site_status').on(t.site_id, t.status),
-		uniqueIndex('idx_companies_site_name').on(t.site_id, t.name),
-		// NULLs are distinct in a SQLite UNIQUE index, so any number of companies may have no domain
-		// while no two may share one.
-		uniqueIndex('idx_companies_site_domain').on(t.site_id, t.domain),
+		// Composite anchors are required for tenant-safe child foreign keys.
+		uniqueIndex('uq_crm_contacts_site_id').on(t.site_id, t.id),
+		uniqueIndex('uq_crm_contacts_site_external_id').on(t.site_id, t.external_id_hash),
+		index('idx_crm_contacts_site_created_id').on(t.site_id, t.created_at, t.id),
+		index('idx_crm_contacts_site_score_id').on(t.site_id, t.score, t.id),
+		index('idx_crm_contacts_site_lifecycle_id').on(t.site_id, t.lifecycle_state, t.id),
+		check(
+			'ck_crm_contacts_external_id_hash',
+			sql`length(${t.external_id_hash}) = 64 AND ${t.external_id_hash} = lower(${t.external_id_hash}) AND ${t.external_id_hash} NOT GLOB '*[^0-9a-f]*'`,
+		),
+		check(
+			'ck_crm_contacts_alias',
+			sql`${t.alias} IS NULL OR length(${t.alias}) BETWEEN 1 AND 160`,
+		),
+		check(
+			'ck_crm_contacts_lifecycle_state',
+			sql`${t.lifecycle_state} IN ('lead', 'active', 'churned')`,
+		),
+		check(
+			'ck_crm_contacts_legal_basis',
+			sql`${t.legal_basis} IN ('consent', 'contract', 'legitimate_interest', 'legal_obligation', 'vital_interest', 'public_task')`,
+		),
+		check(
+			'ck_crm_contacts_origin_source',
+			sql`length(${t.origin_source}) BETWEEN 1 AND 64 AND ${t.origin_source} = lower(${t.origin_source}) AND ${t.origin_source} NOT GLOB '*[^a-z0-9_.-]*'`,
+		),
+		check(
+			'ck_crm_contacts_timestamps',
+			sql`${t.origin_occurred_at} >= 0 AND ${t.created_at} >= 0 AND ${t.updated_at} >= ${t.created_at}`,
+		),
+		check(
+			'ck_crm_contacts_consent',
+			sql`(${t.consent_captured_at} IS NULL OR ${t.consent_captured_at} >= 0) AND (${t.legal_basis} <> 'consent' OR ${t.consent_captured_at} IS NOT NULL)`,
+		),
 	],
 );
 
-/**
- * A person in the CRM. snake_case JS keys throughout, matching the goals/funnels/flags convention in
- * `schema.ts`, so a validated request body maps onto columns without a per-field remap.
- *
- * `external_user_id` is the site's own opaque id for this person — the same value the site passes to
- * `POST /api/consent` and to `/api/event`. It is the join key to `consent_records.external_user_id`
- * in the analytics database and the ONLY thing that can ever tie this row to a visitor hash.
- *
- * `owner_user_id` references `users.id` in the ANALYTICS database (dashboard operators, per the
- * accounts/RBAC tables). There is deliberately no parallel staff table here, and there cannot be a
- * foreign key across the database boundary, so this is validated against `users` in the Worker.
- *
- * `company` and `company_id` are the same fact — where this person works — recorded two ways, and
- * exactly one of them answers at a time. `company_id` is the structured link and wins; `company` is
- * the free text an operator typed for a company that has no record here, and it is what a read
- * coalesces to when nothing is linked. Writing one clears the other, so "which company" never has two
- * answers. This IS a real foreign key, unlike the contact→analytics link and unlike `owner_user_id`,
- * because `companies` lives in THIS database: the separation that forbids the other two is about the
- * analytics boundary specifically, not a blanket aversion to constraints.
- */
-export const contacts = sqliteTable(
-	'contacts',
+export const crmTags = sqliteTable(
+	'crm_tags',
 	{
 		id: text('id').primaryKey(),
 		site_id: text('site_id').notNull(),
-		external_user_id: text('external_user_id'),
-		email: text('email'),
-		name: text('name'),
-		phone: text('phone'),
-		company: text('company'),
-		company_id: text('company_id').references(() => companies.id),
-		title: text('title'),
-		status: text('status').notNull().default('lead'),
-		source: text('source'),
-		notes: text('notes'),
-		owner_user_id: text('owner_user_id'),
+		normalized_name: text('normalized_name').notNull(),
+		display_name: text('display_name').notNull(),
+		color_token: text('color_token').notNull(),
 		created_at: integer('created_at').notNull(),
-		updated_at: integer('updated_at').notNull(),
 	},
 	(t) => [
-		index('idx_contacts_site_created').on(t.site_id, t.created_at),
-		index('idx_contacts_site_status').on(t.site_id, t.status),
-		// Covers both directions of the link: listing one company's contacts, and finding every
-		// contact to unlink when that company is deleted.
-		index('idx_contacts_site_company').on(t.site_id, t.company_id),
-		// SQLite treats NULLs as distinct in a UNIQUE index, so both of these constrain only the rows
-		// that actually carry the value: a site cannot hold two contacts with the same email or the
-		// same external id, while any number may have neither. The external-id uniqueness is what
-		// makes the analytics link deterministic — one contact per identified visitor, per site.
-		uniqueIndex('idx_contacts_site_email').on(t.site_id, t.email),
-		uniqueIndex('idx_contacts_site_extuser').on(t.site_id, t.external_user_id),
+		uniqueIndex('uq_crm_tags_site_id').on(t.site_id, t.id),
+		uniqueIndex('uq_crm_tags_site_normalized_name').on(t.site_id, t.normalized_name),
+		check(
+			'ck_crm_tags_normalized_name',
+			sql`length(${t.normalized_name}) BETWEEN 1 AND 64 AND ${t.normalized_name} = lower(${t.normalized_name}) AND ${t.normalized_name} NOT GLOB '*[^a-z0-9-]*'`,
+		),
+		check('ck_crm_tags_display_name', sql`length(${t.display_name}) BETWEEN 1 AND 80`),
+		check(
+			'ck_crm_tags_color_token',
+			sql`${t.color_token} IN ('slate', 'violet', 'blue', 'cyan', 'green', 'amber', 'orange', 'rose')`,
+		),
+		check('ck_crm_tags_created_at', sql`${t.created_at} >= 0`),
 	],
 );
 
-/** Deal lifecycle. `won`/`lost` are terminal — a pipeline aggregate excludes them from "open" by this
- * set, not by a separate flag, so the two can never disagree about which stages are still moving. */
-export const DEAL_STAGES = ['lead', 'qualified', 'proposal', 'negotiation', 'won', 'lost'] as const;
-
-/**
- * A sales opportunity. A deal linked to `contact_id` makes that person's data include
- * `pd:Transactional` (see `lib/dpv.ts`), same as `company_id` on a contact adding `pd:CurrentEmployment`.
- * `ON DELETE` is handled in the Worker: `deleteCompany`/`deleteContact` null the reference here rather
- * than cascade, the same "unlink, don't destroy" precedent as `contacts.company_id`. `value`/`currency`
- * are both-or-neither (wire schema) so a pipeline total is never summed across an unnamed currency.
- */
-export const deals = sqliteTable(
-	'deals',
+export const crmContactTags = sqliteTable(
+	'crm_contact_tags',
 	{
-		id: text('id').primaryKey(),
 		site_id: text('site_id').notNull(),
-		name: text('name').notNull(),
-		company_id: text('company_id').references(() => companies.id),
-		contact_id: text('contact_id').references(() => contacts.id),
-		stage: text('stage').notNull().default('lead'),
-		/** Cents. Null means no estimate yet, distinct from a deal genuinely worth zero. */
-		value: integer('value'),
-		/** ISO 4217, uppercase. Required exactly when `value` is set. */
-		currency: text('currency'),
-		expected_close_date: integer('expected_close_date'),
-		notes: text('notes'),
-		owner_user_id: text('owner_user_id'),
+		contact_id: text('contact_id').notNull(),
+		tag_id: text('tag_id').notNull(),
 		created_at: integer('created_at').notNull(),
-		updated_at: integer('updated_at').notNull(),
 	},
 	(t) => [
-		index('idx_deals_site_created').on(t.site_id, t.created_at),
-		index('idx_deals_site_stage').on(t.site_id, t.stage),
-		// Covers both directions, same reason as `idx_contacts_site_company`: listing one company's or
-		// contact's deals, and finding every deal to unlink when that row is deleted.
-		index('idx_deals_site_company').on(t.site_id, t.company_id),
-		index('idx_deals_site_contact').on(t.site_id, t.contact_id),
+		primaryKey({ columns: [t.site_id, t.contact_id, t.tag_id] }),
+		foreignKey({
+			name: 'fk_crm_contact_tags_contact',
+			columns: [t.site_id, t.contact_id],
+			foreignColumns: [crmContacts.site_id, crmContacts.id],
+		}).onDelete('cascade'),
+		foreignKey({
+			name: 'fk_crm_contact_tags_tag',
+			columns: [t.site_id, t.tag_id],
+			foreignColumns: [crmTags.site_id, crmTags.id],
+		}).onDelete('cascade'),
+		index('idx_crm_contact_tags_site_tag_contact').on(t.site_id, t.tag_id, t.contact_id),
+		check('ck_crm_contact_tags_created_at', sql`${t.created_at} >= 0`),
 	],
 );
 
-/**
- * Who touched the contact store, what they touched, and when. One row per authorized `/api/crm`
- * request, written BEFORE the handler runs.
- *
- * WHY IT IS HERE rather than in the analytics database. Every row names a `target_id`, which is a
- * pointer into this database's PII, and the analytics database is deliberately free of anything that
- * resolves to a named person. Keeping the log beside the data it describes also means an unbound
- * deployment has no audit table for the same reason it has no contacts — the extension does not
- * exist — and that the log and the row it records are one database apart rather than two, which is
- * the only reason the two writes can be reasoned about at all.
- *
- * WHAT IT DELIBERATELY DOES NOT HOLD is any contact FIELD. It records that contact `x` was read, not
- * what reading it returned, so the log is a record about the OPERATOR and only a pointer to the
- * subject. That is what makes it safe to outlive the contact: once the row is deleted the pointer
- * resolves to nothing, so an erasure request does not have to reach in here — and must not, since a
- * log an operator can clear by deleting the contact is not evidence of anything. Nothing in the API
- * updates or deletes these rows; only the retention cron does.
- *
- * `actor_role` is stored rather than resolved at read time because it is the role the request was
- * AUTHORIZED under. Roles change; "an admin exported this" has to stay true after they are demoted.
- */
-export const crmAuditLog = sqliteTable(
-	'crm_audit_log',
+export const crmContactEvents = sqliteTable(
+	'crm_contact_events',
 	{
 		id: text('id').primaryKey(),
 		site_id: text('site_id').notNull(),
-		/** `users.id` in the ANALYTICS database, so no foreign key is possible — the same cross-database
-		 * limitation as `contacts.owner_user_id`, and the same reason it is validated in the Worker. */
-		actor_user_id: text('actor_user_id').notNull(),
-		actor_role: text('actor_role').notNull(),
-		/** One of `CRM_AUDIT_ACTIONS`. A closed set, so the log is filterable by equality. */
-		action: text('action').notNull(),
-		/** The contact or company the request named, or NULL for a collection-level action. */
-		target_id: text('target_id'),
+		contact_id: text('contact_id').notNull(),
+		event_type: text('event_type').notNull(),
+		payload: text('payload', { mode: 'json' }),
 		occurred_at: integer('occurred_at').notNull(),
 	},
 	(t) => [
-		// The default view: one site's log, newest first. Also what the actor and action filters scan.
-		index('idx_crm_audit_site_time').on(t.site_id, t.occurred_at),
-		// "Everything anyone did to this contact" — the question an erasure or subject-access request
-		// asks, and the one a site-and-time scan answers worst.
-		index('idx_crm_audit_site_target').on(t.site_id, t.target_id),
-		// Retention purges across every site at once, so it needs the timestamp leading. Same shape and
-		// same reason as `idx_identity_salts_window_end` in the analytics schema.
-		index('idx_crm_audit_occurred').on(t.occurred_at),
+		foreignKey({
+			name: 'fk_crm_contact_events_contact',
+			columns: [t.site_id, t.contact_id],
+			foreignColumns: [crmContacts.site_id, crmContacts.id],
+		}).onDelete('cascade'),
+		index('idx_crm_events_contact_occurred_id').on(
+			t.site_id,
+			t.contact_id,
+			t.occurred_at,
+			t.id,
+		),
+		check(
+			'ck_crm_contact_events_type',
+			sql`length(${t.event_type}) BETWEEN 1 AND 64 AND ${t.event_type} = lower(${t.event_type}) AND ${t.event_type} NOT GLOB '*[^a-z0-9_.-]*'`,
+		),
+		check(
+			'ck_crm_contact_events_payload',
+			sql`${t.payload} IS NULL OR (json_valid(${t.payload}) AND length(${t.payload}) <= 4096)`,
+		),
+		check('ck_crm_contact_events_occurred_at', sql`${t.occurred_at} >= 0`),
+	],
+);
+
+export const crmScoreLedger = sqliteTable(
+	'crm_score_ledger',
+	{
+		id: text('id').primaryKey(),
+		site_id: text('site_id').notNull(),
+		contact_id: text('contact_id').notNull(),
+		previous_score: integer('previous_score').notNull(),
+		delta: integer('delta').notNull(),
+		next_score: integer('next_score').notNull(),
+		reason: text('reason').notNull(),
+		rule_id: text('rule_id'),
+		occurred_at: integer('occurred_at').notNull(),
+	},
+	(t) => [
+		foreignKey({
+			name: 'fk_crm_score_ledger_contact',
+			columns: [t.site_id, t.contact_id],
+			foreignColumns: [crmContacts.site_id, crmContacts.id],
+		}).onDelete('cascade'),
+		index('idx_crm_score_contact_occurred_id').on(t.site_id, t.contact_id, t.occurred_at, t.id),
+		check(
+			'ck_crm_score_ledger_arithmetic',
+			sql`${t.next_score} = ${t.previous_score} + ${t.delta}`,
+		),
+		check('ck_crm_score_ledger_delta', sql`${t.delta} <> 0`),
+		check(
+			'ck_crm_score_ledger_reason',
+			sql`length(${t.reason}) BETWEEN 1 AND 64 AND ${t.reason} = lower(${t.reason}) AND ${t.reason} NOT GLOB '*[^a-z0-9_.-]*'`,
+		),
+		check(
+			'ck_crm_score_ledger_rule_id',
+			sql`${t.rule_id} IS NULL OR length(${t.rule_id}) BETWEEN 1 AND 64`,
+		),
+		check('ck_crm_score_ledger_occurred_at', sql`${t.occurred_at} >= 0`),
 	],
 );

@@ -10,7 +10,7 @@ import type { AppEnv } from '../env.js';
 import { requireApiScope } from '../lib/auth.js';
 import { isGpcOptOut } from '../lib/gpc.js';
 import { validationErrorHook } from '../lib/http.js';
-import { ingestEvent } from '../lib/ingest.js';
+import { submitEvent } from '../lib/ingest.js';
 import { rateLimit } from '../lib/ratelimit.js';
 import { clientIp, device } from '../lib/request-meta.js';
 
@@ -31,7 +31,8 @@ eventRoute.post(
 		const gpc = isGpcOptOut(c.req.raw);
 		const body = c.req.valid('json');
 		const ua = body.user_agent ?? '';
-		await ingestEvent(c.env, {
+		await submitEvent(c.env, {
+			eventId: body.event_id,
 			siteId: c.get('siteId'),
 			ip: body.ip ?? clientIp(c.req.raw),
 			ua,

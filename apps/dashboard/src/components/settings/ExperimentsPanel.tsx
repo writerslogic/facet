@@ -1,12 +1,18 @@
 // Experiments panel: create an experiment (name, flag key, 2–8 variants with weights), list, delete.
 
-import type { ExperimentVariant } from '@facet/shared';
-import { Plus, X } from 'lucide-react';
+import type {
+	Experiment,
+	ExperimentInput,
+	ExperimentStatus,
+	ExperimentVariant,
+} from '@facet/shared';
+import { Pencil, Play, Plus, Square, X } from 'lucide-react';
 import { type FormEvent, type ReactElement, useState } from 'react';
 import {
 	useAdminExperiments,
 	useCreateExperiment,
 	useDeleteExperiment,
+	useUpdateExperiment,
 } from '../../hooks/admin.js';
 import { CardSkeletons, EmptyState, ErrorState } from '../StatusStates.js';
 import { BlockedReason, ConfirmDelete, Field, FormControls, MutationStatus, Panel } from './kit.js';
@@ -22,8 +28,11 @@ export function ExperimentsPanel({
 }): ReactElement {
 	const experiments = useAdminExperiments(token, siteId);
 	const create = useCreateExperiment(token, siteId);
+	const update = useUpdateExperiment(token, siteId);
 	const remove = useDeleteExperiment(token, siteId);
 
+	const [editingId, setEditingId] = useState<string | null>(null);
+	const [startImmediately, setStartImmediately] = useState(false);
 	const [name, setName] = useState('');
 	const [flagKey, setFlagKey] = useState('');
 	const [variants, setVariants] = useState<ExperimentVariant[]>([
@@ -31,9 +40,23 @@ export function ExperimentsPanel({
 		{ key: '', weight: 1 },
 	]);
 
-	const filledVariants = variants.filter((v) => v.key.trim());
+	const filledVariants = variants.filter((variant) => variant.key.trim());
+	const allVariantsFilled = filledVariants.length === variants.length;
+	const keys = filledVariants.map((variant) => variant.key.trim());
+	const uniqueKeys = new Set(keys).size === keys.length;
+	const validWeights = filledVariants.every(
+		(variant) => Number.isFinite(variant.weight) && variant.weight >= 0,
+	);
+	const totalWeight = filledVariants.reduce((total, variant) => total + variant.weight, 0);
 	const canSubmit = Boolean(
-		name.trim() && flagKey.trim() && filledVariants.length >= 2 && filledVariants.length <= 8,
+		name.trim() &&
+			flagKey.trim() &&
+			allVariantsFilled &&
+			filledVariants.length >= 2 &&
+			filledVariants.length <= 8 &&
+			uniqueKeys &&
+			validWeights &&
+			totalWeight > 0,
 	);
 	const blocked = canSubmit
 		? null
@@ -41,7 +64,57 @@ export function ExperimentsPanel({
 			? 'Enter a name for this experiment.'
 			: !flagKey.trim()
 				? 'Enter the flag key this experiment drives.'
-				: `Name at least 2 variants — ${filledVariants.length} of ${variants.length} have a key.`;
+				: !allVariantsFilled || filledVariants.length < 2
+					? `Name every variant — ${filledVariants.length} of ${variants.length} have a key.`
+					: !uniqueKeys
+						? 'Variant keys must be unique.'
+						: !validWeights
+							? 'Every weight must be zero or greater.'
+							: 'At least one variant must have a positive weight.';
+	const busy = create.isPending || update.isPending;
+
+	function resetEditor(): void {
+		setEditingId(null);
+		setStartImmediately(false);
+		setName('');
+		setFlagKey('');
+		setVariants([
+			{ key: 'control', weight: 1 },
+			{ key: '', weight: 1 },
+		]);
+	}
+
+	function startEditing(experiment: Experiment): void {
+		if (experiment.status !== 'draft') return;
+		setEditingId(experiment.id);
+		setStartImmediately(false);
+		setName(experiment.name);
+		setFlagKey(experiment.flag_key);
+		setVariants(experiment.variants.map((variant) => ({ ...variant })));
+	}
+
+	function body(status: ExperimentStatus): ExperimentInput {
+		return {
+			site_id: siteId,
+			name: name.trim(),
+			flag_key: flagKey.trim(),
+			variants: filledVariants.map((variant) => ({
+				key: variant.key.trim(),
+				weight: variant.weight,
+			})),
+			status,
+		};
+	}
+
+	function savedBody(experiment: Experiment, status: ExperimentStatus): ExperimentInput {
+		return {
+			site_id: siteId,
+			name: experiment.name,
+			flag_key: experiment.flag_key,
+			variants: experiment.variants,
+			status,
+		};
+	}
 
 	function updateVariant(index: number, patch: Partial<ExperimentVariant>): void {
 		setVariants((prev) => prev.map((v, i) => (i === index ? { ...v, ...patch } : v)));
@@ -50,36 +123,36 @@ export function ExperimentsPanel({
 	function onSubmit(event: FormEvent): void {
 		event.preventDefault();
 		if (!canSubmit) return;
-		create.mutate(
-			{
-				site_id: siteId,
-				name: name.trim(),
-				flag_key: flagKey.trim(),
-				variants: filledVariants.map((v) => ({
-					key: v.key.trim(),
-					weight: Number.isFinite(v.weight) ? v.weight : 0,
-				})),
-			},
-			{
-				onSuccess: () => {
-					setName('');
-					setFlagKey('');
-					setVariants([
-						{ key: 'control', weight: 1 },
-						{ key: '', weight: 1 },
-					]);
-				},
-			},
-		);
+		if (editingId) {
+			update.mutate({ id: editingId, body: body('draft') }, { onSuccess: resetEditor });
+		} else {
+			create.mutate(body(startImmediately ? 'active' : 'draft'), {
+				onSuccess: resetEditor,
+			});
+		}
 	}
 
 	return (
 		<Panel
 			title="Experiments"
-			description="Assigns visitors to variants of a flag and reports the result. Weights are relative, not percentages."
+			description="Configure a draft, start its public allocation, then complete it to preserve a terminal result. Weights are relative, not percentages."
 		>
+			<div className="mb-3 flex items-center justify-between gap-3">
+				<p className="font-medium text-sm text-[color:var(--ink)]">
+					{editingId ? 'Edit draft' : 'Create experiment'}
+				</p>
+				{editingId ? (
+					<button
+						type="button"
+						onClick={resetEditor}
+						className="btn-ghost rounded-lg px-2.5 py-1 text-xs"
+					>
+						Cancel editing
+					</button>
+				) : null}
+			</div>
 			<form onSubmit={onSubmit}>
-				<FormControls busy={create.isPending} className="space-y-3">
+				<FormControls busy={busy} className="space-y-3">
 					<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
 						<Field
 							id="exp-name"
@@ -136,6 +209,11 @@ export function ExperimentsPanel({
 									}
 									className="input w-24 rounded-lg px-3 py-1.5 text-sm"
 								/>
+								<span className="w-12 text-right text-[color:var(--faint)] text-xs tabular-nums">
+									{totalWeight > 0 && Number.isFinite(variant.weight)
+										? `${((variant.weight / totalWeight) * 100).toFixed(0)}%`
+										: '—'}
+								</span>
 								{variants.length > 2 ? (
 									<button
 										type="button"
@@ -164,24 +242,53 @@ export function ExperimentsPanel({
 						) : null}
 					</fieldset>
 
+					{editingId ? null : (
+						<label className="flex items-start gap-2 text-xs text-[color:var(--muted)]">
+							<input
+								type="checkbox"
+								checked={startImmediately}
+								onChange={(event) => setStartImmediately(event.target.checked)}
+								className="mt-0.5"
+							/>
+							<span>
+								Start immediately. Leave off to save an editable, non-public draft.
+							</span>
+						</label>
+					)}
+
 					<div className="space-y-1">
 						<button
 							type="submit"
 							disabled={!canSubmit}
 							className="btn-accent rounded-lg px-4 py-1.5 text-sm transition"
 						>
-							Create experiment
+							{editingId
+								? 'Save draft'
+								: startImmediately
+									? 'Create and start'
+									: 'Save draft'}
 						</button>
 						<BlockedReason reason={blocked} />
 					</div>
 				</FormControls>
 			</form>
 			<MutationStatus
-				isPending={create.isPending}
-				error={create.error}
-				success={create.isSuccess ? 'Experiment created.' : null}
-				pendingLabel="Creating experiment…"
+				isPending={busy}
+				error={create.error ?? update.error}
+				success={
+					create.isSuccess
+						? 'Experiment created.'
+						: update.isSuccess
+							? 'Experiment updated.'
+							: null
+				}
+				pendingLabel={editingId ? 'Saving draft…' : 'Creating experiment…'}
 			/>
+			<p className="alert-info mt-3 rounded-lg px-3 py-2 text-xs">
+				Allocation is locked while an experiment is running. Starting or completing can take
+				up to 60 seconds to clear the public config cache. Visitors with DNT, GPC, or an
+				explicit Facet opt-out are not bucketed and do not emit exposure events.
+			</p>
 
 			<div className="mt-5">
 				{experiments.isLoading ? (
@@ -205,14 +312,71 @@ export function ExperimentsPanel({
 										{exp.name}
 									</p>
 									<p className="truncate text-[color:var(--muted)] text-xs">
-										flag: {exp.flag_key} · {exp.variants.length} variants
+										flag: {exp.flag_key} · {exp.variants.length} variants ·{' '}
+										<span
+											className={
+												exp.status === 'active'
+													? 'text-pos'
+													: 'text-[color:var(--faint)]'
+											}
+										>
+											{exp.status === 'active'
+												? 'Active'
+												: exp.status === 'completed'
+													? 'Completed'
+													: 'Draft'}
+										</span>
 									</p>
 								</div>
-								<ConfirmDelete
-									onConfirm={() => remove.mutate(exp.id)}
-									consequence={`Delete "${exp.name}"? Its results are removed too.`}
-									busy={remove.isPending}
-								/>
+								<div className="flex shrink-0 items-center gap-1">
+									{exp.status !== 'completed' ? (
+										<button
+											type="button"
+											onClick={() =>
+												update.mutate({
+													id: exp.id,
+													body: savedBody(
+														exp,
+														exp.status === 'active'
+															? 'completed'
+															: 'active',
+													),
+												})
+											}
+											aria-label={`${exp.status === 'active' ? 'Complete' : 'Start'} ${exp.name}`}
+											className="btn-ghost inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs"
+										>
+											{exp.status === 'active' ? (
+												<Square
+													className="h-3.5 w-3.5"
+													aria-hidden="true"
+												/>
+											) : (
+												<Play className="h-3.5 w-3.5" aria-hidden="true" />
+											)}
+											{exp.status === 'active' ? 'Complete' : 'Start'}
+										</button>
+									) : null}
+									<button
+										type="button"
+										disabled={exp.status !== 'draft'}
+										onClick={() => startEditing(exp)}
+										aria-label={`Edit ${exp.name}`}
+										title={
+											exp.status === 'draft'
+												? 'Edit draft configuration'
+												: 'Only draft experiments can be edited.'
+										}
+										className="btn-ghost rounded-lg p-1.5 disabled:opacity-30"
+									>
+										<Pencil className="h-4 w-4" aria-hidden="true" />
+									</button>
+									<ConfirmDelete
+										onConfirm={() => remove.mutate(exp.id)}
+										consequence={`Delete "${exp.name}"? Its results are removed too.`}
+										busy={remove.isPending}
+									/>
+								</div>
 							</li>
 						))}
 					</ul>

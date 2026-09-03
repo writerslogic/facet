@@ -27,6 +27,7 @@ export async function funnelReport(
 	f: StatsFilter,
 ): Promise<FunnelReportResult> {
 	const counts = funnel.steps.map(() => 0);
+	const conversionDurations: number[] = [];
 
 	const pathValues = [
 		...new Set(funnel.steps.filter((s) => s.type === 'path').map((s) => s.match_value)),
@@ -43,7 +44,7 @@ export async function funnelReport(
 		eventValues.length > 0 ? inArray(schema.events.name, eventValues) : undefined,
 	);
 	if (!stepMatch) {
-		return { steps: [], overall_rate: 0 };
+		return { steps: [], overall_rate: 0, time_to_convert_ms: null };
 	}
 
 	const client = db(env);
@@ -125,6 +126,8 @@ export async function funnelReport(
 				cursor += 1;
 			}
 			let pointer = 0;
+			let firstMatchedAt: number | null = null;
+			let completedAt: number | null = null;
 			for (let i = cursor; i < visitorEvents.length; i += 1) {
 				const e = visitorEvents[i];
 				if (!e || e.createdAt > session.endedAt) {
@@ -136,14 +139,19 @@ export async function funnelReport(
 				}
 				const value = step.type === 'event' ? e.name : e.path;
 				if (value === step.match_value) {
+					if (pointer === 0) firstMatchedAt = e.createdAt;
 					pointer += 1;
 					if (pointer >= funnel.steps.length) {
+						completedAt = e.createdAt;
 						break;
 					}
 				}
 			}
 			for (let i = 0; i < pointer; i += 1) {
 				counts[i] = (counts[i] ?? 0) + 1;
+			}
+			if (firstMatchedAt !== null && completedAt !== null) {
+				conversionDurations.push(Math.max(0, completedAt - firstMatchedAt));
 			}
 		}
 	}
@@ -156,6 +164,18 @@ export async function funnelReport(
 	const first = counts[0] ?? 0;
 	const last = counts[counts.length - 1] ?? 0;
 	const overallRate = first === 0 ? 0 : last / first;
+	conversionDurations.sort((a, b) => a - b);
+	const middle = Math.floor(conversionDurations.length / 2);
+	const timeToConvert =
+		conversionDurations.length === 0
+			? null
+			: conversionDurations.length % 2 === 1
+				? (conversionDurations[middle] ?? null)
+				: Math.round(
+						((conversionDurations[middle - 1] ?? 0) +
+							(conversionDurations[middle] ?? 0)) /
+							2,
+					);
 
-	return { steps, overall_rate: overallRate };
+	return { steps, overall_rate: overallRate, time_to_convert_ms: timeToConvert };
 }

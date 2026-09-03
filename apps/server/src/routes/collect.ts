@@ -11,8 +11,7 @@ import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
 import { isGpcOptOut } from '../lib/gpc.js';
 import { validationErrorHook } from '../lib/http.js';
-import { deriveEvent, ingestEvent, persistDerived } from '../lib/ingest.js';
-import { createLogger } from '../lib/log.js';
+import { submitEvent } from '../lib/ingest.js';
 import { enforceRateLimit, rateLimit } from '../lib/ratelimit.js';
 import {
 	clientIp,
@@ -25,8 +24,6 @@ import {
 } from '../lib/request-meta.js';
 
 export const collectRoute = new Hono<AppEnv>();
-
-const log = createLogger({ route: 'collect' });
 
 function normalizedHostname(value: string): string {
 	return value.trim().toLowerCase().replace(/\.$/, '');
@@ -84,6 +81,7 @@ collectRoute.post(
 		const seg = segmentation(c.req.raw);
 		// The public beacon carries no trusted identity, so it can only ever produce a Tier 0/1 hash.
 		const input = {
+			eventId: body.event_id,
 			siteId: body.site_id,
 			ip: clientIp(c.req.raw),
 			ua,
@@ -107,26 +105,9 @@ collectRoute.post(
 			uid: null,
 			consent: false,
 		};
-		// Hot path: derive the IP-free event now (the raw IP goes into the hash and is discarded here) and
-		// enqueue it, so the beacon returns without waiting on any D1 write — a consumer batches the writes.
-		// Falls back to a synchronous write only when no queue is bound (tests / minimal deployments).
-		if (c.env.INGEST_QUEUE) {
-			const derived = await deriveEvent(c.env, input);
-			if (derived) {
-				try {
-					await c.env.INGEST_QUEUE.send(derived);
-				} catch (err) {
-					// IMPORTANT: a queue outage must not drop the event. Persist the ALREADY-derived row
-					// rather than re-running `ingestEvent` — a second derivation would hit the in-isolate
-					// dedup key this one just recorded and return null, silently discarding the event, and
-					// would mirror a duplicate data point into Analytics Engine.
-					log.error('ingest_enqueue_failed', err, { site_id: body.site_id });
-					await persistDerived(c.env, [derived]);
-				}
-			}
-		} else {
-			await ingestEvent(c.env, input);
-		}
+		// Hot path: consume the raw IP during derivation, then queue only the privacy-safe row. Minimal
+		// deployments and queue outages fall back to an idempotent synchronous D1 write.
+		await submitEvent(c.env, input);
 		// Advertise the low-entropy UA client hints so browsers keep sending them to this endpoint.
 		c.header('Accept-CH', 'Sec-CH-UA, Sec-CH-UA-Platform, Sec-CH-UA-Mobile');
 		return c.body(null, 202);

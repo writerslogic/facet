@@ -8,6 +8,7 @@
 
 import type { NlQueryResult } from '@facet/shared';
 import { useMutation } from '@tanstack/react-query';
+import { useCallback, useRef } from 'react';
 import { apiPost } from '../api.js';
 import type { Range } from '../state.js';
 
@@ -16,6 +17,7 @@ import type { Range } from '../state.js';
  * question is stopped at the input rather than coming back as an opaque `bad_request`.
  */
 export const QUESTION_MAX_LEN = 500;
+export const ASK_TIMEOUT_MS = 20_000;
 
 export interface NlQueryVars {
 	question: string;
@@ -24,13 +26,47 @@ export interface NlQueryVars {
 }
 
 export function useNlQuery(apiKey: string, siteId: string) {
-	return useMutation<NlQueryResult, Error, NlQueryVars>({
-		mutationFn: ({ question, range }) =>
-			apiPost<NlQueryResult>('/api/stats/query', apiKey, {
-				site_id: siteId,
-				question,
-				start: range.start,
-				end: range.end,
-			}),
+	const active = useRef<{
+		controller: AbortController;
+		reason: 'request_cancelled' | 'request_timeout';
+	} | null>(null);
+	const mutation = useMutation<NlQueryResult, Error, NlQueryVars>({
+		mutationFn: async ({ question, range }) => {
+			if (active.current) {
+				active.current.reason = 'request_cancelled';
+				active.current.controller.abort();
+			}
+			const request = {
+				controller: new AbortController(),
+				reason: 'request_timeout' as const,
+			};
+			active.current = request;
+			const timeout = window.setTimeout(() => request.controller.abort(), ASK_TIMEOUT_MS);
+			try {
+				return await apiPost<NlQueryResult>(
+					'/api/stats/query',
+					apiKey,
+					{
+						site_id: siteId,
+						question,
+						start: range.start,
+						end: range.end,
+					},
+					request.controller.signal,
+				);
+			} catch (error) {
+				if (request.controller.signal.aborted) throw new Error(request.reason);
+				throw error;
+			} finally {
+				window.clearTimeout(timeout);
+				if (active.current === request) active.current = null;
+			}
+		},
 	});
+	const cancel = useCallback(() => {
+		if (!active.current) return;
+		active.current.reason = 'request_cancelled';
+		active.current.controller.abort();
+	}, []);
+	return { ...mutation, cancel };
 }

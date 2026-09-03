@@ -57,6 +57,7 @@ interface RecordedCall {
 	siteId: string;
 	auth: string;
 	current: boolean;
+	url: string;
 }
 
 let calls: RecordedCall[] = [];
@@ -73,7 +74,7 @@ function mockServer(behaviour: Record<string, Behaviour>): void {
 			const headers = (init?.headers ?? {}) as Record<string, string>;
 			// The comparison read asks for the preceding window, whose `end` is a whole range back.
 			const current = Date.now() - Number(params.get('end')) < 60_000;
-			calls.push({ siteId, auth: headers.Authorization ?? '', current });
+			calls.push({ siteId, auth: headers.Authorization ?? '', current, url });
 
 			const site = behaviour[siteId];
 			if (!site) throw new Error('unexpected site');
@@ -148,6 +149,7 @@ describe('all-sites fan-out', () => {
 			[SITE_C]: 'Bearer clk_charlie',
 		};
 		expect(calls).toHaveLength(6);
+		expect(calls.every((call) => call.url.startsWith('/api/stats/core?'))).toBe(true);
 		for (const call of calls) expect(call.auth).toBe(expected[call.siteId]);
 		for (const siteId of [SITE_A, SITE_B, SITE_C]) {
 			const forSite = calls.filter((c) => c.siteId === siteId);

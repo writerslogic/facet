@@ -7,6 +7,8 @@ export interface ExperimentVariant {
 	weight: number;
 }
 
+export type ExperimentStatus = 'draft' | 'active' | 'completed';
+
 /** A stored experiment for a site; `variants` has 2–8 entries and the first is the control. */
 export interface Experiment {
 	id: string;
@@ -14,7 +16,11 @@ export interface Experiment {
 	name: string;
 	flag_key: string;
 	variants: ExperimentVariant[];
+	status: ExperimentStatus;
+	/** Compatibility mirror for clients that predate the durable lifecycle. */
 	active: boolean;
+	started_at: number | null;
+	completed_at: number | null;
 	created_at: number;
 }
 

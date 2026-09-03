@@ -213,10 +213,6 @@ function EngagementBody({
 }
 
 export const engagementBox: TileDef = {
-	id: 'engagement',
-	title: 'Engagement',
-	size: 'md',
-	expandable: true,
 	// Machine-readable values, not the tile's own strings: this grid is copied as TSV into a
 	// spreadsheet, where "62%" is text and a locale-grouped count is a broken cell.
 	table: (ctx) => {

@@ -269,28 +269,6 @@ function PathTreeTile({
 }
 
 export const pathTreeBox: TileDef = {
-	id: 'path-tree',
-	title: 'Path explorer',
-	size: 'tall',
-	expandable: true,
-	variants: [
-		{ id: 'sunburst', label: 'Sunburst' },
-		{ id: 'treemap', label: 'Treemap' },
-	],
-	options: [
-		{
-			key: 'levels',
-			label: 'Levels',
-			type: 'select',
-			choices: [
-				{ value: 'auto', label: 'Auto' },
-				{ value: '2', label: '2' },
-				{ value: '3', label: '3' },
-				{ value: '4', label: '4' },
-			],
-			default: 'auto',
-		},
-	],
 	render: (ctx, density, config) => (
 		<PathTreeTile serverFilter={ctx.serverFilter} density={density} config={config} />
 	),

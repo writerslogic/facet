@@ -44,7 +44,7 @@ export function useClock(apiKey: string, siteId: string, range: Range, filter: C
 			if (filter.channel) params.set('channel', filter.channel);
 			return apiFetch<ClockResponse>(`/api/stats/clock?${params}`, apiKey);
 		},
-		enabled: Boolean(apiKey && siteId) && range.end > range.start,
+		enabled: Boolean(siteId) && range.end > range.start,
 		// Cross-filtering the board re-reads the same grid; keep the old one on screen for the round
 		// trip instead of collapsing the tile to a skeleton. Site-scoped, so a profile switch never
 		// shows the previous site's grid under the new label.
@@ -77,7 +77,7 @@ export function useSessionDistribution(
 				apiKey,
 			);
 		},
-		enabled: Boolean(apiKey && siteId) && range.end > range.start,
+		enabled: Boolean(siteId) && range.end > range.start,
 		placeholderData: (prev, prevQuery) =>
 			prevQuery?.queryKey[1] === siteId ? prev : undefined,
 	});

@@ -18,6 +18,7 @@ import { retentionDays } from '../lib/retention.js';
 import { rollupBucket } from '../lib/rollups.js';
 import { dayKey, getDailySalt } from '../lib/salt.js';
 import { buildSessionsForSiteDay } from '../lib/sessions.js';
+import { hasLoggedRollupKey, rollupKey } from '../lib/transparency.js';
 
 // D1 caps statements per batch, and `persistDerived` emits two per event (the row + its session), so
 // the batch is chunked rather than sent as one 1000-statement transaction.
@@ -92,6 +93,25 @@ importRoutes.post(
 				'too_many_days',
 				400,
 				`batch spans ${days.length} UTC days, over the ${IMPORT_MAX_DAYS}-day per-request limit`,
+			);
+		}
+		// A transparency leaf commits the absolute counters of a daily rollup. Rebuilding that day after
+		// it was logged would change the row while the unique leaf key continued to attest the old hash.
+		// Reject before deriving or writing anything, including for dry runs, so imports are atomic with
+		// respect to the signed history boundary.
+		const affectedRollups = events.map((event) =>
+			rollupKey({
+				siteId,
+				hostname: event.hostname,
+				bucketStart: dayStartMs(dayKey(event.timestamp)),
+				interval: 'day',
+			}),
+		);
+		if (await hasLoggedRollupKey(c.env, affectedRollups)) {
+			throw new ApiError(
+				'signed_history_conflict',
+				409,
+				'one or more imported UTC days already have a signed transparency-log rollup',
 			);
 		}
 		if (dryRun) {

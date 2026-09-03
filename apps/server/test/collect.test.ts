@@ -165,10 +165,21 @@ describe('POST /api/collect', () => {
 		expect(session?.count).toBe(1);
 	});
 
-	it('collapses two back-to-back identical beacons (client double-boot) into one event', async () => {
+	it('counts legitimate identical beacons but deduplicates an exact event-id retry', async () => {
 		const SITE_DUP = '66666666-6666-4666-8666-666666666666';
 		await post(validPayload(SITE_DUP, '/checkout'));
 		await post(validPayload(SITE_DUP, '/checkout'));
-		expect(await eventCount(SITE_DUP)).toBe(1);
+		expect(await eventCount(SITE_DUP)).toBe(2);
+
+		const retry = JSON.stringify({
+			event_id: '77777777-7777-4777-8777-777777777777',
+			site_id: SITE_DUP,
+			hostname: 'example.com',
+			path: '/checkout',
+			referrer: '',
+		});
+		await post(retry);
+		await post(retry);
+		expect(await eventCount(SITE_DUP)).toBe(3);
 	});
 });

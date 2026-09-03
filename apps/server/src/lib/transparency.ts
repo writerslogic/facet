@@ -121,13 +121,27 @@ async function mmrLeafCount(env: Env): Promise<number> {
  * ever reading them. Separator and field order MUST stay in lockstep with `rollupKey()`. */
 const rollupKeyExpr = sql`${schema.eventRollups.siteId} || '|' || ${schema.eventRollups.hostname} || '|' || ${schema.eventRollups.bucketStart} || '|' || ${schema.eventRollups.interval}`;
 
+/** Whether rebuilding any of these daily buckets would mutate history already committed to the log.
+ * Imports are allowed to create old rollups, but never to overwrite a rollup whose hash has already
+ * become a leaf: the unique rollup key means a changed row could not be appended a second time. */
+export async function hasLoggedRollupKey(env: Env, keys: readonly string[]): Promise<boolean> {
+	for (const keyChunk of chunked([...new Set(keys)], D1_MAX_IN_PARAMS)) {
+		const [row] = await db(env)
+			.select({ leafNo: schema.mmrLeaves.leafNo })
+			.from(schema.mmrLeaves)
+			.where(inArray(schema.mmrLeaves.rollupKey, keyChunk))
+			.limit(1);
+		if (row !== undefined) return true;
+	}
+	return false;
+}
+
 /** Append every finalized, not-yet-logged rollup as a leaf. Returns the number appended. */
 export async function appendFinalizedRollups(env: Env, now: number): Promise<number> {
 	const client = db(env);
 	// A rollup is finalized once its bucket has fully elapsed (bucket end <= the current hour floor).
-	// FIXME: routes/import.ts re-runs rollupBucket over arbitrary historical days and rollups.ts
-	// overwrites the counters absolutely, so an elapsed bucket is not in fact immutable. A rewritten
-	// rollup cannot be re-leafed while mmr_leaves.rollup_key is unique, so the fix is not in this file.
+	// Historical imports refuse a day once one of its daily rollups is logged. That guard is what makes
+	// the anti-join below safe: an existing rollup key always commits the row's current counters.
 	const hourFloor = Math.floor(now / HOUR_MS) * HOUR_MS;
 	// event_rollups is never pruned (rollups.ts keeps every bucket forever) and mmr_leaves grows in
 	// lockstep with what's already logged, so both filters run in SQL — an unbounded hourly cron tick

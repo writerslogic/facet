@@ -440,30 +440,6 @@ function CalendarBody({
 }
 
 export const clockBox: TileDef = {
-	id: 'timing',
-	title: 'When traffic arrives',
-	// A dial wants a square plot: at two rows it letterboxed to the tile height and drew a coin.
-	size: 'tall',
-	expandable: true,
-	variants: [
-		{ id: 'polar', label: 'Polar grid' },
-		{ id: 'nightingale', label: 'Nightingale' },
-		{ id: 'calendar', label: 'Calendar' },
-	],
-	options: [
-		{
-			key: 'timezone',
-			label: 'Hours',
-			type: 'select',
-			choices: [
-				{ value: 'utc', label: 'UTC (as served)' },
-				{ value: 'local', label: 'Your local offset' },
-			],
-			// UTC is the default because it is what the API returned. Defaulting to a client-side
-			// shift would put a number on screen the server never computed, under no label.
-			default: 'utc',
-		},
-	],
 	table: (ctx) => {
 		const counts = dailyCounts(ctx.series);
 		return {

@@ -602,7 +602,7 @@ optOut(); // effective immediately; all collection stops`}</Code>
 					pre-image is <code>ip | ua | salt | siteId</code> on a daily window.{' '}
 					<strong>Pseudonymous</strong> keeps that pre-image but widens the window to
 					day/week/month. <strong>Identified</strong> switches to{' '}
-					<code>uid:&lt;uid&gt; | salt | siteId</code> so you can join to your own CRM.
+					<code>uid:&lt;uid&gt; | salt | siteId</code> for consented identified analytics.
 				</P>
 				<P>
 					Both elevated tiers require a deployment signing key, and each visitor needs a{' '}

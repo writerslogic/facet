@@ -331,6 +331,12 @@ function buildRangeStats(
 	const attribution: AttributionResult = {
 		conversions: orders,
 		revenue: revenueTotal,
+		meta: {
+			exact: true,
+			truncated: false,
+			rows_scanned: pageviews + events,
+			range_supported: true,
+		},
 		models: Object.fromEntries(
 			models.map((m, i) => [
 				m,
@@ -600,7 +606,7 @@ export function buildFunnelReport(start: number, end: number): FunnelReportResul
 	}));
 	const first = steps[0]?.count ?? 1;
 	const last = steps[steps.length - 1]?.count ?? 0;
-	return { steps, overall_rate: last / first };
+	return { steps, overall_rate: last / first, time_to_convert_ms: 4 * 60_000 };
 }
 
 export function buildConversions(goalId: string, start: number, end: number): GoalConversionResult {
@@ -624,7 +630,10 @@ export const DEMO_EXPERIMENTS: Experiment[] = [
 			{ key: 'control', weight: 1 },
 			{ key: 'urgency', weight: 1 },
 		],
+		status: 'active',
 		active: true,
+		started_at: Date.UTC(2025, 1, 1),
+		completed_at: null,
 		created_at: Date.UTC(2025, 1, 1),
 	},
 ];

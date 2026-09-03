@@ -24,7 +24,7 @@ export function useGoals(apiKey: string, siteId: string) {
 	return useQuery({
 		queryKey: siteQueryKey('goals', siteId),
 		queryFn: () => apiFetch<{ goals: Goal[] }>(`/api/stats/goals?site_id=${siteId}`, apiKey),
-		enabled: Boolean(apiKey && siteId),
+		enabled: Boolean(siteId),
 		staleTime: CATALOG_STALE_MS,
 		retry,
 	});
@@ -35,7 +35,7 @@ export function useFunnels(apiKey: string, siteId: string) {
 		queryKey: siteQueryKey('funnels', siteId),
 		queryFn: () =>
 			apiFetch<{ funnels: Funnel[] }>(`/api/stats/funnels?site_id=${siteId}`, apiKey),
-		enabled: Boolean(apiKey && siteId),
+		enabled: Boolean(siteId),
 		staleTime: CATALOG_STALE_MS,
 		retry,
 	});
@@ -49,7 +49,7 @@ export function useConversions(apiKey: string, siteId: string, goalId: string, r
 				`/api/stats/conversions?site_id=${siteId}&goal_id=${goalId}&start=${range.start}&end=${range.end}`,
 				apiKey,
 			),
-		enabled: Boolean(apiKey && siteId && goalId),
+		enabled: Boolean(siteId && goalId),
 		retry,
 	});
 }
@@ -62,7 +62,7 @@ export function useFunnelReport(apiKey: string, siteId: string, funnelId: string
 				`/api/funnels/${funnelId}/report?site_id=${siteId}&start=${range.start}&end=${range.end}`,
 				apiKey,
 			),
-		enabled: Boolean(apiKey && siteId && funnelId),
+		enabled: Boolean(siteId && funnelId),
 		retry,
 	});
 }

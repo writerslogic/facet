@@ -1,9 +1,10 @@
 // App shell: header with brand, the site-profile switcher, a Settings toggle, and the date-range
 // control. Profiles are managed from the switcher; there is no single-credential sign-out anymore.
 
-import { Settings as SettingsIcon } from 'lucide-react';
-import type { ReactElement, ReactNode } from 'react';
+import { Ellipsis, Settings as SettingsIcon } from 'lucide-react';
+import { type ReactElement, type ReactNode, useEffect, useRef, useState } from 'react';
 import { cn } from '../lib/cn.js';
+import { usePopoverDismiss } from '../lib/usePopoverDismiss.js';
 import { ClockToggle } from './ClockToggle.js';
 import { DateRange } from './DateRange.js';
 import { ShortcutHelpButton } from './ShortcutHelp.js';
@@ -58,6 +59,25 @@ export function Layout({
 	/** Dark "cut obsidian" shell for the Overview marketing surface — ink background + light chrome. */
 	dark?: boolean;
 }): ReactElement {
+	const [compactHeader, setCompactHeader] = useState(false);
+	const [phoneHeader, setPhoneHeader] = useState(false);
+	const [moreOpen, setMoreOpen] = useState(false);
+	const moreWrapRef = useRef<HTMLDivElement>(null);
+	const moreToggleRef = useRef<HTMLButtonElement>(null);
+	usePopoverDismiss(moreOpen, () => setMoreOpen(false), moreWrapRef, moreToggleRef);
+	useEffect(() => {
+		const measure = (): void => {
+			setCompactHeader(window.innerWidth < 1200);
+			setPhoneHeader(window.innerWidth < 680);
+		};
+		measure();
+		window.addEventListener('resize', measure);
+		return () => window.removeEventListener('resize', measure);
+	}, []);
+	useEffect(() => {
+		if (!compactHeader) setMoreOpen(false);
+	}, [compactHeader]);
+
 	return (
 		<div
 			className={cn(
@@ -87,31 +107,78 @@ export function Layout({
 					fill ? 'shrink-0' : 'sticky top-0',
 				)}
 			>
-				<div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-6 py-2">
+				<div className="mx-auto flex max-w-[1600px] items-center justify-between gap-2 px-3 py-2 sm:gap-3 sm:px-6">
 					<div className="flex items-center gap-3">
 						<span data-chrome className="flex items-center gap-2">
 							<BrandMark />
-							<span className="text-prism text-lg font-semibold tracking-[-0.02em]">
+							<span className="hidden text-prism text-lg font-semibold tracking-[-0.02em] sm:inline">
 								Facet
 							</span>
 						</span>
 						<SiteSwitcher />
 					</div>
-					<div className="flex flex-wrap items-center gap-2 sm:gap-3">
-						{settingsActive ? null : <DateRange dark={dark} />}
-						{/* The standing statement of which clock the whole app is in. Next to the date
-						    range on purpose: the two together are "which window, on which clock". */}
-						<ClockToggle />
-						{headerExtra}
-						{onOpenShortcuts ? (
-							<ShortcutHelpButton onOpen={onOpenShortcuts} open={shortcutsOpen} />
-						) : null}
+					<div className="flex shrink-0 items-center gap-2 sm:gap-3">
+						{settingsActive || phoneHeader ? null : <DateRange dark={dark} />}
+						{compactHeader ? (
+							<div className="relative" ref={moreWrapRef}>
+								<button
+									ref={moreToggleRef}
+									type="button"
+									onClick={() => setMoreOpen((open) => !open)}
+									aria-label="More dashboard actions"
+									aria-haspopup="dialog"
+									aria-expanded={moreOpen}
+									title="More dashboard actions"
+									className="flex size-9 items-center justify-center rounded-lg border border-[color:rgb(var(--border))] text-[color:var(--muted)] transition hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]"
+								>
+									<Ellipsis className="h-4 w-4" aria-hidden="true" />
+								</button>
+								{moreOpen ? (
+									<dialog
+										open
+										aria-label="More dashboard actions"
+										className="absolute right-0 z-40 m-0 mt-1 flex w-[min(22rem,calc(100vw-1.5rem))] flex-col items-stretch gap-1 rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-2 shadow-float"
+									>
+										{phoneHeader && !settingsActive ? (
+											<DateRange dark={dark} />
+										) : null}
+										{/* The clock remains adjacent in the wide header; here its explicit label
+										    makes the same state discoverable without forcing a second header row. */}
+										<ClockToggle />
+										{headerExtra}
+										{onOpenShortcuts ? (
+											<ShortcutHelpButton
+												onOpen={() => {
+													setMoreOpen(false);
+													onOpenShortcuts();
+												}}
+												open={shortcutsOpen}
+											/>
+										) : null}
+									</dialog>
+								) : null}
+							</div>
+						) : (
+							<>
+								{/* The standing statement of which clock the whole app is in. Next to the
+								    date range on purpose: together they are "which window, on which clock". */}
+								<ClockToggle />
+								{headerExtra}
+								{onOpenShortcuts ? (
+									<ShortcutHelpButton
+										onOpen={onOpenShortcuts}
+										open={shortcutsOpen}
+									/>
+								) : null}
+							</>
+						)}
 						<button
 							type="button"
 							onClick={onToggleSettings}
 							aria-pressed={settingsActive}
+							aria-label="Settings"
 							className={cn(
-								'inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-medium transition',
+								'inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm font-medium transition sm:px-3',
 								settingsActive
 									? 'chip-active'
 									: dark
@@ -120,7 +187,9 @@ export function Layout({
 							)}
 						>
 							<SettingsIcon className="h-4 w-4" aria-hidden="true" />
-							Settings
+							<span className="hidden sm:inline" aria-hidden="true">
+								Settings
+							</span>
 						</button>
 					</div>
 				</div>
@@ -128,7 +197,7 @@ export function Layout({
 			<main
 				id="facet-main"
 				className={cn(
-					'mx-auto w-full max-w-[1600px] px-6',
+					'mx-auto w-full max-w-[1600px] px-3 sm:px-6',
 					// The fixed "Powered by Facet" badge sits bottom-right; scrolling tabs reserve room
 					// under the content so it can't cover the last control on the page (it was landing
 					// on the Settings panels' action buttons).

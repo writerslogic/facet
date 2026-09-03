@@ -2,6 +2,7 @@
 // config. Zero dependencies.
 
 import type { EventProps } from '@facet/shared';
+import { eventId } from './id.js';
 import { isExplicitlyOptedOut } from './optout.js';
 
 export interface FacetConfig {
@@ -85,7 +86,12 @@ function post(endpoint: string, body: string): Promise<boolean> {
  * was QUEUED by the browser, never that the server accepted it — a caller that commits dedupe state on
  * a beacon can suppress the retry that would have fixed a drop.
  */
-export function sendEvent(_name?: string, _props?: EventProps, ack = false): Promise<boolean> {
+export function sendEvent(
+	_name?: string,
+	_props?: EventProps,
+	ack = false,
+	_eventId = eventId(),
+): Promise<boolean> {
 	// Only a DELIBERATE opt-out suppresses the anonymous, cookieless pageview/event — a passive GPC/DNT
 	// signal does not, so total traffic stays accurately counted (see isExplicitlyOptedOut).
 	if (isExplicitlyOptedOut()) return Promise.resolve(true);
@@ -105,6 +111,7 @@ export function sendEvent(_name?: string, _props?: EventProps, ack = false): Pro
 	const utm = parseUtmFromSearch(search);
 
 	const payload: Record<string, unknown> = {
+		...(_eventId ? { event_id: _eventId } : {}),
 		site_id: siteId,
 		hostname,
 		path: path || '/',

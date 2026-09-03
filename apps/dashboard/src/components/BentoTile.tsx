@@ -3,19 +3,13 @@
 // a count-up hook so metrics animate in "alive"; and a compact KPI readout for a tile.
 
 import type { CountRow } from '@facet/shared';
-import { Maximize2, TableProperties, X } from 'lucide-react';
-import {
-	type ReactElement,
-	type MouseEvent as ReactMouseEvent,
-	type ReactNode,
-	useEffect,
-	useId,
-	useRef,
-	useState,
-} from 'react';
+import { Ellipsis, Maximize2, TableProperties, X } from 'lucide-react';
+import { type ReactElement, type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import type { TileEmphasis } from '../features/overview/catalog.js';
 import type { CompareSource } from '../hooks/compare.js';
 import { cn } from '../lib/cn.js';
 import { type DeltaSense, formatNumber } from '../lib/format.js';
+import { usePopoverDismiss } from '../lib/usePopoverDismiss.js';
 import { BreakdownList } from './CompareList.js';
 import { DeltaBadge } from './Delta.js';
 import { ColumnSpark, HorizonSpark, RadialGauge } from './KpiViz.js';
@@ -78,8 +72,6 @@ export function useCountUp(value: number, ms = 650): number {
 /** Surface emphasis: `hero` gets an accent-tinted face + ring so the eye lands on it first; `flow` is the
  * dark feature surface (inked, so the flow's light ribbons pop); `kpi` a lighter lift; default is the
  * plain lit face. */
-export type TileEmphasis = 'hero' | 'flow' | 'kpi' | 'default';
-
 // Dark "cut obsidian" surfaces: every tile is inked (.tile-dark supplies the ink face + bevel + prism
 // hover edge); emphasis only layers a faint gradient tint so the eye still lands on the hero + flow.
 const EMPHASIS: Record<TileEmphasis, string> = {
@@ -93,6 +85,7 @@ const EMPHASIS: Record<TileEmphasis, string> = {
  * grid inflates it); while focused it shows `onClose` instead. The expand/close buttons carry data hooks
  * so the board can move keyboard focus onto them across the transition. */
 export function BentoTile({
+	title,
 	label,
 	action,
 	onExpand,
@@ -106,6 +99,9 @@ export function BentoTile({
 	bodyClassName,
 	children,
 }: {
+	/** Semantic tile name. Independent from `label`, which may be visually suppressed by self-labelled
+	 * content but must never make the surrounding section or its controls anonymous. */
+	title: string;
 	label?: string;
 	action?: ReactNode;
 	onExpand?: () => void;
@@ -126,30 +122,21 @@ export function BentoTile({
 	const dark = true;
 	const compact = density === 'compact';
 	const headingId = useId();
+	const [actionsOpen, setActionsOpen] = useState(false);
+	const actionsWrapRef = useRef<HTMLDivElement>(null);
+	const actionsToggleRef = useRef<HTMLButtonElement>(null);
+	usePopoverDismiss(actionsOpen, () => setActionsOpen(false), actionsWrapRef, actionsToggleRef);
 	// The caller signals a scrolling body by passing an overflow utility (see BentoBoard).
 	const scrolls = Boolean(bodyClassName?.includes('overflow-y-auto'));
-	// Expand on a click anywhere in the tile EXCEPT on its own interactive content (list rows cross-filter,
-	// flow nodes drill — those must not also expand). The corner Maximize button remains the keyboard path.
-	const onTileClick = onExpand
-		? (e: ReactMouseEvent<HTMLElement>): void => {
-				if (
-					!(e.target as HTMLElement).closest(
-						'button,a,input,select,textarea,[role="button"],[role="tab"]',
-					)
-				)
-					onExpand();
-			}
-		: undefined;
+	const hasActions = Boolean(onToggleTable || onExpand);
 	return (
-		// biome-ignore lint/a11y/useKeyWithClickEvents: pointer enhancement only; the corner Maximize button is the keyboard-accessible expand control
 		<section
 			data-focused={focused}
-			onClick={onTileClick}
 			// Named from its own heading, so each tile is an addressable region rather than an
 			// anonymous <section> the accessibility tree drops on the floor.
-			aria-labelledby={label ? headingId : undefined}
+			aria-labelledby={headingId}
 			className={cn(
-				'tile-dark facet-glint group relative flex min-h-0 flex-col overflow-hidden rounded-2xl',
+				'tile-dark group relative flex min-h-0 flex-col overflow-hidden rounded-2xl',
 				// IMPORTANT: chrome is the whole budget at compact. p-4 plus the header row costs ~56px
 				// before the body starts, which at a 64px tile left it 8px and at the 34px squeezed case
 				// left it nothing — three box reviews independently found their compact rendering drawing
@@ -157,59 +144,90 @@ export function BentoTile({
 				// overlay, the same trick the controls above already use for exactly this reason.
 				compact ? 'p-2' : 'p-4',
 				'transition-all duration-300 ease-out',
-				focused ? 'z-20' : 'hover:-translate-y-0.5',
-				onExpand && 'cursor-pointer',
+				focused && 'z-20',
+				actionsOpen && 'overflow-visible',
 				EMPHASIS[emphasis],
 				className,
 			)}
 		>
-			{/* Controls float as an overlay (not a header row) so a short tile keeps its full height for content. */}
-			{onToggleTable ? (
-				<button
-					type="button"
-					onClick={onToggleTable}
-					aria-pressed={tableActive}
-					aria-label={`${tableActive ? 'Hide' : 'Show'} ${label ?? 'box'} data table`}
-					className={cn(
-						'absolute right-9 top-2.5 z-20 rounded-md p-1 transition group-hover:opacity-100',
-						tableActive
-							? 'text-accent-300 opacity-100'
-							: 'text-[color:var(--muted)] opacity-40 hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]',
-					)}
+			{!label ? (
+				<h2 id={headingId} className="sr-only">
+					{title}
+				</h2>
+			) : null}
+			{/* One 40px action target replaces multiple tiny corner icons. The focused close stays direct so
+			    Escape and the visible control both restore focus to this menu trigger. */}
+			{hasActions ? (
+				<div
+					ref={actionsWrapRef}
+					className={cn('absolute top-1 z-30', onClose ? 'right-11' : 'right-1')}
 				>
-					<TableProperties className="h-3.5 w-3.5" aria-hidden="true" />
-				</button>
+					<button
+						ref={actionsToggleRef}
+						type="button"
+						data-tile-expand
+						onClick={() => setActionsOpen((open) => !open)}
+						aria-label={`${title} actions`}
+						aria-haspopup="menu"
+						aria-expanded={actionsOpen}
+						title={`${title} actions`}
+						className="flex size-10 items-center justify-center rounded-lg text-[color:var(--muted)] opacity-60 transition hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)] focus:opacity-100 group-hover:opacity-100"
+					>
+						<Ellipsis className="h-4 w-4" aria-hidden="true" />
+					</button>
+					{actionsOpen ? (
+						<div
+							role="menu"
+							className="absolute right-0 z-40 mt-1 w-48 rounded-xl border border-[color:rgb(var(--border))] bg-[var(--panel)] p-1 shadow-float"
+						>
+							{onToggleTable ? (
+								<button
+									type="button"
+									role="menuitemcheckbox"
+									aria-checked={tableActive}
+									onClick={() => {
+										onToggleTable();
+										setActionsOpen(false);
+									}}
+									className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-left text-[color:var(--ink)] text-sm hover:bg-[color:rgb(var(--hover))]"
+								>
+									<TableProperties className="h-4 w-4" aria-hidden="true" />
+									{tableActive ? 'Hide data table' : 'Show data table'}
+								</button>
+							) : null}
+							{onExpand ? (
+								<button
+									type="button"
+									role="menuitem"
+									onClick={() => {
+										setActionsOpen(false);
+										onExpand();
+									}}
+									className="flex min-h-10 w-full items-center gap-2 rounded-lg px-3 text-left text-[color:var(--ink)] text-sm hover:bg-[color:rgb(var(--hover))]"
+								>
+									<Maximize2 className="h-4 w-4" aria-hidden="true" />
+									Expand detail
+								</button>
+							) : null}
+						</div>
+					) : null}
+				</div>
 			) : null}
 			{onClose ? (
 				<button
 					type="button"
 					data-tile-close
 					onClick={onClose}
-					aria-label={`Close ${label ?? 'tile'} detail`}
+					aria-label={`Close ${title} detail`}
+					title={`Close ${title} detail`}
 					className={cn(
-						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 transition',
+						'absolute right-1 top-1 z-30 flex size-10 items-center justify-center rounded-lg transition',
 						dark
 							? 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
 							: 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]',
 					)}
 				>
-					<X className="h-3.5 w-3.5" aria-hidden="true" />
-				</button>
-			) : onExpand ? (
-				<button
-					type="button"
-					data-tile-expand
-					onClick={onExpand}
-					aria-label={`Expand ${label ?? 'tile'}`}
-					// Faintly visible at rest so every tile signals it can be expanded; solid on hover/focus.
-					className={cn(
-						'absolute right-2.5 top-2.5 z-20 rounded-md p-1 opacity-40 transition focus:opacity-100 group-hover:opacity-100',
-						dark
-							? 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]'
-							: 'text-[color:var(--muted)] hover:bg-[color:rgb(var(--hover))] hover:text-[color:var(--ink)]',
-					)}
-				>
-					<Maximize2 className="h-3.5 w-3.5" aria-hidden="true" />
+					<X className="h-4 w-4" aria-hidden="true" />
 				</button>
 			) : null}
 			{compact && label ? (
@@ -224,7 +242,7 @@ export function BentoTile({
 				<header
 					className={cn(
 						'relative z-10 mb-2 flex shrink-0 items-center justify-between gap-2',
-						onToggleTable ? 'pr-14' : 'pr-7',
+						hasActions || onClose ? 'pr-11' : '',
 					)}
 				>
 					{label ? (
@@ -237,7 +255,7 @@ export function BentoTile({
 								dark ? 'text-[color:var(--muted)]' : 'text-[color:var(--faint)]',
 							)}
 						>
-							{label}
+							{title}
 						</h2>
 					) : (
 						<span />
@@ -255,7 +273,7 @@ export function BentoTile({
 					bodyClassName,
 				)}
 				{...(scrolls
-					? { tabIndex: 0, role: 'group', 'aria-label': `${label ?? 'Tile'} contents` }
+					? { tabIndex: 0, role: 'group', 'aria-label': `${title} contents` }
 					: {})}
 			>
 				{children}
@@ -297,8 +315,11 @@ export function KpiTile({
 	viz = 'spark',
 	gaugeRatio,
 	gaugeLabel,
+	description,
 }: {
 	label: string;
+	/** Explains a metric whose privacy-preserving semantics are not obvious from its short label. */
+	description?: string;
 	value: number;
 	deltaPct?: number | null;
 	deltaSense?: DeltaSense;
@@ -340,6 +361,14 @@ export function KpiTile({
 				size="sm"
 			/>
 		) : null;
+	const comparison = chip ? (
+		<span className="inline-flex items-center gap-1.5">
+			{chip}
+			<span className="text-[10px] text-[color:var(--faint)] @max-[15rem]/tile:hidden">
+				vs previous period
+			</span>
+		</span>
+	) : null;
 
 	if (expanded) {
 		const s = spark;
@@ -356,7 +385,10 @@ export function KpiTile({
 		return (
 			<div className="flex h-full items-stretch gap-5" style={{ background: tint }}>
 				<div className="flex min-w-0 flex-col justify-center">
-					<div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted)]">
+					<div
+						className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-[color:var(--muted)]"
+						title={description}
+					>
 						<span
 							className="inline-block size-1.5 rotate-45 rounded-[1px]"
 							style={{ background: line }}
@@ -368,7 +400,7 @@ export function KpiTile({
 						<span className="tabular font-semibold text-4xl text-[color:var(--ink)] leading-none tracking-[-0.02em]">
 							{formatNumber(Math.round(shown))}
 						</span>
-						{chip}
+						{comparison}
 					</div>
 					{stats ? (
 						<div className="mt-4 flex gap-5">
@@ -438,7 +470,10 @@ export function KpiTile({
 				className="flex h-full items-center gap-2 overflow-hidden"
 				style={{ background: tint }}
 			>
-				<span className="shrink-0 font-semibold text-[10px] text-[color:var(--muted)] uppercase leading-none tracking-[0.08em]">
+				<span
+					className="shrink-0 font-semibold text-[10px] text-[color:var(--muted)] uppercase leading-none tracking-[0.08em]"
+					title={description}
+				>
 					{label}
 				</span>
 				<span className="tabular ml-auto shrink-0 font-semibold text-[color:var(--ink)] text-lg leading-none tracking-[-0.02em]">
@@ -454,14 +489,17 @@ export function KpiTile({
 			<div className="flex min-w-0 flex-col justify-center">
 				{/* leading-none: an 11px uppercase label was sitting in a 16.5px line box, which is
 				    loose typography AND was 5px of the budget in the shortest tile on the board. */}
-				<div className="text-[11px] font-semibold uppercase leading-none tracking-[0.08em] text-[color:var(--muted)]">
+				<div
+					className="text-[11px] font-semibold uppercase leading-none tracking-[0.08em] text-[color:var(--muted)]"
+					title={description}
+				>
 					{label}
 				</div>
 				<div className="mt-0.5 flex items-baseline gap-1.5">
 					<span className="tabular text-[2rem] font-semibold leading-none tracking-[-0.02em] text-[color:var(--ink)] @max-[13rem]/tile:text-3xl @max-[9rem]/tile:text-2xl">
 						{formatNumber(Math.round(shown))}
 					</span>
-					{chip}
+					{comparison}
 				</div>
 			</div>
 			{viz === 'gauge' ? (

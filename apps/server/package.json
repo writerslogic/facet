@@ -13,7 +13,8 @@
 		"deploy": "wrangler deploy --minify",
 		"lint": "biome check .",
 		"format": "biome format --write .",
-		"typecheck": "tsc --noEmit",
+		"types:bindings": "wrangler types worker-configuration.d.ts --config wrangler.example.jsonc --env-interface CloudflareBindings --strict-vars false --include-runtime false",
+		"typecheck": "pnpm run types:bindings --check && tsc --noEmit",
 		"gen:test-config": "node scripts/gen-test-wrangler.mjs",
 		"pretest": "node scripts/gen-test-wrangler.mjs && pnpm --filter @facet/dashboard build",
 		"test": "vitest run",
@@ -21,8 +22,8 @@
 		"db:generate:crm": "drizzle-kit generate --config drizzle.crm.config.ts",
 		"migrate:local": "wrangler d1 migrations apply facet --local",
 		"migrate:remote": "wrangler d1 migrations apply facet --remote",
-		"migrate:crm:local": "wrangler d1 migrations apply facet-crm --local",
-		"migrate:crm:remote": "wrangler d1 migrations apply facet-crm --remote",
+		"migrate:crm:local": "wrangler d1 migrations apply CRM_DB --local",
+		"migrate:crm:remote": "wrangler d1 migrations apply CRM_DB --remote",
 		"seed:local": "wrangler d1 execute facet --local --file=./scripts/seed.sql"
 	},
 	"dependencies": {

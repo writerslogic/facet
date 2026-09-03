@@ -7,7 +7,6 @@
 // a filtered current period.
 
 import type { CountRow, StatsResponse } from '@facet/shared';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen, waitFor } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -19,7 +18,7 @@ import {
 	variantMovements,
 } from '../components/Experiments.js';
 import { curveComparison } from '../components/Retention.js';
-import { SegmentProvider } from '../hooks/segment.js';
+import { PreviousPeriodProvider } from '../hooks/compare.js';
 import { compareBreakdown, droppedMovement } from '../lib/compare.js';
 import {
 	LOW_VOLUME_BASE,
@@ -28,9 +27,6 @@ import {
 	rateMovement,
 	toMovement,
 } from '../lib/format.js';
-import { DashboardProvider } from '../state.js';
-
-const SITE = '11111111-1111-4111-8111-111111111111';
 
 const rows = (...pairs: [string, number][]): CountRow[] =>
 	pairs.map(([key, count]) => ({ key, count }));
@@ -222,7 +218,10 @@ describe('experiment period comparison', () => {
 		name: 'CTA',
 		flag_key: 'cta',
 		variants: [{ key: 'control', weight: 1 }],
+		status: 'active' as const,
 		active: true,
+		started_at: createdAt,
+		completed_at: null,
 		created_at: createdAt,
 	});
 
@@ -277,15 +276,11 @@ let previousStats: Partial<StatsResponse> = {
 	top_paths: rows(['/pricing', 100], ['/features', 100]),
 };
 
-function providers(ui: ReactElement): ReactElement {
-	const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-	return (
-		<QueryClientProvider client={client}>
-			<DashboardProvider>
-				<SegmentProvider>{ui}</SegmentProvider>
-			</DashboardProvider>
-		</QueryClientProvider>
-	);
+function providers(
+	ui: ReactElement,
+	previous: StatsResponse | null = previousStats as StatsResponse,
+) {
+	return <PreviousPeriodProvider value={previous}>{ui}</PreviousPeriodProvider>;
 }
 
 function list(current: CountRow[] = rows(['/pricing', 122], ['/features', 60], ['/new', 80])) {
@@ -299,25 +294,8 @@ function list(current: CountRow[] = rows(['/pricing', 122], ['/features', 60], [
 	);
 }
 
-let fetchCalls: string[] = [];
-
 beforeEach(() => {
-	fetchCalls = [];
 	previousStats = { top_paths: rows(['/pricing', 100], ['/features', 100]) };
-	localStorage.clear();
-	localStorage.setItem(
-		'facet.profiles',
-		JSON.stringify([{ id: 'p1', label: 'Site', siteId: SITE, apiKey: 'clk_x' }]),
-	);
-	sessionStorage.setItem('facet.activeProfile', 'p1');
-	window.history.replaceState(null, '', '/?range=7d');
-	vi.stubGlobal(
-		'fetch',
-		vi.fn(async (input: RequestInfo | URL) => {
-			fetchCalls.push(String(input));
-			return { ok: true, json: async () => previousStats };
-		}),
-	);
 });
 
 afterEach(() => {
@@ -326,7 +304,7 @@ afterEach(() => {
 });
 
 describe('BreakdownList', () => {
-	it('reads the preceding window once and labels each row honestly', async () => {
+	it('reads the provided preceding window and labels each row honestly', async () => {
 		render(providers(list()));
 		// /pricing 100 → 122.
 		await waitFor(() => expect(screen.getByText('+22%')).toBeInTheDocument());
@@ -336,9 +314,6 @@ describe('BreakdownList', () => {
 		// as a percentage of zero.
 		expect(screen.getByText('new')).toBeInTheDocument();
 		expect(screen.queryByText('+Infinity%')).toBeNull();
-		// Exactly one read — the comparison window the Overview already asks for.
-		expect(fetchCalls).toHaveLength(1);
-		expect(fetchCalls[0]).toContain('/api/stats?');
 	});
 
 	it('shows a key that disappeared, rather than dropping it silently', async () => {
@@ -354,11 +329,9 @@ describe('BreakdownList', () => {
 	it('shows no comparison at all while a segment filters the current numbers', async () => {
 		// The comparison window is NOT sliced by the segment, so subtracting it from a filtered
 		// current period would compare two different populations. It is not even fetched.
-		window.history.replaceState(null, '', '/?range=7d&device=mobile');
-		render(providers(list()));
+		render(providers(list(), null));
 		await waitFor(() => expect(screen.getByText('/pricing')).toBeInTheDocument());
 		expect(screen.queryByText('+22%')).toBeNull();
 		expect(screen.queryByText('new')).toBeNull();
-		expect(fetchCalls).toHaveLength(0);
 	});
 });

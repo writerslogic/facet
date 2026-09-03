@@ -36,3 +36,8 @@ export function localId(): string {
 	safeSet(STORAGE_KEY, id);
 	return id;
 }
+
+/** A short-lived id for one event. It is never persisted and therefore cannot identify a visitor. */
+export function eventId(): string | undefined {
+	return typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined;
+}

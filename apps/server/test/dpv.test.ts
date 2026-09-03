@@ -28,8 +28,7 @@ describe('analytics-only deployment', () => {
 		expect(claims['dpv:hasPurpose']).toBe('dpv:ServiceOptimisation');
 		expect(claims['dpv:hasLegalBasis']).toBe('dpv:LegitimateInterest');
 		expect(claims['dpv:hasTechnicalOrganisationalMeasure']).toEqual(['dpv:Pseudonymisation']);
-		// Nothing here is read one record at a time by a named operator, so there is no access log and
-		// no claim of one.
+		// The foundation does not claim an operator access log that has not been implemented.
 		expect(claims['dpv:hasTechnicalOrganisationalMeasure']).not.toContain(
 			'dpv:ActivityMonitoring',
 		);
@@ -52,35 +51,29 @@ describe('CRM-enabled deployment', () => {
 		expect(claims['dpv:hasProcessing']).toContain('dpv:Erase');
 	});
 
-	it('adds consent as a legal basis rather than resting on legitimate interest alone', () => {
-		// The contact→analytics link is authorized ONLY by an active signed consent record, so
-		// consent is a basis this deployment actually relies on.
-		expect(claims['dpv:hasLegalBasis']).toEqual(['dpv:LegitimateInterest', 'dpv:Consent']);
+	it('declares the controller-selected legal bases supported per contact', () => {
+		expect(claims['dpv:hasLegalBasis']).toEqual([
+			'dpv:LegitimateInterest',
+			'dpv:Consent',
+			'dpv:Contract',
+			'dpv:LegalObligation',
+			'dpv:VitalInterest',
+			'dpv:PublicInterest',
+		]);
+		expect(claims['dpv:hasRole']).toBe('dpv:DataProcessor');
 	});
 
-	it('stops letting pseudonymisation imply coverage it does not have', () => {
-		// Pseudonymisation still describes the analytics half and stays. What must NOT happen is it
-		// remaining the ONLY declared measure, which would read as "everything here is pseudonymised"
-		// while the CRM holds names and email addresses in the clear.
+	it('declares pseudonymisation and access control without inventing activity monitoring', () => {
 		const measures = claims['dpv:hasTechnicalOrganisationalMeasure'] as string[];
 		expect(measures).toContain('dpv:Pseudonymisation');
 		expect(measures).toContain('dpv:AccessControlMethod');
-		expect(measures).not.toEqual(['dpv:Pseudonymisation']);
-		// The CRM audit log. Access control says who MAY read a contact; this says the deployment
-		// records who did, and it is claimed only where such a record exists to be claimed.
-		expect(measures).toContain('dpv:ActivityMonitoring');
+		expect(measures).not.toContain('dpv:ActivityMonitoring');
 	});
 
-	it('names the personal data it holds and the subject it holds it about', () => {
-		// `pd:CurrentEmployment` is the companies extension: a contact linked to an organization
-		// record carries a structured employer, which the free-text `company` box was not.
-		expect(claims['dpv:hasPersonalData']).toEqual([
-			'pd:Name',
-			'pd:EmailAddress',
-			'pd:TelephoneNumber',
-			'pd:CurrentEmployment',
-			'pd:Transactional',
-		]);
+	it('names only the personal-data categories the foundation can hold', () => {
+		expect(claims['dpv:hasPersonalData']).toEqual(['pd:Name', 'pd:UID']);
+		expect(claims['dpv:hasPersonalData']).not.toContain('pd:EmailAddress');
+		expect(claims['dpv:hasPersonalData']).not.toContain('pd:TelephoneNumber');
 		expect(claims['dpv:hasDataSubject']).toBe('dpv:Customer');
 		// Naming pd: terms requires the extension's namespace to be in the context, or the document
 		// is not resolvable JSON-LD and the extra honesty is unreadable.

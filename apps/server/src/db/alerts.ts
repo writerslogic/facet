@@ -6,7 +6,7 @@
 // alert fact being re-detected on the next run (anomaly and threshold evaluation both deliberately
 // revisit the same completed hour when a cron trigger is delayed or duplicated).
 
-import { and, eq, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, eq, isNotNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import type { Env } from '../env.js';
 import { db } from './queries.js';
 import * as schema from './schema.js';
@@ -21,6 +21,11 @@ export const ALERT_MAX_ATTEMPTS = 3 as const;
  * this constant — it is not measuring real elapsed delivery time. If `now` is ever switched to real
  * wall-clock time, this becomes load-bearing against actual latency and must be reassessed. */
 const PENDING_CLAIM_STALE_MS = 30_000 as const;
+
+/** The cron is hourly, but the timestamped backoff also behaves correctly for manually retried or
+ * more frequent schedules. Attempts wait 5 then 10 minutes; the third failure is terminal. */
+const ALERT_RETRY_BASE_MS = 5 * 60_000;
+const ALERT_RETRY_LIMIT = 100;
 
 /** A destination row as stored (secret included — only the delivery path may read it). */
 export interface StoredDestination {
@@ -121,6 +126,7 @@ export async function claimDelivery(
 		.set({
 			attempts: sql`${schema.alertDeliveries.attempts} + 1`,
 			status: 'pending',
+			next_attempt_at: null,
 			updated_at: now,
 		})
 		.where(
@@ -133,8 +139,14 @@ export async function claimDelivery(
 				// A fresh 'pending' row may be another caller's in-flight delivery (duplicate Cron Trigger
 				// fire) — only re-claim it once stale enough that the holder is presumed dead.
 				or(
-					eq(schema.alertDeliveries.status, 'failed'),
-					lt(schema.alertDeliveries.updated_at, now - PENDING_CLAIM_STALE_MS),
+					and(
+						eq(schema.alertDeliveries.status, 'failed'),
+						lte(schema.alertDeliveries.next_attempt_at, now),
+					),
+					and(
+						eq(schema.alertDeliveries.status, 'pending'),
+						lt(schema.alertDeliveries.updated_at, now - PENDING_CLAIM_STALE_MS),
+					),
 				),
 			),
 		)
@@ -150,22 +162,110 @@ export async function claimDelivery(
 export async function markDelivered(env: Env, deliveryId: string, now: number): Promise<void> {
 	await db(env)
 		.update(schema.alertDeliveries)
-		.set({ status: 'delivered', last_error: null, updated_at: now })
+		.set({ status: 'delivered', last_error: null, next_attempt_at: null, updated_at: now })
 		.where(eq(schema.alertDeliveries.id, deliveryId));
 }
 
-/** Record a failed delivery so the endpoint's brokenness is visible rather than silent.
- * FIXME: there is no cross-tick retry. Every dedupe key in lib/alerts.ts embeds the bucket or
- * windowStart, so the next cron mints a new key and never re-presents this row; only a same-tick
- * stale-pending reclaim reaches the retry branch above. */
+/** Retain the exact alert fact before transport so a later invocation can replay it. */
+export async function storeDeliveryPayload(
+	env: Env,
+	deliveryId: string,
+	payload: string,
+	now: number,
+): Promise<void> {
+	await db(env)
+		.update(schema.alertDeliveries)
+		.set({ payload, updated_at: now })
+		.where(eq(schema.alertDeliveries.id, deliveryId));
+}
+
+/** Record a failed delivery and schedule its next bounded attempt. */
 export async function markFailed(
 	env: Env,
 	deliveryId: string,
 	now: number,
 	error: string,
+	attempt: number,
 ): Promise<void> {
+	const nextAttemptAt =
+		attempt < ALERT_MAX_ATTEMPTS ? now + ALERT_RETRY_BASE_MS * 2 ** (attempt - 1) : null;
 	await db(env)
 		.update(schema.alertDeliveries)
-		.set({ status: 'failed', last_error: error.slice(0, 200), updated_at: now })
+		.set({
+			status: 'failed',
+			last_error: error.slice(0, 200),
+			next_attempt_at: nextAttemptAt,
+			updated_at: now,
+		})
 		.where(eq(schema.alertDeliveries.id, deliveryId));
+}
+
+/** A failed delivery joined to its currently enabled destination. */
+export interface StoredAlertRetry {
+	deliveryId: string;
+	dedupeKey: string;
+	severity: string;
+	payload: string;
+	destination: StoredDestination;
+}
+
+/** Bounded, oldest-first retry candidates. Disabled/deleted destinations are deliberately omitted. */
+export async function dueAlertRetries(env: Env, now: number): Promise<StoredAlertRetry[]> {
+	const rows = await db(env)
+		.select({
+			deliveryId: schema.alertDeliveries.id,
+			dedupeKey: schema.alertDeliveries.dedupe_key,
+			severity: schema.alertDeliveries.severity,
+			payload: schema.alertDeliveries.payload,
+			id: schema.alertDestinations.id,
+			site_id: schema.alertDestinations.site_id,
+			name: schema.alertDestinations.name,
+			type: schema.alertDestinations.type,
+			target: schema.alertDestinations.target,
+			min_severity: schema.alertDestinations.min_severity,
+			secret: schema.alertDestinations.secret,
+			enabled: schema.alertDestinations.enabled,
+			created_at: schema.alertDestinations.created_at,
+		})
+		.from(schema.alertDeliveries)
+		.innerJoin(
+			schema.alertDestinations,
+			and(
+				eq(schema.alertDestinations.id, schema.alertDeliveries.destination_id),
+				eq(schema.alertDestinations.enabled, 1),
+			),
+		)
+		.where(
+			and(
+				eq(schema.alertDeliveries.status, 'failed'),
+				lt(schema.alertDeliveries.attempts, ALERT_MAX_ATTEMPTS),
+				isNotNull(schema.alertDeliveries.payload),
+				lte(schema.alertDeliveries.next_attempt_at, now),
+			),
+		)
+		.orderBy(asc(schema.alertDeliveries.next_attempt_at))
+		.limit(ALERT_RETRY_LIMIT);
+	return rows.flatMap((row) =>
+		row.payload === null
+			? []
+			: [
+					{
+						deliveryId: row.deliveryId,
+						dedupeKey: row.dedupeKey,
+						severity: row.severity,
+						payload: row.payload,
+						destination: {
+							id: row.id,
+							site_id: row.site_id,
+							name: row.name,
+							type: row.type,
+							target: row.target,
+							min_severity: row.min_severity,
+							secret: row.secret,
+							enabled: row.enabled,
+							created_at: row.created_at,
+						},
+					},
+				],
+	);
 }

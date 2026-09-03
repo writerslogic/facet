@@ -15,7 +15,13 @@ import type { FunnelReportResult } from '@facet/shared';
 import { Target, TrendingDown } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { cn } from '../lib/cn.js';
-import { formatNumber, formatPercent, rateMovement, senseOf } from '../lib/format.js';
+import {
+	formatDuration,
+	formatNumber,
+	formatPercent,
+	rateMovement,
+	senseOf,
+} from '../lib/format.js';
 import { DeltaBadge } from './Delta.js';
 
 interface Step {
@@ -170,6 +176,9 @@ export function FunnelChart({
 	const entry = steps[0]?.count ?? 0;
 	// Two rates → percentage POINTS, through the same movement model the rest of the app uses.
 	const overall = previous ? rateMovement(report.overall_rate, previous.overall_rate) : null;
+	const completed = steps.at(-1)?.count ?? 0;
+	const medianTime = report.time_to_convert_ms ?? null;
+	const previousTime = previous?.time_to_convert_ms ?? null;
 
 	return (
 		<section className="surface rounded-xl p-5">
@@ -197,6 +206,43 @@ export function FunnelChart({
 					) : null}
 				</span>
 			</div>
+			<dl className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Funnel summary">
+				{[
+					{ label: 'Entered', value: formatNumber(entry), detail: 'Matched step 1' },
+					{
+						label: 'Completed',
+						value: formatNumber(completed),
+						detail: 'Reached final step',
+					},
+					{
+						label: 'Conversion',
+						value: entry > 0 ? `${formatPercent(report.overall_rate)} overall` : '—',
+						detail: 'Completed ÷ entered',
+					},
+					{
+						label: 'Median time to convert',
+						value: medianTime === null ? '—' : formatDuration(medianTime),
+						detail:
+							medianTime === null
+								? 'No completed sessions'
+								: previousTime === null
+									? 'First step to completion'
+									: `${formatDuration(Math.abs(medianTime - previousTime))} ${medianTime <= previousTime ? 'faster' : 'slower'} vs previous`,
+					},
+				].map((item) => (
+					<div key={item.label} className="surface-2 rounded-xl p-3">
+						<dt className="text-[10px] font-semibold uppercase tracking-wide text-[color:var(--faint)]">
+							{item.label}
+						</dt>
+						<dd className="mt-1 font-semibold text-xl text-[color:var(--ink)] tabular-nums">
+							{item.value}
+						</dd>
+						<p className="mt-0.5 text-[11px] text-[color:var(--muted)]">
+							{item.detail}
+						</p>
+					</div>
+				))}
+			</dl>
 
 			{steps.length === 0 || entry === 0 ? (
 				<DegenerateFunnel steps={steps} />

@@ -9,6 +9,8 @@ export type EventProps = Record<string, PropValue>;
 
 /** Core fields of the `POST /api/collect` body. `CollectPayloadSchema` is the complete contract. */
 export interface CollectPayload {
+	/** Per-event UUID, reused only when retrying the same event. */
+	event_id?: string;
 	/** UUID of the site this event belongs to. */
 	site_id: string;
 	/** Hostname the event was fired from (e.g. "example.com"). */

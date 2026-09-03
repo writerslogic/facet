@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1785884856424,
-      "tag": "0000_free_black_bolt",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1785902667995,
-      "tag": "0001_perfect_tombstone",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1785912191326,
-      "tag": "0002_marvelous_agent_zero",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1786210314959,
-      "tag": "0003_brainy_proteus",
+      "when": 1788305259572,
+      "tag": "0000_bumpy_clea",
       "breakpoints": true
     }
   ]

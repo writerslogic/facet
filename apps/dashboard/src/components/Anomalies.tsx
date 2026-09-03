@@ -9,7 +9,9 @@ import type { Anomaly } from '@facet/shared';
 import {
 	AlertOctagon,
 	AlertTriangle,
+	GanttChart,
 	Info,
+	List,
 	RotateCcw,
 	Search,
 	ShieldCheck,
@@ -189,9 +191,10 @@ function AnomalyCard({
 			</p>
 			{diagnosis ? (
 				<p className="mt-1 text-xs text-[color:var(--muted)]">
-					Largest contributor: {diagnosis.dimension}={diagnosis.value} (
+					Largest associated contributor: {diagnosis.dimension}={diagnosis.value} (
 					{formatNumber(diagnosis.current)} vs ~
-					{formatNumber(Math.round(diagnosis.baseline_avg))} typical).
+					{formatNumber(Math.round(diagnosis.baseline_avg))} typical). This is a
+					correlated breakdown, not a claim that the segment caused the anomaly.
 				</p>
 			) : null}
 			{/* btn-ghost + the global focus-visible outline, replacing the hardcoded accent-400/700
@@ -257,6 +260,7 @@ export function Anomalies({
 	// then kept in state so a dismiss re-filters without a refetch.
 	const [dismissed, setDismissed] = useState<Set<string>>(() => loadDismissed());
 	const [showDismissed, setShowDismissed] = useState(false);
+	const [display, setDisplay] = useState<'timeline' | 'list'>('timeline');
 	// The id of the most recent dismissal in this session, so it can be undone in one click.
 	const [undoable, setUndoable] = useState<string | null>(null);
 	// Provenance mode overlays the transparency-log attestation on each anomaly. The checkpoint is fetched
@@ -313,6 +317,26 @@ export function Anomalies({
 		setUndoable(null);
 	}
 
+	function renderEntry(entry: Entry): ReactElement {
+		const card = (
+			<AnomalyCard
+				id={entry.id}
+				anomaly={entry.anomaly}
+				severity={entry.severity}
+				now={now}
+				onDismiss={onDismiss}
+				onInvestigate={onInvestigate}
+			/>
+		);
+		return provenance ? (
+			<VerifiedMetric key={entry.id} label={anomalyLabel(entry.anomaly)}>
+				{card}
+			</VerifiedMetric>
+		) : (
+			card
+		);
+	}
+
 	if (error && isAuthError(error)) {
 		return <AuthErrorBanner />;
 	}
@@ -346,8 +370,38 @@ export function Anomalies({
 						hidden.length,
 					)}
 				</p>
-				<ProvenanceToggle on={provenance} onToggle={() => setProvenance((v) => !v)} />
+				<div className="flex items-center gap-2">
+					<div
+						className="flex rounded-lg border border-[color:rgb(var(--border))] p-0.5"
+						aria-label="Anomaly display"
+					>
+						{(['timeline', 'list'] as const).map((option) => {
+							const Icon = option === 'timeline' ? GanttChart : List;
+							return (
+								<button
+									key={option}
+									type="button"
+									aria-pressed={display === option}
+									onClick={() => setDisplay(option)}
+									className={cn(
+										'rounded-md p-1.5',
+										display === option ? 'chip-active' : 'btn-ghost',
+									)}
+									title={`Show ${option}`}
+								>
+									<Icon className="h-3.5 w-3.5" aria-hidden="true" />
+									<span className="sr-only">{option}</span>
+								</button>
+							);
+						})}
+					</div>
+					<ProvenanceToggle on={provenance} onToggle={() => setProvenance((v) => !v)} />
+				</div>
 			</div>
+			<p className="text-xs text-[color:var(--faint)]">
+				Every item here is detector-authored. Operator annotations are separate notes on the
+				Overview timeline and are never assigned a severity or confidence score.
+			</p>
 			{provenance ? (
 				checkpointLoading ? (
 					<p className="rounded-lg border border-[color:rgb(var(--border))] bg-[color:rgb(var(--hover))] px-3 py-2 text-xs text-[color:var(--muted)]">
@@ -412,35 +466,30 @@ export function Anomalies({
 						too few complete hours to build a baseline from.
 					</EmptyState>
 				)
-			) : (
-				// Only the card list is a live region, so toggling Provenance doesn't announce a flood of
-				// card content. Under Provenance every card is wrapped in VerifiedMetric (stable identity;
-				// the badge appears when the shared checkpoint resolves) rather than swapping element types.
-				<div className="space-y-4" aria-live="polite">
-					{visible.map((entry) =>
-						provenance ? (
-							<VerifiedMetric key={entry.id} label={anomalyLabel(entry.anomaly)}>
-								<AnomalyCard
-									id={entry.id}
-									anomaly={entry.anomaly}
-									severity={entry.severity}
-									now={now}
-									onDismiss={onDismiss}
-									onInvestigate={onInvestigate}
-								/>
-							</VerifiedMetric>
-						) : (
-							<AnomalyCard
-								key={entry.id}
-								id={entry.id}
-								anomaly={entry.anomaly}
-								severity={entry.severity}
-								now={now}
-								onDismiss={onDismiss}
-								onInvestigate={onInvestigate}
+			) : // Only the card list is a live region, so toggling Provenance doesn't announce a flood of
+			// card content. Under Provenance every card is wrapped in VerifiedMetric (stable identity;
+			// the badge appears when the shared checkpoint resolves) rather than swapping element types.
+			display === 'timeline' ? (
+				<ol
+					className="relative ml-3 space-y-4 border-[color:rgb(var(--border))] border-l pl-6"
+					aria-live="polite"
+					aria-label="Detected anomaly timeline"
+				>
+					{visible.map((entry) => (
+						<li key={entry.id} className="relative">
+							<span
+								className="-left-[1.9rem] absolute top-6 size-3 rounded-full border-2 border-[color:var(--panel)] bg-[color:var(--d1)]"
+								aria-hidden="true"
 							/>
-						),
-					)}
+							{renderEntry(entry)}
+						</li>
+					))}
+				</ol>
+			) : (
+				<div className="space-y-4" aria-live="polite" aria-label="Detected anomaly list">
+					{visible.map((entry) => (
+						<div key={entry.id}>{renderEntry(entry)}</div>
+					))}
 				</div>
 			)}
 			{hidden.length > 0 && visible.length > 0 ? (

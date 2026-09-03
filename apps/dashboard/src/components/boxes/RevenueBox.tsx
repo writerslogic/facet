@@ -246,12 +246,6 @@ function RevenueBody({
 }
 
 export const revenueBox: TileDef = {
-	id: 'revenue',
-	title: 'Revenue',
-	size: 'md',
-	selfLabeled: true,
-	emphasis: 'kpi',
-	expandable: true,
 	// Machine-readable values, not the tile's own strings: this grid is copied as TSV into a
 	// spreadsheet, where "$1,234" is text and not a number. The unit rides in the metric name, and a
 	// metric this site never measured exports an empty cell: a zero there would claim a measurement.

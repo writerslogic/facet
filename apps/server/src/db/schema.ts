@@ -131,10 +131,8 @@ export const events = sqliteTable(
 		index('idx_events_site_created_os').on(t.siteId, t.createdAt, t.os),
 		index('idx_events_site_created_region').on(t.siteId, t.createdAt, t.region),
 		index('idx_events_site_created_network').on(t.siteId, t.createdAt, t.network),
-		// Every other index leads with created_at, so a visitor_hash filter (conversions.ts's
-		// per-session EXISTS, experiments.ts's per-exposure EXISTS, contact-analytics.ts's
-		// unranged IN-list) fell back to a full table scan. visitor_hash leads here since
-		// contact-analytics.ts's lookup carries no time bound at all.
+		// Every other index leads with created_at, so visitor-hash filters such as conversions.ts's
+		// per-session EXISTS and experiments.ts's per-exposure EXISTS fell back to a full table scan.
 		index('idx_events_site_visitor_created').on(t.siteId, t.visitorHash, t.createdAt),
 		// retention.ts's cron purge deletes by createdAt alone, across every site — every other index
 		// above requires siteId as its leading column, so that delete could only seek the PK prefix
@@ -301,7 +299,8 @@ export const funnels = sqliteTable(
 );
 
 // experiments store their `variants` as a JSON TEXT column (mirrors funnels.steps): the validated
-// array is stringified on insert and parsed back on read. `active` is a 0/1 integer flag.
+// array is stringified on insert and parsed back on read. `status` is the durable lifecycle;
+// `active` remains a synchronized 0/1 compatibility flag for older API consumers.
 export const experiments = sqliteTable(
 	'experiments',
 	{
@@ -310,7 +309,12 @@ export const experiments = sqliteTable(
 		name: text('name').notNull(),
 		flag_key: text('flag_key').notNull(),
 		variants: text('variants').notNull(),
+		status: text('status', { enum: ['draft', 'active', 'completed'] })
+			.notNull()
+			.default('active'),
 		active: integer('active').notNull().default(1),
+		started_at: integer('started_at'),
+		completed_at: integer('completed_at'),
 		created_at: integer('created_at').notNull(),
 	},
 	(t) => [index('idx_experiments_site').on(t.site_id)],
@@ -528,11 +532,15 @@ export const alertDeliveries = sqliteTable(
 		status: text('status').notNull(), // pending | delivered | failed
 		attempts: integer('attempts').notNull().default(0),
 		last_error: text('last_error'),
+		// Canonical alert fact retained so a failed transport can retry on a later cron invocation.
+		payload: text('payload'),
+		next_attempt_at: integer('next_attempt_at'),
 		created_at: integer('created_at').notNull(),
 		updated_at: integer('updated_at').notNull(),
 	},
 	(t) => [
 		uniqueIndex('idx_alert_deliveries_dedupe').on(t.destination_id, t.dedupe_key),
 		index('idx_alert_deliveries_site').on(t.site_id, t.created_at),
+		index('idx_alert_deliveries_retry').on(t.status, t.next_attempt_at),
 	],
 );

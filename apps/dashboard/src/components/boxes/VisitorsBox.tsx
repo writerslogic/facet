@@ -9,7 +9,7 @@
 import type { CountRow } from '@facet/shared';
 import { KpiTile, type KpiVizName } from '../BentoTile.js';
 import { drillSpec } from './drill.js';
-import { ACCENT_OPTION, accentOf, rowsTable } from './shared.js';
+import { accentOf, rowsTable } from './shared.js';
 import type { TileContext, TileDef } from './types.js';
 
 /** The cube folds every country outside its top 30 — and every unattributed hit — into `'other'`
@@ -25,23 +25,11 @@ function countryRows(ctx: TileContext): CountRow[] {
 }
 
 export const visitorsBox: TileDef = {
-	id: 'visitors',
-	title: 'Visitors',
-	size: 'kpi',
-	selfLabeled: true,
-	emphasis: 'kpi',
-	expandable: true,
-	variants: [
-		{ id: 'gauge', label: 'Gauge' },
-		{ id: 'spark', label: 'Line' },
-		{ id: 'horizon', label: 'Horizon' },
-		{ id: 'columns', label: 'Columns' },
-	],
-	options: [ACCENT_OPTION],
 	table: (ctx) => rowsTable('Country', countryRows(ctx)),
 	render: (ctx, density, config) => (
 		<KpiTile
-			label="Visitors"
+			label="Windowed visitors"
+			description="Distinct visitor hashes within each configured salt window (daily by default); one person active across windows is counted again."
 			value={ctx.summary.visitors}
 			deltaPct={ctx.deltas.vis}
 			deltaSense={ctx.sense(ctx.deltas.vis)}
@@ -62,7 +50,6 @@ export const visitorsBox: TileDef = {
 				compare: {
 					current: ctx.data.top_countries ?? [],
 					select: (p) => p.top_countries,
-					note: 'measured over all events for this country, not just the pageviews shown',
 				},
 				drill: drillSpec(ctx, 'country'),
 			}}

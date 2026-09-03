@@ -76,6 +76,19 @@ describe('POST /api/event', () => {
 		expect(await eventCount()).toBe(0);
 	});
 
+	it('deduplicates a retried event_id', async () => {
+		const body = {
+			event_id: '22222222-2222-4222-8222-222222222222',
+			hostname: 'shop.example.com',
+			path: '/charged',
+			name: 'purchase',
+			user_agent: 'Mozilla/5.0 Chrome/120.0.0.0',
+		};
+		expect((await post(body, key)).status).toBe(202);
+		expect((await post(body, key)).status).toBe(202);
+		expect(await eventCount()).toBe(1);
+	});
+
 	it('rejects a missing API key with 401', async () => {
 		const res = await post({ hostname: 'shop.example.com', path: '/' }, null);
 		expect(res.status).toBe(401);

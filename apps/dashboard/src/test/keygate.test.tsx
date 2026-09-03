@@ -53,7 +53,7 @@ afterEach(() => {
 });
 
 describe('KeyGate', () => {
-	it('gates until a valid key + site are entered, then persists a profile and shows the shell', async () => {
+	it('uses an API key only in memory while persisting non-secret site metadata', async () => {
 		renderApp();
 		expect(screen.getByText('View dashboard')).toBeInTheDocument();
 
@@ -67,8 +67,9 @@ describe('KeyGate', () => {
 
 		const profiles = JSON.parse(sessionStorage.getItem('facet.profiles') ?? '[]');
 		expect(profiles).toHaveLength(1);
-		expect(profiles[0].apiKey).toBe('clk_live_abc');
+		expect(profiles[0].apiKey).toBeUndefined();
 		expect(profiles[0].siteId).toBe(VALID_SITE);
+		expect(JSON.stringify(profiles)).not.toContain('clk_live_abc');
 
 		await waitFor(() =>
 			expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument(),
@@ -93,7 +94,7 @@ describe('KeyGate', () => {
 		expect(screen.getByText('View dashboard')).toBeInTheDocument();
 	});
 
-	it('migrates legacy single-site creds into a profile on first load', async () => {
+	it('scrubs legacy stored credentials while keeping them for the current document', async () => {
 		localStorage.setItem('facet.key', 'clk_legacy');
 		localStorage.setItem('facet.site', VALID_SITE);
 		renderApp();
@@ -103,8 +104,43 @@ describe('KeyGate', () => {
 		);
 		const profiles = JSON.parse(sessionStorage.getItem('facet.profiles') ?? '[]');
 		expect(profiles).toHaveLength(1);
-		expect(profiles[0].apiKey).toBe('clk_legacy');
+		expect(profiles[0].apiKey).toBeUndefined();
+		expect(JSON.stringify(profiles)).not.toContain('clk_legacy');
 		expect(localStorage.getItem('facet.key')).toBeNull();
+	});
+
+	it('hydrates team sites from an HttpOnly-cookie session without an API key', async () => {
+		vi.stubGlobal(
+			'fetch',
+			vi.fn(async (input: RequestInfo | URL) => {
+				const url = String(input);
+				if (url === '/api/auth/me') {
+					return {
+						ok: true,
+						json: async () => ({
+							user: { id: 'u1', email: 'owner@example.com', name: null },
+							memberships: [],
+							sites: [
+								{
+									id: VALID_SITE,
+									name: 'Session site',
+									domain: 'example.com',
+									role: 'owner',
+								},
+							],
+						}),
+					};
+				}
+				return { ok: true, json: async () => okStats() };
+			}),
+		);
+		renderApp();
+		await waitFor(() =>
+			expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument(),
+		);
+		const stored = sessionStorage.getItem('facet.profiles') ?? '';
+		expect(stored).toContain('Session site');
+		expect(stored).not.toContain('apiKey');
 	});
 
 	it('switching the range preset updates the derived window', async () => {

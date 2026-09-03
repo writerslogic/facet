@@ -540,7 +540,7 @@ export function TrafficChart({
 	useClockMode();
 	if (bare) {
 		return (
-			<>
+			<div className="relative h-full">
 				{series.length === 0 ? (
 					// "No data yet" said nothing a reader did not already know. An empty series here is a
 					// statement about the SELECTED RANGE, and naming that is what tells someone whether to
@@ -562,8 +562,31 @@ export function TrafficChart({
 						zoomable={zoomable}
 					/>
 				)}
+				{series.length > 0 ? (
+					<ul
+						className="pointer-events-none absolute top-1 right-2 z-10 flex items-center gap-3 rounded-md bg-[var(--panel)]/80 px-2 py-1 text-[10px] text-[color:var(--muted)] backdrop-blur"
+						aria-label="Traffic chart series"
+					>
+						<li className="flex items-center gap-1.5">
+							<span
+								className="h-0.5 w-4"
+								style={{ background: colors.d1 }}
+								aria-hidden="true"
+							/>
+							Pageviews
+						</li>
+						<li className="flex items-center gap-1.5">
+							<span
+								className="h-0.5 w-4"
+								style={{ background: colors.d2 }}
+								aria-hidden="true"
+							/>
+							Visitors
+						</li>
+					</ul>
+				) : null}
 				{accessibleAnnotations}
-			</>
+			</div>
 		);
 	}
 	return (

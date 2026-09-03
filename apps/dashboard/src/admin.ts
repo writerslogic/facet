@@ -1,7 +1,5 @@
-// Admin-token store: the ADMIN_TOKEN grants deployment-wide admin access, so it is kept OUT of the
-// site-credential profile store and out of localStorage. It lives in memory + sessionStorage only,
-// is never placed in a URL/log, and is only ever attached to the explicit admin endpoint allowlist
-// via adminFetch. "Forget admin token" clears both memory and sessionStorage.
+// Admin-token store: the deployment-wide ADMIN_TOKEN is held in memory only, never Web Storage,
+// a URL, or a log. It is attached only to the explicit admin endpoint allowlist via adminFetch.
 
 import {
 	type ReactElement,
@@ -10,10 +8,9 @@ import {
 	createElement,
 	useCallback,
 	useContext,
+	useEffect,
 	useState,
 } from 'react';
-
-const ADMIN_TOKEN_STORAGE = 'facet.adminToken';
 
 /** Endpoints the admin token may be sent to. Nothing else is permitted. */
 const ADMIN_PATHS = [
@@ -37,54 +34,58 @@ function isAdminPath(path: string): boolean {
 	return ADMIN_PATHS.some((p) => base === p || base.startsWith(`${p}/`));
 }
 
-/** Read the admin token from sessionStorage (survives reload within a tab, cleared on tab close). */
-function readAdminToken(): string {
-	try {
-		return sessionStorage.getItem(ADMIN_TOKEN_STORAGE) ?? '';
-	} catch {
-		return '';
-	}
-}
-
 export interface AdminStore {
 	token: string;
 	hasToken: boolean;
+	rejected: boolean;
 	setToken: (token: string) => void;
 	forgetToken: () => void;
 }
 
 const AdminContext = createContext<AdminStore | null>(null);
+const rejectionListeners = new Set<() => void>();
+
+function reportRejectedToken(): void {
+	for (const listener of rejectionListeners) listener();
+}
+
+async function requestError(response: Response): Promise<Error> {
+	const body = (await response.json().catch(() => ({}))) as { error?: string };
+	const code = body.error ?? 'request_failed';
+	if (code === INVALID_ADMIN_TOKEN) reportRejectedToken();
+	return new Error(code);
+}
 
 export function AdminProvider({
 	children,
 }: {
 	children: ReactNode;
 }): ReactElement {
-	const [token, setTokenState] = useState<string>(readAdminToken);
+	const [token, setTokenState] = useState<string>(() =>
+		import.meta.env.VITE_FACET_STATIC_DEMO === '1' ? 'demo-read-only' : '',
+	);
+	const [rejected, setRejected] = useState(false);
+
+	useEffect(() => {
+		const listener = () => setRejected(true);
+		rejectionListeners.add(listener);
+		return () => rejectionListeners.delete(listener);
+	}, []);
 
 	const setToken = useCallback((next: string) => {
-		const trimmed = next.trim();
-		try {
-			if (trimmed) sessionStorage.setItem(ADMIN_TOKEN_STORAGE, trimmed);
-			else sessionStorage.removeItem(ADMIN_TOKEN_STORAGE);
-		} catch {
-			// sessionStorage unavailable: keep it in memory only.
-		}
-		setTokenState(trimmed);
+		setRejected(false);
+		setTokenState(next.trim());
 	}, []);
 
 	const forgetToken = useCallback(() => {
-		try {
-			sessionStorage.removeItem(ADMIN_TOKEN_STORAGE);
-		} catch {
-			// ignore
-		}
+		setRejected(false);
 		setTokenState('');
 	}, []);
 
 	const store: AdminStore = {
 		token,
 		hasToken: token.length > 0,
+		rejected,
 		setToken,
 		forgetToken,
 	};
@@ -128,8 +129,7 @@ export async function adminFetch<T>(
 		headers: { Authorization: `Bearer ${token}` },
 	});
 	if (!res.ok) {
-		const body = (await res.json().catch(() => ({}))) as { error?: string };
-		throw new Error(body.error ?? 'request_failed');
+		throw await requestError(res);
 	}
 	return (await res.json()) as T;
 }
@@ -146,10 +146,7 @@ export async function adminPost<T>(path: string, token: string, body: unknown): 
 		body: JSON.stringify(body),
 	});
 	if (!res.ok) {
-		const errorBody = (await res.json().catch(() => ({}))) as {
-			error?: string;
-		};
-		throw new Error(errorBody.error ?? 'request_failed');
+		throw await requestError(res);
 	}
 	return (await res.json()) as T;
 }
@@ -166,10 +163,7 @@ export async function adminPatch<T>(path: string, token: string, body: unknown):
 		body: JSON.stringify(body),
 	});
 	if (!res.ok) {
-		const errorBody = (await res.json().catch(() => ({}))) as {
-			error?: string;
-		};
-		throw new Error(errorBody.error ?? 'request_failed');
+		throw await requestError(res);
 	}
 	return (await res.json()) as T;
 }

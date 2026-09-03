@@ -1,28 +1,23 @@
-// Breakdown comparison, wired to the query the Overview ALREADY makes.
-//
-// Cost is the whole design constraint here. The Overview fetches the equal-length preceding window
-// once (see `compareQuery` in App.tsx) to put deltas on the three KPI tiles, and that single response
-// carries every breakdown list too — top_paths, top_referrers, top_countries, the lot. So the fifteen
-// list tiles need no query of their own: this hook rebuilds the SAME `StatsQuery` value from the same
-// store, hands it to the same `useCompareStats`, and lands on the same react-query cache entry
-// (`['stats-compare', query]`, hashed by value). Fifteen callers, zero extra requests. Nothing here
-// runs on any other tab, because nothing here is mounted on any other tab.
-//
-// The gate is copied from the Overview deliberately: a segment that filters the current numbers is
-// NOT applied to the comparison window (device/country/channel are sliced client-side from the cube;
-// path/referrer re-query the server), so while one is active the Overview does not fetch a comparison
-// at all — and this hook must not either. A delta computed from an unfiltered preceding period next
-// to a filtered current period would be worse than no delta.
+// Breakdown comparison consumes the preceding-period slices the Overview already selected.
+// Individual boxes never own network reads, so a board with fifteen comparison-capable tiles still
+// opens only the requirement-aware requests assembled in App.tsx.
 
-import type { CountRow, StatsQuery, StatsResponse } from '@facet/shared';
-import { useMemo } from 'react';
+import type { CountRow, StatsResponse } from '@facet/shared';
+import { type ReactNode, createContext, createElement, useContext, useMemo } from 'react';
 import { type BreakdownComparison, NO_COMPARISON, compareBreakdown } from '../lib/compare.js';
-import { isFilterActive } from '../lib/cube.js';
 import type { MetricDirection } from '../lib/format.js';
-import { needsServer, toCubeFilter } from '../lib/segment.js';
-import { useDashboard } from '../state.js';
-import { useSegment } from './segment.js';
-import { useCompareStats } from './stats.js';
+
+const PreviousPeriodContext = createContext<StatsResponse | null>(null);
+
+export function PreviousPeriodProvider({
+	value,
+	children,
+}: {
+	value: StatsResponse | null;
+	children: ReactNode;
+}): ReactNode {
+	return createElement(PreviousPeriodContext.Provider, { value }, children);
+}
 
 /**
  * Where a list's comparison rows come from. `current` must be measured exactly like `select`'s
@@ -38,32 +33,11 @@ export interface CompareSource {
 }
 
 /**
- * The preceding-period stats response for the Overview's window, or null when there is none to be
- * had: no site, or a segment is active (see above). Never throws and never fetches on its own — if
- * the Overview did not ask for this window, neither does this.
+ * The preceding-period slices selected by the active layout. This hook never opens a request: the
+ * Overview owns the requirements-aware reads and provides their assembled compatibility shape.
  */
 export function usePreviousPeriodStats(): StatsResponse | null {
-	const { apiKey, siteId, preset, range } = useDashboard();
-	const { segment } = useSegment();
-
-	// Same three lines as the Overview: a cube slice or a server drill-down both mean "the comparison
-	// window is not narrowed the same way", which disables the comparison entirely.
-	const serverMode = needsServer(segment);
-	const cubeActive = isFilterActive(toCubeFilter(segment)) && !serverMode;
-	const filtered = cubeActive || serverMode;
-
-	const span = range.end - range.start;
-	const query: StatsQuery = {
-		site_id: siteId,
-		start: range.start - span,
-		end: range.start,
-		interval: preset === '24h' ? 'hour' : 'day',
-	};
-	// Strictly narrower than the Overview's own gate (which omits the site check), so this can only
-	// ever read a cache entry the Overview already asked for — never open a request of its own.
-	const enabled = Boolean(siteId) && !filtered;
-	const { data } = useCompareStats(apiKey, query, enabled);
-	return enabled ? (data ?? null) : null;
+	return useContext(PreviousPeriodContext);
 }
 
 /**

@@ -27,10 +27,12 @@ import {
 	type StoredDestination,
 	type StoredMetricAlertRule,
 	claimDelivery,
+	dueAlertRetries,
 	enabledDestinations,
 	enabledMetricAlertRules,
 	markDelivered,
 	markFailed,
+	storeDeliveryPayload,
 } from '../db/alerts.js';
 import { detectAnomalies } from '../db/anomaly.js';
 import { summary } from '../db/stats.js';
@@ -109,11 +111,69 @@ async function deliverClaimedAlert(
 	if (!claim) {
 		return;
 	}
-	const outcome = await deliverAlert(env, dest, input.payload(claim.attempt), fetchImpl);
+	const payload = input.payload(claim.attempt);
+	await storeDeliveryPayload(env, claim.id, JSON.stringify(payload), input.now);
+	const outcome = await deliverAlert(env, dest, payload, fetchImpl);
 	if (outcome.ok) {
 		await markDelivered(env, claim.id, input.now);
 	} else {
-		await markFailed(env, claim.id, input.now, outcome.error ?? 'unknown');
+		await markFailed(env, claim.id, input.now, outcome.error ?? 'unknown', claim.attempt);
+	}
+}
+
+function parseStoredPayload(
+	value: string,
+	destinationId: string,
+	dedupeKey: string,
+): AlertPayload | null {
+	try {
+		const parsed: unknown = JSON.parse(value);
+		if (typeof parsed !== 'object' || parsed === null) return null;
+		const fields = parsed as Record<string, unknown>;
+		if (fields.type !== ANOMALY_ALERT_TYPE && fields.type !== METRIC_ALERT_TYPE) return null;
+		if (fields.destination_id !== destinationId || fields.dedupe_key !== dedupeKey) return null;
+		return parsed as AlertPayload;
+	} catch {
+		return null;
+	}
+}
+
+/** Replay transport failures retained in D1. Each row is atomically re-claimed, so overlapping cron
+ * invocations cannot double-send it; the payload gets a fresh delivery id and signed timestamp. */
+async function retryFailedAlerts(
+	env: Env,
+	now: number,
+	log: ReturnType<typeof createLogger>,
+	fetchImpl?: FetchLike,
+): Promise<void> {
+	for (const retry of await dueAlertRetries(env, now)) {
+		const claim = await claimDelivery(env, {
+			destinationId: retry.destination.id,
+			siteId: retry.destination.site_id,
+			dedupeKey: retry.dedupeKey,
+			severity: retry.severity,
+			now,
+		});
+		if (!claim) continue;
+		const stored = parseStoredPayload(retry.payload, retry.destination.id, retry.dedupeKey);
+		if (!stored) {
+			await markFailed(env, claim.id, now, 'invalid_stored_payload', claim.attempt);
+			continue;
+		}
+		const payload = {
+			...stored,
+			delivery_id: crypto.randomUUID(),
+			attempt: claim.attempt,
+			issued_at: now,
+		} as AlertPayload;
+		try {
+			const outcome = await deliverAlert(env, retry.destination, payload, fetchImpl);
+			if (outcome.ok) await markDelivered(env, claim.id, now);
+			else await markFailed(env, claim.id, now, outcome.error ?? 'unknown', claim.attempt);
+		} catch (err) {
+			log.error('alert_retry_failed', err, { delivery_id: claim.id });
+			await markFailed(env, claim.id, now, 'retry_internal_error', claim.attempt);
+		}
 	}
 }
 
@@ -209,11 +269,16 @@ async function metricRuleDestination(
  * OPTIMIZE: that SELECT scans — alert_destinations has no index leading with `enabled`.
  */
 export async function runAlerts(env: Env, now: number, fetchImpl?: FetchLike): Promise<void> {
+	const log = createLogger({ job: 'alerts' });
 	const destinations = await enabledDestinations(env);
+	try {
+		await retryFailedAlerts(env, now, log, fetchImpl);
+	} catch (err) {
+		log.error('alert_retry_scan_failed', err);
+	}
 	if (destinations.length === 0) {
 		return;
 	}
-	const log = createLogger({ job: 'alerts' });
 	const rules = await enabledMetricAlertRules(env);
 	const bySite = new Map<string, StoredDestination[]>();
 	const rulesBySite = new Map<string, StoredMetricAlertRule[]>();

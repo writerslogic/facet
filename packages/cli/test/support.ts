@@ -196,14 +196,14 @@ export const REAL_CONFIG = join(
 	'..',
 	'apps',
 	'server',
-	'wrangler.jsonc',
+	'wrangler.example.jsonc',
 );
 
 /**
- * The wrangler.jsonc a fresh clone gets: the real shipped config with the database id normalised back
+ * The wrangler.jsonc a fresh clone gets: the tracked template with the database id normalised back
  * to the placeholder and exactly one active `routes` line pointing at the upstream domain — the worst
  * case the installer has to fix. Built by rewriting rather than by assuming, so a working copy that
- * already carries a live id (the file is tracked with skip-worktree) still produces a stable fixture.
+ * already carries a live id still produces a stable fixture.
  */
 export function freshConfig(): string {
 	const lines = readFileSync(REAL_CONFIG, 'utf8')

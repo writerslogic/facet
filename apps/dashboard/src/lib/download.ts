@@ -77,20 +77,3 @@ export async function downloadExport(apiKey: string, params: ExportParams): Prom
 	}
 	saveBlob(await res.blob(), filenameFor(params));
 }
-
-/**
- * Download one contact's data-subject export. Session-authenticated and `admin`-only, so it carries
- * the cookie and NO bearer key — see `sessionFetch`. A plain link would work for the cookie but
- * could not surface the error body, and this route's failures (403, 501) are exactly the ones the
- * operator needs named.
- */
-export async function downloadContactExport(siteId: string, contactId: string): Promise<void> {
-	const res = await fetch(`/api/crm/contacts/${contactId}/export?site_id=${siteId}`, {
-		credentials: 'same-origin',
-	});
-	if (!res.ok) {
-		const body = (await res.json().catch(() => ({}))) as { error?: string };
-		throw new Error(body.error ?? 'export_failed');
-	}
-	saveBlob(await res.blob(), `facet-contact-${contactId}.json`);
-}

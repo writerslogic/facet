@@ -218,6 +218,72 @@ export interface StatsResponse {
 	meta?: Freshness;
 }
 
+/** The minimum range read needed for traffic totals and a chart. */
+export interface StatsCoreResponse {
+	summary: StatsSummary;
+	series: SeriesPoint[];
+}
+
+/** A totals-only read for lightweight activity probes and cross-site rollups. */
+export interface StatsSummaryResponse {
+	summary: StatsSummary;
+}
+
+/** Session-materialization state without loading any analytics tiles. */
+export interface StatsFreshnessResponse {
+	meta: Freshness;
+}
+
+/** The six bounded lists shown beside the realtime counters. */
+export interface RealtimeContextResponse {
+	top_paths: CountRow[];
+	top_referrers: CountRow[];
+	top_events: CountRow[];
+	top_countries: CountRow[];
+	top_devices: CountRow[];
+	channels: CountRow[];
+}
+
+/** Revenue and multi-touch attribution, loaded only when an attribution surface needs them. */
+export interface StatsAttributionResponse {
+	revenue: RevenueSummary;
+	revenue_by_channel: CountRow[];
+	attribution: AttributionResult;
+}
+
+/** Content rankings commonly rendered together by the Overview's headline and list tiles. */
+export interface StatsContentResponse {
+	top_paths: CountRow[];
+	top_events: CountRow[];
+}
+
+/** Acquisition detail kept separate from content and low-cardinality cube dimensions. */
+export interface StatsAcquisitionResponse {
+	top_referrers: CountRow[];
+}
+
+/** K-anonymised browser/platform/network rankings used only by optional technology tiles. */
+export interface StatsTechnologyResponse {
+	top_browsers: CountRow[];
+	top_os: CountRow[];
+	top_screens: CountRow[];
+	top_languages: CountRow[];
+	top_regions: CountRow[];
+	top_networks: CountRow[];
+	top_connections: CountRow[];
+}
+
+/** Session engagement without the legacy route's unrelated freshness statement. */
+export interface StatsEngagementResponse {
+	engagement: EngagementSummary;
+}
+
+/** Revenue rollups without the heavier multi-touch attribution scan. */
+export interface StatsRevenueResponse {
+	revenue: RevenueSummary;
+	revenue_by_channel: CountRow[];
+}
+
 /** One group of a `GET /api/stats/breakdown` response. `key` is the dimension's value, with an
  * absent one reported as the empty string — the columnar store has no NULL, so both stores fold a
  * missing dimension to `''` rather than each inventing its own label for it. */
@@ -465,4 +531,12 @@ export interface AttributionResult {
 	conversions: number;
 	revenue: number;
 	models: Record<AttributionModel, CountRow[]>;
+	/** Completeness of the bounded input scan. Optional for compatibility with older producers. */
+	meta?: {
+		exact: boolean;
+		truncated: boolean;
+		rows_scanned: number;
+		/** False when the requested range exceeded the exact bounded plan. */
+		range_supported: boolean;
+	};
 }

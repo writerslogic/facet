@@ -126,7 +126,7 @@ export async function listFunnels(env: Env, siteId: string): Promise<Funnel[]> {
 		.filter((f): f is Funnel => f !== undefined);
 }
 
-/** List a site's experiments (variants parsed, active as boolean), newest first. Skips a row whose
+/** List a site's experiments (variants parsed, lifecycle exposed), newest first. Skips a row whose
  * `variants` column fails to parse. */
 export async function listExperiments(env: Env, siteId: string): Promise<Experiment[]> {
 	const rows = await db(env)
@@ -149,7 +149,10 @@ export async function listExperiments(env: Env, siteId: string): Promise<Experim
 				name: r.name,
 				flag_key: r.flag_key,
 				variants,
-				active: r.active === 1,
+				status: r.status,
+				active: r.status === 'active',
+				started_at: r.started_at,
+				completed_at: r.completed_at,
 				created_at: r.created_at,
 			};
 		})
@@ -164,7 +167,7 @@ export async function listActiveExperiments(
 	const rows = await db(env)
 		.select()
 		.from(schema.experiments)
-		.where(and(eq(schema.experiments.site_id, siteId), eq(schema.experiments.active, 1)))
+		.where(and(eq(schema.experiments.site_id, siteId), eq(schema.experiments.status, 'active')))
 		.orderBy(desc(schema.experiments.created_at));
 	return rows
 		.map((r) => {

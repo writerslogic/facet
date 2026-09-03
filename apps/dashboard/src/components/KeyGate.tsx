@@ -6,8 +6,17 @@
 // both the in-app route (Settings, using the deployment's ADMIN_TOKEN) and the admin-API route —
 // and states up front that more sites can be added later, since that was not discoverable either.
 
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, ExternalLink, Terminal } from 'lucide-react';
-import { type FormEvent, type ReactElement, type ReactNode, useState } from 'react';
+import {
+	type FormEvent,
+	type ReactElement,
+	type ReactNode,
+	useEffect,
+	useRef,
+	useState,
+} from 'react';
+import { useRequestSessionLink, useSessionMe, useVerifySessionToken } from '../hooks/session.js';
 import { cn } from '../lib/cn.js';
 import { validateApiKey, validateSiteId } from '../lib/validate.js';
 import { useDashboard } from '../state.js';
@@ -44,6 +53,13 @@ function Step({
 
 export function KeyGate(): ReactElement {
 	const { addProfile } = useDashboard();
+	const queryClient = useQueryClient();
+	const me = useSessionMe();
+	const requestLink = useRequestSessionLink();
+	const loginToken = useRef(new URLSearchParams(window.location.search).get('token')).current;
+	const verification = useVerifySessionToken(loginToken);
+	const hydrated = useRef(false);
+	const [email, setEmail] = useState('');
 	const [key, setKey] = useState('');
 	const [site, setSite] = useState('');
 	const [label, setLabel] = useState('');
@@ -53,6 +69,37 @@ export function KeyGate(): ReactElement {
 	const siteError = validateSiteId(site);
 	const showKeyError = submitted && keyError;
 	const showSiteError = submitted && siteError;
+
+	useEffect(() => {
+		if (!loginToken) return;
+		const url = new URL(window.location.href);
+		url.searchParams.delete('token');
+		if (url.pathname === '/login') url.pathname = '/';
+		window.history.replaceState(null, '', url);
+	}, [loginToken]);
+
+	useEffect(() => {
+		if (!verification.data) return;
+		void queryClient.invalidateQueries({ queryKey: ['session', 'me'] });
+	}, [queryClient, verification.data]);
+
+	useEffect(() => {
+		if (hydrated.current || !Array.isArray(me.data?.sites) || me.data.sites.length === 0) {
+			return;
+		}
+		hydrated.current = true;
+		for (const sessionSite of me.data.sites) {
+			if (typeof sessionSite.id === 'string' && typeof sessionSite.name === 'string') {
+				addProfile({ label: sessionSite.name, siteId: sessionSite.id, apiKey: '' });
+			}
+		}
+	}, [addProfile, me.data?.sites]);
+
+	function requestSignIn(event: FormEvent): void {
+		event.preventDefault();
+		const normalized = email.trim();
+		if (normalized) requestLink.mutate(normalized);
+	}
 
 	function onSubmit(event: FormEvent): void {
 		event.preventDefault();
@@ -119,103 +166,161 @@ export function KeyGate(): ReactElement {
 					</div>
 				</section>
 
-				<form
-					onSubmit={onSubmit}
-					noValidate
-					className="surface rounded-3xl p-6 shadow-float lg:sticky lg:top-10"
-				>
+				<div className="surface order-first rounded-3xl p-6 shadow-float lg:order-none lg:sticky lg:top-10">
 					<h2 className="font-semibold text-[color:var(--ink)] text-base">
-						Connect your first site
+						Sign in with your account
 					</h2>
-
-					<label
-						htmlFor="kg-key"
-						className="mt-5 block font-medium text-[color:var(--ink)] text-sm"
-					>
-						API key
-					</label>
-					<input
-						id="kg-key"
-						type="password"
-						value={key}
-						onChange={(e) => setKey(e.target.value)}
-						autoComplete="off"
-						placeholder="clk_…"
-						aria-invalid={Boolean(showKeyError)}
-						aria-describedby={showKeyError ? 'kg-key-err' : 'kg-key-hint'}
-						className="input mt-1 block w-full rounded-lg px-3 py-2 text-sm"
-					/>
-					{showKeyError ? (
-						<p id="kg-key-err" role="alert" className="mt-1 text-neg text-xs">
-							{keyError}
-						</p>
-					) : (
-						<p id="kg-key-hint" className="mt-1 text-[color:var(--faint)] text-xs">
-							Settings → API keys → Issue key
-						</p>
-					)}
-
-					<label
-						htmlFor="kg-site"
-						className="mt-4 block font-medium text-[color:var(--ink)] text-sm"
-					>
-						Site ID
-					</label>
-					<input
-						id="kg-site"
-						type="text"
-						value={site}
-						onChange={(e) => setSite(e.target.value)}
-						autoComplete="off"
-						placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx"
-						aria-invalid={Boolean(showSiteError)}
-						aria-describedby={showSiteError ? 'kg-site-err' : 'kg-site-hint'}
-						className="input mt-1 block w-full rounded-lg px-3 py-2 font-mono text-sm"
-					/>
-					{showSiteError ? (
-						<p id="kg-site-err" role="alert" className="mt-1 text-neg text-xs">
-							{siteError}
-						</p>
-					) : (
-						<p id="kg-site-hint" className="mt-1 text-[color:var(--faint)] text-xs">
-							Settings → Sites, shown under the site name
-						</p>
-					)}
-
-					<label
-						htmlFor="kg-label"
-						className="mt-4 block font-medium text-[color:var(--ink)] text-sm"
-					>
-						Label <span className="text-[color:var(--muted)]">(optional)</span>
-					</label>
-					<input
-						id="kg-label"
-						type="text"
-						value={label}
-						onChange={(e) => setLabel(e.target.value)}
-						autoComplete="off"
-						placeholder="Marketing site"
-						aria-describedby="kg-label-hint"
-						className="input mt-1 block w-full rounded-lg px-3 py-2 text-sm"
-					/>
-					<p id="kg-label-hint" className="mt-1 text-[color:var(--faint)] text-xs">
-						What this site is called in the switcher
+					<p className="mt-1 text-[color:var(--muted)] text-xs">
+						Recommended: the credential stays in a secure HttpOnly cookie and is never
+						available to dashboard JavaScript.
 					</p>
+					<form onSubmit={requestSignIn}>
+						<label htmlFor="kg-email" className="mt-4 block font-medium text-sm">
+							Email
+						</label>
+						<input
+							id="kg-email"
+							type="email"
+							value={email}
+							onChange={(event) => setEmail(event.target.value)}
+							autoComplete="email"
+							className="input mt-1 block w-full rounded-lg px-3 py-2 text-sm"
+						/>
+						<button
+							type="submit"
+							disabled={!email.trim() || requestLink.isPending}
+							className="btn-secondary mt-3 w-full rounded-xl px-4 py-2 text-sm"
+						>
+							{requestLink.isPending ? 'Sending…' : 'Email me a sign-in link'}
+						</button>
+					</form>
+					{requestLink.isSuccess ? (
+						<output className="mt-2 block text-pos text-xs">
+							Check your email for a single-use sign-in link.
+						</output>
+					) : null}
+					{requestLink.error ? (
+						<p role="alert" className="mt-2 text-neg text-xs">
+							Sign-in email unavailable. You can still use a site API key below.
+						</p>
+					) : null}
+					{verification.isLoading ? (
+						<output className="mt-2 block text-[color:var(--muted)] text-xs">
+							Signing in…
+						</output>
+					) : null}
+					{verification.error ? (
+						<p role="alert" className="mt-2 text-neg text-xs">
+							That sign-in link is invalid, expired, or already used.
+						</p>
+					) : null}
+					{me.data?.user && me.data.sites?.length === 0 ? (
+						<output className="mt-2 block text-[color:var(--muted)] text-xs">
+							Signed in as {me.data.user.email}, but no sites are assigned to your
+							teams.
+						</output>
+					) : null}
 
-					<button
-						type="submit"
-						className={cn(
-							'btn-accent mt-6 flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm shadow-card transition',
-							'hover:shadow-float',
+					<div className="my-5 flex items-center gap-3" aria-hidden="true">
+						<span className="h-px flex-1 bg-[color:var(--line)]" />
+						<span className="text-[color:var(--faint)] text-xs">or use a site key</span>
+						<span className="h-px flex-1 bg-[color:var(--line)]" />
+					</div>
+
+					<form onSubmit={onSubmit} noValidate>
+						<h2 className="font-semibold text-[color:var(--ink)] text-base">
+							Connect your first site
+						</h2>
+
+						<label
+							htmlFor="kg-key"
+							className="mt-5 block font-medium text-[color:var(--ink)] text-sm"
+						>
+							API key
+						</label>
+						<input
+							id="kg-key"
+							type="password"
+							value={key}
+							onChange={(e) => setKey(e.target.value)}
+							autoComplete="off"
+							placeholder="clk_…"
+							aria-invalid={Boolean(showKeyError)}
+							aria-describedby={showKeyError ? 'kg-key-err' : 'kg-key-hint'}
+							className="input mt-1 block w-full rounded-lg px-3 py-2 text-sm"
+						/>
+						{showKeyError ? (
+							<p id="kg-key-err" role="alert" className="mt-1 text-neg text-xs">
+								{keyError}
+							</p>
+						) : (
+							<p id="kg-key-hint" className="mt-1 text-[color:var(--faint)] text-xs">
+								Settings → API keys → Issue key
+							</p>
 						)}
-					>
-						View dashboard
-						<ArrowRight className="h-4 w-4" aria-hidden="true" />
-					</button>
-					<p className="mt-3 text-center text-[color:var(--faint)] text-xs">
-						Stored in this browser only, never sent anywhere but your own deployment.
-					</p>
-				</form>
+
+						<label
+							htmlFor="kg-site"
+							className="mt-4 block font-medium text-[color:var(--ink)] text-sm"
+						>
+							Site ID
+						</label>
+						<input
+							id="kg-site"
+							type="text"
+							value={site}
+							onChange={(e) => setSite(e.target.value)}
+							autoComplete="off"
+							placeholder="xxxxxxxx-xxxx-4xxx-xxxx-xxxxxxxxxxxx"
+							aria-invalid={Boolean(showSiteError)}
+							aria-describedby={showSiteError ? 'kg-site-err' : 'kg-site-hint'}
+							className="input mt-1 block w-full rounded-lg px-3 py-2 font-mono text-sm"
+						/>
+						{showSiteError ? (
+							<p id="kg-site-err" role="alert" className="mt-1 text-neg text-xs">
+								{siteError}
+							</p>
+						) : (
+							<p id="kg-site-hint" className="mt-1 text-[color:var(--faint)] text-xs">
+								Settings → Sites, shown under the site name
+							</p>
+						)}
+
+						<label
+							htmlFor="kg-label"
+							className="mt-4 block font-medium text-[color:var(--ink)] text-sm"
+						>
+							Label <span className="text-[color:var(--muted)]">(optional)</span>
+						</label>
+						<input
+							id="kg-label"
+							type="text"
+							value={label}
+							onChange={(e) => setLabel(e.target.value)}
+							autoComplete="off"
+							placeholder="Marketing site"
+							aria-describedby="kg-label-hint"
+							className="input mt-1 block w-full rounded-lg px-3 py-2 text-sm"
+						/>
+						<p id="kg-label-hint" className="mt-1 text-[color:var(--faint)] text-xs">
+							What this site is called in the switcher
+						</p>
+
+						<button
+							type="submit"
+							className={cn(
+								'btn-accent mt-6 flex w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2.5 text-sm shadow-card transition',
+								'hover:shadow-float',
+							)}
+						>
+							View dashboard
+							<ArrowRight className="h-4 w-4" aria-hidden="true" />
+						</button>
+						<p className="mt-3 text-center text-[color:var(--faint)] text-xs">
+							Held in memory only; re-enter it after a page reload.
+						</p>
+					</form>
+				</div>
 			</div>
 		</main>
 	);

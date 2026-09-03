@@ -163,7 +163,7 @@ export function usePathTree(
 			if (filter.referrer) params.set('referrer', filter.referrer);
 			return apiFetch<PathTreeResponse>(`/api/stats/path-tree?${params}`, apiKey);
 		},
-		enabled: Boolean(apiKey && siteId) && range.end > range.start,
+		enabled: Boolean(siteId) && range.end > range.start,
 		// Keep the current tree on screen while a range/filter change loads, but never show the
 		// previous SITE's tree under the new label.
 		placeholderData: (prev, prevQuery) =>

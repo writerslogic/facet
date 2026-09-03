@@ -9,7 +9,7 @@ import { funnelReport } from '../db/funnels.js';
 import { db } from '../db/queries.js';
 import * as schema from '../db/schema.js';
 import type { AppEnv } from '../env.js';
-import { requireAdmin, requireApiScope } from '../lib/auth.js';
+import { requireAdmin, requireSiteAccess } from '../lib/auth.js';
 import { DAY_MS, MAX_RANGE_DAYS } from '../lib/constants.js';
 import { ApiError, validationErrorHook } from '../lib/http.js';
 
@@ -48,6 +48,35 @@ funnelsRoutes.get('/', requireAdmin, async (c) => {
 	return c.json({ funnels: await listFunnels(c.env, c.req.query('site_id') ?? '') });
 });
 
+// Full replacement keeps editing deterministic: the ordered step array is validated as one unit,
+// then written in one D1 statement. The site id is part of both validation and the WHERE clause, so
+// an admin editing one site's list cannot accidentally move or overwrite another site's funnel.
+funnelsRoutes.patch(
+	'/:id',
+	requireAdmin,
+	vValidator('json', FunnelSchema, validationErrorHook),
+	async (c) => {
+		const body = c.req.valid('json');
+		const id = c.req.param('id');
+		if (!id) throw new ApiError('not_found', 404);
+		const updated = await db(c.env)
+			.update(schema.funnels)
+			.set({ name: body.name, steps: JSON.stringify(body.steps) })
+			.where(and(eq(schema.funnels.id, id), eq(schema.funnels.site_id, body.site_id)))
+			.returning({ created_at: schema.funnels.created_at });
+		const row = updated[0];
+		if (!row) return c.json({ error: 'not_found' }, 404);
+		const funnel: Funnel = {
+			id,
+			site_id: body.site_id,
+			name: body.name,
+			steps: body.steps,
+			created_at: row.created_at,
+		};
+		return c.json({ funnel });
+	},
+);
+
 funnelsRoutes.delete('/:id', requireAdmin, async (c) => {
 	const siteId = c.req.query('site_id') ?? '';
 	const deleted = await db(c.env)
@@ -60,7 +89,7 @@ funnelsRoutes.delete('/:id', requireAdmin, async (c) => {
 	return c.json({ deleted: true });
 });
 
-funnelsRoutes.get('/:id/report', requireApiScope('read'), async (c) => {
+funnelsRoutes.get('/:id/report', requireSiteAccess, async (c) => {
 	const siteId = c.req.query('site_id');
 	if (siteId !== c.get('siteId')) {
 		throw new ApiError('site_mismatch', 403);

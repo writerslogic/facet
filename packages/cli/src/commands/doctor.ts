@@ -172,6 +172,8 @@ export interface ResourceFacts {
 	toolingBlocked: boolean;
 	queueRequired: boolean;
 	queueExists: boolean;
+	deadLetterQueueName: string | null;
+	deadLetterQueueExists: boolean;
 	secretsListed: boolean;
 	adminSecretSet: boolean;
 	queueName: string;
@@ -183,6 +185,18 @@ export function diagnoseResources(facts: ResourceFacts): Cause | null {
 		[
 			facts.queueRequired && !facts.queueExists,
 			`the queue ${facts.queueName} is bound but does not exist, so the deploy is rejected before anything else runs`,
+			'facet init',
+		],
+		[
+			facts.queueRequired && facts.deadLetterQueueName === null,
+			'the ingest consumer has no dead-letter queue, so poisoned events are dropped after retries',
+			'facet init',
+		],
+		[
+			facts.queueRequired &&
+				facts.deadLetterQueueName !== null &&
+				!facts.deadLetterQueueExists,
+			`the dead-letter queue ${facts.deadLetterQueueName ?? ''} is configured but does not exist`,
 			'facet init',
 		],
 		[
@@ -442,6 +456,13 @@ export async function runDoctor(
 		'ingest queue',
 		local.queuesEnabled ? (local.queueName ?? 'facet-ingest') : 'disabled (synchronous ingest)',
 	);
+	if (local.queuesEnabled) {
+		row(
+			local.deadLetterQueueName ? 'info' : 'missing',
+			'dead-letter queue',
+			local.deadLetterQueueName ?? 'not configured — exhausted messages would be dropped',
+		);
+	}
 	row(
 		local.hasLocalAdminToken ? 'ok' : 'warn',
 		'admin token',
@@ -456,6 +477,7 @@ export async function runDoctor(
 	let loginError: CfError | null = null;
 	let accountError: CfError | null = null;
 	let queuePresent = true;
+	let deadLetterQueuePresent = true;
 	let secretsListed = true;
 	let adminSecretSet = true;
 
@@ -486,6 +508,19 @@ export async function runDoctor(
 						? `${queueName} exists`
 						: `${queueName} does not exist — the deploy will fail`,
 				);
+				if (local.deadLetterQueueName) {
+					deadLetterQueuePresent = await queueExists(
+						found.value,
+						local.deadLetterQueueName,
+					);
+					row(
+						deadLetterQueuePresent ? 'ok' : 'missing',
+						'dead-letter queue',
+						deadLetterQueuePresent
+							? `${local.deadLetterQueueName} exists`
+							: `${local.deadLetterQueueName} does not exist — exhausted messages would be dropped`,
+					);
+				}
 			}
 			const secrets = await secretNames(found.value);
 			if (secrets.ok && secrets.value !== null) {
@@ -546,6 +581,8 @@ export async function runDoctor(
 		toolingBlocked: toolingCause !== null,
 		queueRequired: local.queuesEnabled,
 		queueExists: queuePresent,
+		deadLetterQueueName: local.deadLetterQueueName,
+		deadLetterQueueExists: deadLetterQueuePresent,
 		secretsListed,
 		adminSecretSet,
 		queueName,

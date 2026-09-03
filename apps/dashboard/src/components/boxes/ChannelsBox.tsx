@@ -8,16 +8,10 @@
 // Inspecting a row composes that channel from the cube's other axes (device, country) client-side.
 
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, LIST_VARIANTS, ListBody, rowsTable } from './shared.js';
+import { ListBody, rowsTable } from './shared.js';
 import type { TileDef } from './types.js';
 
 export const channelsBox: TileDef = {
-	id: 'channels',
-	title: 'Channels',
-	size: 'lg',
-	expandable: true,
-	variants: LIST_VARIANTS,
-	options: LIST_OPTIONS,
 	table: (ctx) => rowsTable('Channel', ctx.dimRows('channel', ctx.data.channels)),
 	render: (ctx, density, config) => (
 		<ListBody
@@ -30,7 +24,6 @@ export const channelsBox: TileDef = {
 			compare={{
 				current: ctx.data.channels ?? [],
 				select: (p) => p.channels,
-				note: 'counted as sessions for this channel, not the pageviews shown',
 			}}
 			drill={drillSpec(ctx, 'channel')}
 		/>

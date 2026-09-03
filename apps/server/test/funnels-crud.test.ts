@@ -19,7 +19,7 @@ const STEPS = [
 ];
 
 describe('funnels CRUD', () => {
-	it('creates, lists with steps parsed, and deletes a funnel', async () => {
+	it('creates, edits, lists with steps parsed, and deletes a funnel', async () => {
 		const created = await app.request(
 			'/api/funnels',
 			{
@@ -36,6 +36,24 @@ describe('funnels CRUD', () => {
 		expect(funnel.id).toMatch(/^[0-9a-f-]{36}$/);
 		expect(funnel.steps).toEqual(STEPS);
 
+		const editedSteps = [
+			{ type: 'path', match_value: '/shop' },
+			{ type: 'event', match_value: 'checkout_complete' },
+		];
+		const edited = await app.request(
+			`/api/funnels/${funnel.id}`,
+			{
+				method: 'PATCH',
+				headers: JSON_HEADERS,
+				body: JSON.stringify({ site_id: SITE, name: 'Checkout', steps: editedSteps }),
+			},
+			env,
+		);
+		expect(edited.status).toBe(200);
+		expect(await edited.json()).toMatchObject({
+			funnel: { id: funnel.id, name: 'Checkout', steps: editedSteps },
+		});
+
 		const list = await app.request(
 			`/api/funnels?site_id=${SITE}`,
 			{ headers: { Authorization: ADMIN } },
@@ -47,7 +65,7 @@ describe('funnels CRUD', () => {
 		};
 		expect(funnels).toHaveLength(1);
 		expect(funnels[0]?.id).toBe(funnel.id);
-		expect(funnels[0]?.steps).toEqual(STEPS);
+		expect(funnels[0]?.steps).toEqual(editedSteps);
 
 		const del = await app.request(
 			`/api/funnels/${funnel.id}?site_id=${SITE}`,

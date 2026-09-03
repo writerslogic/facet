@@ -25,8 +25,18 @@ import type {
 	FunnelReportResult,
 	GoalConversionResult,
 	NlQueryResult,
+	RealtimeContextResponse,
 	RealtimeSnapshot,
+	StatsAcquisitionResponse,
+	StatsAttributionResponse,
+	StatsContentResponse,
+	StatsCoreResponse,
+	StatsEngagementResponse,
+	StatsFreshnessResponse,
 	StatsResponse,
+	StatsRevenueResponse,
+	StatsSummaryResponse,
+	StatsTechnologyResponse,
 } from '@facet/shared';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { DEMO_SITE_ID } from '../demo/constants.js';
@@ -118,6 +128,15 @@ describe('demo API contract: the range is load-bearing', () => {
 	// A fixture that ignores its range is indistinguishable from a working endpoint without this.
 	const rangeScoped: { path: string; extra?: string }[] = [
 		{ path: '/api/stats' },
+		{ path: '/api/stats/core' },
+		{ path: '/api/stats/summary' },
+		{ path: '/api/stats/content' },
+		{ path: '/api/stats/acquisition' },
+		{ path: '/api/stats/technology' },
+		{ path: '/api/stats/engagement' },
+		{ path: '/api/stats/revenue' },
+		{ path: '/api/stats/realtime-context' },
+		{ path: '/api/stats/attribution' },
 		{ path: '/api/stats/cube' },
 		{ path: '/api/stats/interactions' },
 		{ path: '/api/stats/conversions', extra: 'goal_id=g1' },
@@ -289,6 +308,58 @@ describe('demo API contract: breakdown keys are in the real API key space', () =
 describe('demo API contract: response shapes', () => {
 	it('/api/stats satisfies StatsResponse', async () => {
 		expectStatsResponse(await ok<StatsResponse>(`/api/stats?${range(WEEK)}`));
+	});
+
+	it('satisfies the narrow stats response contracts', async () => {
+		const core = await ok<StatsCoreResponse>(`/api/stats/core?${range(WEEK)}`);
+		expect(Object.keys(core).sort()).toEqual(['series', 'summary']);
+
+		const summary = await ok<StatsSummaryResponse>(`/api/stats/summary?${range(WEEK)}`);
+		expect(Object.keys(summary)).toEqual(['summary']);
+
+		const freshness = await ok<StatsFreshnessResponse>(`/api/stats/freshness?${range(WEEK)}`);
+		expect(freshness.meta.materialization).toBe('hourly');
+
+		const realtime = await ok<RealtimeContextResponse>(
+			`/api/stats/realtime-context?${range(WEEK)}`,
+		);
+		expectCountRows(realtime.top_paths, 'realtime.top_paths');
+		expectCountRows(realtime.channels, 'realtime.channels');
+
+		const attribution = await ok<StatsAttributionResponse>(
+			`/api/stats/attribution?${range(WEEK)}`,
+		);
+		expect(Number.isFinite(attribution.revenue.total)).toBe(true);
+		expect(Number.isFinite(attribution.attribution.revenue)).toBe(true);
+		expect(attribution.attribution.meta).toMatchObject({
+			exact: true,
+			truncated: false,
+			range_supported: true,
+		});
+
+		const content = await ok<StatsContentResponse>(`/api/stats/content?${range(WEEK)}`);
+		expectCountRows(content.top_paths, 'content.top_paths');
+		expectCountRows(content.top_events, 'content.top_events');
+
+		const acquisition = await ok<StatsAcquisitionResponse>(
+			`/api/stats/acquisition?${range(WEEK)}`,
+		);
+		expectCountRows(acquisition.top_referrers, 'acquisition.top_referrers');
+
+		const technology = await ok<StatsTechnologyResponse>(
+			`/api/stats/technology?${range(WEEK)}`,
+		);
+		expectCountRows(technology.top_browsers, 'technology.top_browsers');
+		expectCountRows(technology.top_connections, 'technology.top_connections');
+
+		const engagement = await ok<StatsEngagementResponse>(
+			`/api/stats/engagement?${range(WEEK)}`,
+		);
+		expect(Number.isFinite(engagement.engagement.sessions)).toBe(true);
+
+		const revenue = await ok<StatsRevenueResponse>(`/api/stats/revenue?${range(WEEK)}`);
+		expect(Number.isFinite(revenue.revenue.total)).toBe(true);
+		expect(revenue).not.toHaveProperty('attribution');
 	});
 
 	it('/api/stats/cube satisfies CubeResponse and buckets by the same rule as the server', async () => {

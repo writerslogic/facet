@@ -20,48 +20,12 @@ import {
 	windowEndMs,
 	windowKey,
 } from './identity.js';
+import { createLogger } from './log.js';
 import { dayKey, getDailySalt } from './salt.js';
 
-const DEDUP_WINDOW_MS = 5000;
-const DEDUP_MAX_ENTRIES = 2000;
-
-/** In-isolate, best-effort guard against a client SDK double-boot firing the same beacon twice —
- * NOT a substitute for the queue-redelivery idempotency below, which is unconditional. Content-
- * keyed and unpersisted, so it only catches a repeat the same isolate happens to see, and it runs
- * AFTER hash derivation, so it suppresses the duplicate row, not the reads that produced the hash. */
-const recentContentKeys = new Map<string, number>();
-
-async function isDuplicateContent(input: IngestInput, vh: string): Promise<boolean> {
-	const bucket = Math.floor(input.now / DEDUP_WINDOW_MS);
-	// IMPORTANT: `props` is part of the identity of an event — two same-name, same-path beacons that
-	// differ only in props (one $exposure per experiment) are distinct, not a double-boot. Digested so
-	// a validated bag can't put kilobytes into a resident key.
-	const props = input.props ? await sha256Hex(JSON.stringify(input.props)) : '';
-	const key = `${input.siteId}|${vh}|${input.path}|${input.name ?? ''}|${props}|${bucket}`;
-	if (recentContentKeys.size > DEDUP_MAX_ENTRIES) {
-		for (const [k, t] of recentContentKeys) {
-			if (input.now - t > DEDUP_WINDOW_MS * 2) recentContentKeys.delete(k);
-		}
-		// IMPORTANT: the age sweep frees nothing while traffic is dense enough to keep every entry
-		// inside the window, so the cap is enforced by evicting oldest-first (Map insertion order is
-		// arrival order — entries are only ever set on a miss, and backdated rows never reach here).
-		for (const k of recentContentKeys.keys()) {
-			if (recentContentKeys.size <= DEDUP_MAX_ENTRIES) break;
-			recentContentKeys.delete(k);
-		}
-	}
-	if (recentContentKeys.has(key)) return true;
-	recentContentKeys.set(key, input.now);
-	return false;
-}
-
-/** pool-workers reuses the isolate (and this module's state) across tests in one file, so
- * apply-migrations.ts's per-test reset calls this too. */
-export function __resetIngestDedupForTests(): void {
-	recentContentKeys.clear();
-}
-
 export interface IngestInput {
+	/** Client-minted UUID. The same logical event must reuse it across request retries. */
+	eventId?: string;
 	siteId: string;
 	/** Raw IP, used only to derive the visitor hash. Never stored, logged, or returned. */
 	ip: string;
@@ -104,9 +68,9 @@ export interface IngestInput {
 	/** Set ONLY by the admin historical-import route, never by a request-time path. Its presence makes
 	 * `now` a backdated timestamp, which changes three things: the hash derives from the source tool's
 	 * opaque visitor id under the pre-resolved salt for that day (no `ip`/`ua` to derive from, and no
-	 * tier elevation — imported history is anonymous by construction), the in-isolate double-boot
-	 * dedup is bypassed, and the row is NOT mirrored to Analytics Engine. Like `ip` and `uid`,
-	 * `visitorId` is consumed by the derivation and never stored, logged, or returned. */
+	 * tier elevation — imported history is anonymous by construction), and the row is NOT mirrored to
+	 * Analytics Engine. Like `ip` and `uid`, `visitorId` is consumed by the derivation and never stored,
+	 * logged, or returned. */
 	historical?: { visitorId: string; salt: string };
 }
 
@@ -177,6 +141,13 @@ async function importEventId(row: NewEvent): Promise<string> {
 	return `${d.slice(0, 8)}-${d.slice(8, 12)}-${d.slice(12, 16)}-${d.slice(16, 20)}-${d.slice(20, 32)}`;
 }
 
+/** Namespace a caller's id by site so two tenants that choose the same UUID cannot collide on the
+ * global `events.id` primary key. The external id itself is not retained. */
+async function requestEventId(siteId: string, eventId: string): Promise<string> {
+	const d = await sha256Hex(`${siteId}|event|${eventId}`);
+	return `${d.slice(0, 8)}-${d.slice(8, 12)}-${d.slice(12, 16)}-${d.slice(16, 20)}-${d.slice(20, 32)}`;
+}
+
 /** A fully-derived, IP-free event ready to persist — the queue message shape. The raw IP is consumed
  * into `row.visitorHash` during derivation and never appears here, so it is never queued. */
 export interface DerivedEvent {
@@ -219,12 +190,6 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 	} else {
 		const policy = await resolvePolicy(env, input.siteId);
 		vh = await deriveForIngest(env, input, policy, dk);
-		// The dedup guard buckets on `now`, so it is meaningless against backdated rows and would drop
-		// two genuinely distinct imported hits that share a 5s bucket. Re-import safety comes from the
-		// content-addressed id below instead.
-		if (await isDuplicateContent(input, vh)) {
-			return null;
-		}
 	}
 	const utm = {
 		source: input.utm?.source ?? null,
@@ -285,7 +250,11 @@ export async function deriveEvent(env: Env, input: IngestInput): Promise<Derived
 	// The id is minted HERE (not at insert) so an at-least-once queue redelivery re-inserts the same id
 	// as a no-op — the persist path is idempotent, so a queue retry can never duplicate the event.
 	return {
-		id: historical ? await importEventId(row) : crypto.randomUUID(),
+		id: historical
+			? await importEventId(row)
+			: input.eventId
+				? await requestEventId(input.siteId, input.eventId)
+				: crypto.randomUUID(),
 		row,
 		session: {
 			siteId: input.siteId,
@@ -309,6 +278,26 @@ export async function ingestEvent(env: Env, input: IngestInput): Promise<{ inser
 	const derived = await deriveEvent(env, input);
 	if (!derived) {
 		return { inserted: false };
+	}
+	await persistDerived(env, [derived]);
+	return { inserted: true };
+}
+
+/** Derive once, then enqueue for batched persistence. A deployment without Queues, or a transient
+ * queue failure, falls back to the same idempotent D1 write without re-deriving the event. */
+export async function submitEvent(env: Env, input: IngestInput): Promise<{ inserted: boolean }> {
+	const derived = await deriveEvent(env, input);
+	if (!derived) return { inserted: false };
+	if (env.INGEST_QUEUE) {
+		try {
+			await env.INGEST_QUEUE.send(derived);
+			return { inserted: true };
+		} catch (err) {
+			createLogger({ component: 'ingest' }).error('ingest_enqueue_failed', err, {
+				site_id: input.siteId,
+				event_id: derived.id,
+			});
+		}
 	}
 	await persistDerived(env, [derived]);
 	return { inserted: true };

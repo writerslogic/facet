@@ -1,16 +1,14 @@
-// Worker environment bindings (D1, static assets, rate-limiter, vars, secrets). Single source of truth for `Env`.
+// Worker environment bindings. Required bindings come from `wrangler.example.jsonc` through the
+// generated worker-configuration.d.ts; this file only describes deliberately optional deployment
+// variants, secrets, and application-level variables that cannot be inferred from the template.
 
 import type { Role } from './lib/accounts.js';
 import type { DerivedEvent } from './lib/ingest.js';
 
-export interface Env {
-	/** D1 database holding sites, events, rollups, salts, and API keys. */
-	DB: D1Database;
+interface OptionalDeploymentBindings {
 	/** Ingest queue: the beacon enqueues a derived (IP-free) event and returns immediately, and a consumer
 	 * batches the D1 writes off the hot path. Optional — absent in tests, where ingest runs synchronously. */
 	INGEST_QUEUE?: Queue<DerivedEvent>;
-	/** Static-asset binding serving the built dashboard. */
-	ASSETS: Fetcher;
 	/** Cloudflare native rate-limit binding. Optional: `lib/ratelimit.ts` fails OPEN when it is
 	 * unbound, so a production deployment MUST bind it. The test config deliberately omits it. */
 	RATE_LIMITER?: RateLimit;
@@ -19,15 +17,9 @@ export interface Env {
 	AE?: AnalyticsEngineDataset;
 	/** Explicit opt-in for the best-effort Analytics Engine mirror. D1 remains authoritative. */
 	AE_BEST_EFFORT_ENABLED?: string;
-	/** Rolling retention window for raw events, in days (string var). */
-	RAW_RETENTION_DAYS: string;
 	/** Set to "false" only in isolated tests or a deliberate legacy deployment. Production defaults
 	 * to validating every public beacon against an existing site's configured domain. */
 	COLLECT_VALIDATE_SITE?: string;
-	/** Rolling retention window for the CRM audit log, in days (string var). Optional: unset means the
-	 * default in `constants.ts`, which is deliberately longer than the raw-event window because the log
-	 * records what OPERATORS did rather than what visitors did. Only read when `CRM_DB` is bound. */
-	CRM_AUDIT_RETENTION_DAYS?: string;
 	/** Months of hour/day rollup detail kept before `lib/coarsen.ts` folds a month into one `month`
 	 * row (string var). Nothing is deleted — coarsening is additive. */
 	ROLLUP_DETAIL_MONTHS?: string;
@@ -50,8 +42,6 @@ export interface Env {
 	AUTH_EMAIL_FROM?: string;
 	/** Verified sender address for anomaly alerts. */
 	ALERT_EMAIL_FROM?: string;
-	/** Workers AI binding, used to translate natural-language analytics questions. */
-	AI: Ai;
 	/** YOUR deployment's security.txt contact URI (var), e.g. `mailto:security@example.com`. There is
 	 * deliberately no default: until this is set, `/.well-known/security.txt` returns 404 rather than
 	 * publishing someone else's address as this deployment's disclosure contact. */
@@ -76,17 +66,20 @@ export interface Env {
 	SCITT_URL?: string;
 	/** Optional bearer token (Worker secret) for the external SCITT service. */
 	SCITT_TOKEN?: string;
-	/** CRM database — a SEPARATE D1 database, not a table set inside `DB`. The CRM is an optional
-	 * extension holding directly-supplied contact PII, so "excluded" has to mean the tables do not
-	 * exist: with this binding absent there is no database, no migration is applied, and every
-	 * `/api/crm` route returns 501 `crm_unavailable`.
+	/** CRM database — a separate D1 database, not a table set inside `DB`. It stores only explicitly
+	 * materialized pseudonymous contacts; raw operator identifiers and analytics identities do not
+	 * cross this physical boundary.
 	 *
-	 * The separation is load-bearing, not cosmetic. D1 cannot join across databases, so the
-	 * contact→analytics link CANNOT be a foreign key — it must be assembled in the Worker, which
-	 * structurally forces it through the consent check in `lib/consent.ts` instead of a join someone
-	 * adds later. Binding this also changes what the deployment attests: see `lib/dpv.ts`. */
+	 * The separation is load-bearing: D1 cannot join across databases, so a future analytics bridge
+	 * cannot become an accidental foreign key or query join. Binding this also changes what the
+	 * deployment attests; see `lib/dpv.ts`. */
 	CRM_DB?: D1Database;
 }
+
+type OptionalGeneratedBinding = 'INGEST_QUEUE' | 'RATE_LIMITER' | 'AE';
+
+/** Runtime environment: generated required bindings plus explicitly optional deployment variants. */
+export type Env = Omit<CloudflareBindings, OptionalGeneratedBinding> & OptionalDeploymentBindings;
 
 /** App-wide Hono environment: bindings plus request-scoped variables (set by auth middleware).
  * `userId`/`role` are set only by `requireTeamRole`, the session-only guard — the API-key middlewares

@@ -6,11 +6,10 @@
 // its own error and its own refetch, which is exactly the isolation this view needs: a revoked key
 // on one site must cost that row and nothing else.
 //
-// The query keys deliberately match `useStats`/`useCompareStats` (both go through `siteQueryKey`
-// with the same scope and site id), so the site the user is already looking at renders from cache
-// with no extra round-trip, and a refetch here warms the Overview too.
+// These use the narrow core response rather than sharing the full Overview cache: returning only
+// summary + series avoids paying for every optional tile twice per site.
 
-import type { SeriesPoint, StatsQuery, StatsResponse, StatsSummary } from '@facet/shared';
+import type { SeriesPoint, StatsCoreResponse, StatsQuery, StatsSummary } from '@facet/shared';
 import { useQueries } from '@tanstack/react-query';
 import { apiFetch, qs } from '../api.js';
 import { type Delta, computeDelta } from '../lib/format.js';
@@ -94,7 +93,7 @@ function toStatus(isPending: boolean, error: Error | null): RowStatus {
 }
 
 /**
- * Fan out one stats read (plus one comparison read) per profile.
+ * Fan out one core read (plus one comparison read) per profile.
  *
  * Current and comparison are separate queries on purpose: if a site's comparison window fails, the
  * row still shows this period's numbers without deltas, rather than the whole row collapsing.
@@ -109,9 +108,10 @@ export function useAllSitesRollup(
 		queries: profiles.map((profile) => {
 			const query = statsQuery(profile, range, interval);
 			return {
-				queryKey: siteQueryKey('stats', profile.siteId, query),
-				queryFn: () => apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, profile.apiKey),
-				enabled: Boolean(profile.apiKey && profile.siteId) && enabled,
+				queryKey: siteQueryKey('stats-core', profile.siteId, query),
+				queryFn: () =>
+					apiFetch<StatsCoreResponse>(`/api/stats/core?${qs(query)}`, profile.apiKey),
+				enabled: Boolean(profile.siteId) && enabled,
 				retry: retryPolicy,
 			};
 		}),
@@ -120,9 +120,10 @@ export function useAllSitesRollup(
 		queries: profiles.map((profile) => {
 			const query = statsQuery(profile, previousWindow(range), interval);
 			return {
-				queryKey: siteQueryKey('stats-compare', profile.siteId, query),
-				queryFn: () => apiFetch<StatsResponse>(`/api/stats?${qs(query)}`, profile.apiKey),
-				enabled: Boolean(profile.apiKey && profile.siteId) && enabled,
+				queryKey: siteQueryKey('stats-core-compare', profile.siteId, query),
+				queryFn: () =>
+					apiFetch<StatsCoreResponse>(`/api/stats/core?${qs(query)}`, profile.apiKey),
+				enabled: Boolean(profile.siteId) && enabled,
 				retry: retryPolicy,
 			};
 		}),

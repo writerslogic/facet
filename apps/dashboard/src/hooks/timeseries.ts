@@ -367,7 +367,7 @@ export function useDimensionSeries({
 				`/api/stats/timeseries?${qs(query)}&dimension=${encodeURIComponent(dimension)}&limit=${limit}`,
 				apiKey,
 			),
-		enabled: Boolean(apiKey && siteId) && enabled && range.end > range.start,
+			enabled: Boolean(siteId) && enabled && range.end > range.start,
 		staleTime: 60_000,
 		// Hold the previous answer while the next one loads so a range/segment change re-scales the
 		// chart instead of collapsing it to a skeleton. Scoped to the same site: a site switch must

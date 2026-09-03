@@ -218,16 +218,15 @@ export interface TabSegmentSupport {
  *                           dropping a filter term it cannot express. FULL.
  *   /api/stats/cube       → cube() uses buildEventWhere on purpose; the client slices the result.
  *   /api/stats/realtime   → realtime(env, siteId, …): site + trailing window only. NO filter.
+ *   /api/stats/realtime-context → realtimeContext() applies all five filters to its raw-event lists.
+ *                           FULL (the Realtime tab remains PARTIAL because its counters use the
+ *                           unfiltered snapshot above).
  *   /api/stats/retention  → cohortRetention() reads `sessions` by siteId + firstSeen only. It
  *                           accepts path/country/device/channel and DISCARDS them. NO filter.
  *   /api/stats/anomalies  → detectAnomalies() uses buildEventWhere (unfiltered). NO filter.
  *   /api/funnels/:id/report and /api/stats/conversions → no dimension params at all. NO filter.
  *   /api/stats/experiment → experimentResult() scopes by siteId + range only. NO filter.
  *   /api/stats/query      → the executor is handed { siteId, start, end }. NO filter.
- *   /api/crm/*            → a contact's activity is every event its consent-verified visitor hashes
- *                           produced; contactActivity() takes siteId + hashes and nothing else, and
- *                           there is no date range either. NO filter.
- *
  * A tab whose level is not `full` must render this note next to its numbers. Showing filtered
  * labels over unfiltered numbers is the one outcome worse than not filtering at all.
  */

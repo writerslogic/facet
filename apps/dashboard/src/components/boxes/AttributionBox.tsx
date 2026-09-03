@@ -14,7 +14,7 @@ import { formatNumber } from '../../lib/format.js';
 import { DeltaBadge } from '../Delta.js';
 import { ChartEmpty } from '../charts/ChartChrome.js';
 import { drillSpec } from './drill.js';
-import { LIST_OPTIONS, ListBody, accentOf } from './shared.js';
+import { ListBody, accentOf } from './shared.js';
 import type {
 	TableData,
 	TileConfig,
@@ -193,12 +193,6 @@ function AttributionList({
 }
 
 export const attributionBox: TileDef = {
-	id: 'attribution',
-	title: 'Attribution',
-	size: 'lg',
-	expandable: true,
-	variants: MODELS,
-	options: LIST_OPTIONS,
 	table: (ctx, config): TableData => {
 		const model = modelOf(config);
 		const rows = modelRows(ctx, model);

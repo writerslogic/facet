@@ -36,7 +36,7 @@ function mockApi(opts: { realtime: unknown; stats?: unknown; statsFails?: boolea
 	vi.stubGlobal(
 		'fetch',
 		vi.fn(async (url: string) => {
-			if (String(url).startsWith('/api/stats/realtime')) return ok(opts.realtime);
+			if (String(url).startsWith('/api/stats/realtime?')) return ok(opts.realtime);
 			if (opts.statsFails) {
 				return { ok: false, json: async () => ({ error: 'range_too_large' }) };
 			}
@@ -153,7 +153,7 @@ describe('useRealtimeBreakdown', () => {
 		expect(fetch).not.toHaveBeenCalled();
 	});
 
-	it('fires once the window is real', () => {
+	it('fires the narrow context endpoint once the window is real', async () => {
 		mockApi({ realtime: SNAPSHOT });
 		const client = new QueryClient({
 			defaultOptions: { queries: { retry: false } },
@@ -162,6 +162,12 @@ describe('useRealtimeBreakdown', () => {
 			wrapper: wrapper(client),
 		});
 		expect(result.current.fetchStatus).not.toBe('idle');
+		await vi.waitFor(() =>
+			expect(fetch).toHaveBeenCalledWith(
+				expect.stringContaining('/api/stats/realtime-context?'),
+				expect.any(Object),
+			),
+		);
 	});
 });
 

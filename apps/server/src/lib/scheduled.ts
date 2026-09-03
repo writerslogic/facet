@@ -9,7 +9,7 @@ import { occurrenceOf, parseCadence } from './cadence.js';
 import { coarsenRollups } from './coarsen.js';
 import { HOUR_MS } from './constants.js';
 import { createLogger } from './log.js';
-import { enforceCrmAuditRetention, enforceRetention } from './retention.js';
+import { enforceRetention } from './retention.js';
 import { runRollups } from './rollups.js';
 import { dayKey } from './salt.js';
 import { buildSessions } from './sessions.js';
@@ -48,14 +48,6 @@ registerJob({
 	name: 'retention',
 	cadence: '1h',
 	run: (env, now) => enforceRetention(env, now),
-});
-// Optional: age out the CRM audit log on its own, longer window. No-op unless CRM_DB is bound.
-registerJob({
-	name: 'crm-audit-retention',
-	cadence: '24h',
-	run: async (env, now) => {
-		await enforceCrmAuditRetention(env, now);
-	},
 });
 // Optional: maintain the MMR transparency log + signed checkpoint. No-op unless FACET_SIGNING_JWK is set.
 registerJob({
@@ -123,7 +115,82 @@ async function writeCadenceError(
 	}
 }
 
-/** Run every registered job that is due, isolating failures so one bad job never blocks the rest. */
+async function runDueJob(
+	job: ScheduledJob,
+	row: LedgerRow | undefined,
+	env: Env,
+	now: number,
+	log: Log,
+): Promise<void> {
+	const cadence = parseCadence(job.cadence);
+	if (!cadence.ok) {
+		// IMPORTANT: never fall back to a default cadence — running work on a schedule nobody
+		// chose is worse than not running it. Disable this job alone.
+		log.error(`job_cadence_invalid:${job.name}`, cadence.error);
+		if (row?.cadenceError !== cadence.error) {
+			await writeCadenceError(env, job.name, cadence.error, log);
+		}
+		return;
+	}
+	if (row?.cadenceError != null) {
+		await writeCadenceError(env, job.name, null, log);
+	}
+	const occurrence = occurrenceOf(now, cadence.ms);
+	if (row?.lastOccurrence != null && row.lastOccurrence >= occurrence) return;
+
+	let failure: unknown;
+	try {
+		await job.run(env, now);
+	} catch (err) {
+		failure = err;
+		log.error(`job_failed:${job.name}`, err instanceof Error ? err : String(err));
+	}
+	try {
+		if (failure !== undefined) {
+			// IMPORTANT: a failed run leaves `last_occurrence` untouched so the next trigger retries it.
+			await db(env)
+				.insert(schema.scheduledJobRuns)
+				.values({
+					name: job.name,
+					lastSuccessAt: null,
+					lastFailureAt: now,
+					lastError: failure instanceof Error ? failure.name : 'UnknownError',
+				})
+				.onConflictDoUpdate({
+					target: schema.scheduledJobRuns.name,
+					set: {
+						lastFailureAt: now,
+						lastError: failure instanceof Error ? failure.name : 'UnknownError',
+					},
+				});
+			return;
+		}
+		await db(env)
+			.insert(schema.scheduledJobRuns)
+			.values({
+				name: job.name,
+				lastSuccessAt: now,
+				lastFailureAt: null,
+				lastError: null,
+				lastOccurrence: occurrence,
+				cadenceError: null,
+			})
+			.onConflictDoUpdate({
+				target: schema.scheduledJobRuns.name,
+				set: {
+					lastSuccessAt: now,
+					lastError: null,
+					lastOccurrence: occurrence,
+					cadenceError: null,
+				},
+			});
+	} catch (heartbeatError) {
+		log.error('job_heartbeat_failed', heartbeatError, { job: job.name });
+	}
+}
+
+/** Run due jobs independently. Their data windows do not overlap in a way that requires ordering,
+ * and each owns a separate ledger row, so one slow external call must not hold every other job. */
 export async function runScheduled(
 	event: ScheduledController,
 	env: Env,
@@ -132,72 +199,5 @@ export async function runScheduled(
 	const now = event.scheduledTime;
 	const log = createLogger({ handler: 'scheduled' });
 	const ledger = await readLedger(env, log);
-	for (const job of jobs) {
-		const row = ledger.get(job.name);
-		const cadence = parseCadence(job.cadence);
-		if (!cadence.ok) {
-			// IMPORTANT: never fall back to a default cadence — running work on a schedule nobody
-			// chose is worse than not running it. Disable this job alone.
-			log.error(`job_cadence_invalid:${job.name}`, cadence.error);
-			if (row?.cadenceError !== cadence.error) {
-				await writeCadenceError(env, job.name, cadence.error, log);
-			}
-			continue;
-		}
-		if (row?.cadenceError != null) {
-			await writeCadenceError(env, job.name, null, log);
-		}
-		const occurrence = occurrenceOf(now, cadence.ms);
-		if (row?.lastOccurrence != null && row.lastOccurrence >= occurrence) continue;
-
-		let failure: unknown;
-		try {
-			await job.run(env, now);
-		} catch (err) {
-			failure = err;
-			log.error(`job_failed:${job.name}`, err instanceof Error ? err : String(err));
-		}
-		try {
-			if (failure !== undefined) {
-				// IMPORTANT: a failed run leaves `last_occurrence` untouched so the next trigger retries it.
-				await db(env)
-					.insert(schema.scheduledJobRuns)
-					.values({
-						name: job.name,
-						lastSuccessAt: null,
-						lastFailureAt: now,
-						lastError: failure instanceof Error ? failure.name : 'UnknownError',
-					})
-					.onConflictDoUpdate({
-						target: schema.scheduledJobRuns.name,
-						set: {
-							lastFailureAt: now,
-							lastError: failure instanceof Error ? failure.name : 'UnknownError',
-						},
-					});
-				continue;
-			}
-			await db(env)
-				.insert(schema.scheduledJobRuns)
-				.values({
-					name: job.name,
-					lastSuccessAt: now,
-					lastFailureAt: null,
-					lastError: null,
-					lastOccurrence: occurrence,
-					cadenceError: null,
-				})
-				.onConflictDoUpdate({
-					target: schema.scheduledJobRuns.name,
-					set: {
-						lastSuccessAt: now,
-						lastError: null,
-						lastOccurrence: occurrence,
-						cadenceError: null,
-					},
-				});
-		} catch (heartbeatError) {
-			log.error('job_heartbeat_failed', heartbeatError, { job: job.name });
-		}
-	}
+	await Promise.all(jobs.map((job) => runDueJob(job, ledger.get(job.name), env, now, log)));
 }

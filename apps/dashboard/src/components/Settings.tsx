@@ -1,5 +1,5 @@
 // Self-service admin area. Manages sites, API keys, goals, funnels, experiments and flags via the
-// admin API. The ADMIN_TOKEN is entered here and kept in memory/sessionStorage only (never mixed
+// admin API. The ADMIN_TOKEN is entered here and kept in memory only (never mixed
 // with the site-credential store, never in a URL/log). All mutations invalidate the relevant list.
 //
 // Layout: everything below Sites is scoped to ONE selected site, which used to be implicit — eight
@@ -41,7 +41,7 @@ const SECTIONS: { id: SectionId; label: string }[] = [
 ];
 
 export function Settings({ onEditLayout }: { onEditLayout: () => void }): ReactElement {
-	const { hasToken, token, forgetToken } = useAdmin();
+	const { hasToken, token, rejected: requestRejected, forgetToken } = useAdmin();
 	const { activeProfile } = useDashboard();
 	const [siteId, setSiteId] = useState<string>(activeProfile?.siteId ?? '');
 	const [section, setSection] = useState<SectionId>('keys');
@@ -65,7 +65,7 @@ export function Settings({ onEditLayout }: { onEditLayout: () => void }): ReactE
 
 	// A token accepted at the gate can be rotated out from under the session. Say so once, here,
 	// instead of letting all six panels each render their own bare "invalid_admin_token".
-	const rejected = isAdminAuthError(sites.error);
+	const rejected = requestRejected || isAdminAuthError(sites.error);
 	const selected = sites.data?.sites.find((s) => s.id === siteId) ?? null;
 	// Only a *loaded* list can prove a site is absent; mid-flight there is nothing to conclude.
 	const missing = Boolean(siteId) && Boolean(sites.data) && !selected;

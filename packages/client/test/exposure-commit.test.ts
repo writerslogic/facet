@@ -82,6 +82,10 @@ describe('exposure deferred commit', () => {
 		assignment('cta');
 		await tick();
 		expect(collected).toHaveLength(2);
+		const eventIds = collected.map(
+			(body) => (JSON.parse(body) as { event_id: string }).event_id,
+		);
+		expect(eventIds[0]).toBe(eventIds[1]);
 
 		advancePastBackoff();
 		assignment('cta');

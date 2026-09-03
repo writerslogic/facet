@@ -32,16 +32,13 @@ function wranglerJsonc(name: string, db: string): string {
 			"migrations_dir": "migrations"
 		}
 	],
-	"unsafe": {
-		"bindings": [
-			{
-				"name": "RATE_LIMITER",
-				"type": "ratelimit",
-				"namespace_id": "1001",
-				"simple": { "limit": 100, "period": 60 }
-			}
-		]
-	},
+	"ratelimits": [
+		{
+			"name": "RATE_LIMITER",
+			"namespace_id": "1001",
+			"simple": { "limit": 100, "period": 60 }
+		}
+	],
 	"vars": { "RAW_RETENTION_DAYS": "90" }
 }
 `;
