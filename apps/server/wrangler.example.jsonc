@@ -1,0 +1,79 @@
+{
+  // Facet Worker config: ingest + stats API + dashboard static assets + cron rollups.
+  // Tracked, shareable template. `pnpm install` copies it to the gitignored wrangler.jsonc once;
+  // deploy and CLI commands use that local copy, which is where D1 ids and routes belong.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "facet",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Optional custom domain. Add this to the generated wrangler.jsonc only.
+  // "routes": [{ "pattern": "analytics.example.com", "custom_domain": true }],
+  "observability": {
+    "enabled": true,
+    "logs": { "enabled": true, "invocation_logs": true, "head_sampling_rate": 1 },
+    "traces": { "enabled": true, "head_sampling_rate": 0.1 }
+  },
+  "triggers": { "crons": ["0 * * * *"] },
+  "assets": { "directory": "../dashboard/dist", "binding": "ASSETS" },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "facet",
+      "database_id": "PLACEHOLDER_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+
+    // OPTIONAL CRM database. This physical separation is a privacy boundary: D1 cannot join it to
+    // analytics. Enable only after reviewing docs/self-hosting.md and the attestation impact.
+    // ,{
+    //   "binding": "CRM_DB",
+    //   "database_name": "facet-crm",
+    //   "database_id": "PLACEHOLDER_CRM_D1_DATABASE_ID",
+    //   "migrations_dir": "migrations-crm"
+    // }
+  ],
+  "vars": {
+    "RAW_RETENTION_DAYS": "90"
+    // Optional non-secret deployment metadata and feature configuration belongs in the local copy.
+    // ,"ROLLUP_DETAIL_MONTHS": "6"
+    // ,"ROLLUP_MONTHLY_MONTHS": "24"
+    // ,"AE_BEST_EFFORT_ENABLED": "true"
+  },
+
+  "ai": { "binding": "AI" },
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 100, "period": 60 }
+    }
+  ],
+
+  // Queues require Workers Paid. On Free, remove this block; both ingest endpoints then use their
+  // synchronous, idempotent D1 fallback. The DLQ retains messages that exhaust native retries.
+  "queues": {
+    "producers": [{ "binding": "INGEST_QUEUE", "queue": "facet-ingest" }],
+    "consumers": [
+      {
+        "queue": "facet-ingest",
+        "max_batch_size": 100,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "facet-ingest-dlq"
+      }
+    ]
+  },
+
+  // Optional scale mirror. D1 remains authoritative; remove this binding for a D1-only deployment.
+  // Analytics Engine has no delete API, so Facet disables writes when RAW_RETENTION_DAYS is under 90.
+  "analytics_engine_datasets": [{ "binding": "AE", "dataset": "facet_events" }]
+
+  // POST-v1 SCALE PATH: add optional bindings only to the local config. Durable Objects can own
+  // real-time aggregation and R2 can hold exports/archives without changing this shared template.
+  // OPTIONAL email delivery (requires Email Routing on the deployment zone):
+  // ,"send_email": [{ "name": "SEND_EMAIL" }]
+  // Add AUTH_EMAIL_FROM and/or ALERT_EMAIL_FROM to vars in the local copy.
+}

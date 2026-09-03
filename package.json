@@ -1,6 +1,6 @@
 {
   "name": "facet",
-  "version": "0.5.2",
+  "version": "0.6.0",
   "private": true,
   "description": "Facet — privacy-first, Cloudflare-native web analytics.",
   "license": "AGPL-3.0-only",
@@ -16,6 +16,7 @@
     "node": ">=22"
   },
   "scripts": {
+    "postinstall": "node scripts/ensure-wrangler-config.mjs",
     "dev": "wrangler dev",
     "dev:web": "pnpm --filter @facet/dashboard dev",
     "dev:worker": "pnpm --filter @facet/server dev",
@@ -25,6 +26,7 @@
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "check:links": "node scripts/check-release-links.mjs",
+    "check:release": "node scripts/check-release.mjs",
     "check:bundle": "node scripts/check-dashboard-bundle.mjs",
     "check:migrations": "node scripts/check-migration-upgrade.mjs",
     "format": "biome format --write .",

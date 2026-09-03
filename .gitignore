@@ -11,6 +11,10 @@ build/
 .wrangler/
 .dev.vars
 .dev.vars.*
+# Generated from the tracked template on install. Holds this checkout's D1 ids, routes, and optional
+# bindings; never rely on git index flags to keep deployment identity out of a commit.
+apps/server/wrangler.jsonc
+.facet-backups/
 
 # Test / coverage
 coverage/
@@ -35,3 +39,8 @@ pnpm-debug.log*
 DEVPLAN.md
 project.yaml
 .orchestrator/
+
+# Local agent/tooling scratch
+.claude/
+.playwright-mcp/
+apps/dashboard/test-results/
