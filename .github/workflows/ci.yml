@@ -48,8 +48,8 @@ jobs:
       - name: Test
         run: pnpm test
 
-      - name: Install browser
-        run: pnpm --filter @facet/dashboard exec playwright install --with-deps chromium
+      - name: Install browsers
+        run: pnpm --filter @facet/dashboard exec playwright install --with-deps chromium firefox webkit
 
       - name: Browser end-to-end test
         run: pnpm test:e2e
