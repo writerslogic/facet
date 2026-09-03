@@ -1,4 +1,14 @@
-# @facet/trust
+<!-- repo-header:start -->
+<img src="https://github.com/writerslogic.png?size=160" alt="@facet/trust logo" width="120" align="left">
+
+<h1>@facet/trust</h1>
+
+<p><strong>Documentation for @facet/trust in Facet.</strong></p>
+
+<br clear="left">
+
+[![CI](https://img.shields.io/github/actions/workflow/status/writerslogic/facet/ci.yml?style=flat-square&labelColor=20232a&branch=main&label=CI)](https://github.com/writerslogic/facet/actions/workflows/ci.yml) [![CodeQL](https://img.shields.io/github/actions/workflow/status/writerslogic/facet/codeql.yml?style=flat-square&labelColor=20232a&branch=main&label=CodeQL)](https://github.com/writerslogic/facet/actions/workflows/codeql.yml) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/writerslogic/facet?style=flat-square&labelColor=20232a&label=OpenSSF)](https://securityscorecards.dev/viewer/?uri=github.com/writerslogic/facet) [![OpenSSF Best Practices](https://www.bestpractices.dev/projects/14244/badge)](https://www.bestpractices.dev/projects/14244) [![License](https://img.shields.io/github/license/writerslogic/facet?style=flat-square&labelColor=20232a&color=007ec6&label=license)](https://github.com/writerslogic/facet/blob/main/LICENSE) [![Code of Conduct](https://img.shields.io/badge/code%20of%20conduct-Contributor%20Covenant%202.1-6a4c93?style=flat-square&labelColor=20232a)](https://github.com/writerslogic/facet/blob/main/CODE_OF_CONDUCT.md) [![GitHub Sponsors](https://img.shields.io/badge/GitHub%20Sponsors-Sponsor-EA4AAA?style=flat-square&labelColor=20232a)](https://github.com/sponsors/dcondrey)
+<!-- repo-header:end -->
 
 Workers-native trust & provenance primitives for Facet, shared by `@facet/server` and the CLI.
 Everything here is proven to run under `@cloudflare/vitest-pool-workers` (real workerd) — see
