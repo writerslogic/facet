@@ -44,9 +44,9 @@ The rest of this page is the manual path — the same steps, run by hand.
 wrangler d1 create facet
 ```
 
-This prints a `database_id`. Write it into `apps/server/wrangler.jsonc` — which ships with
-the placeholder `PLACEHOLDER_D1_DATABASE_ID` — with the CLI (this does a targeted replace
-that preserves the file's comments and unrelated config):
+This prints a `database_id`. Write it into `apps/server/wrangler.jsonc` — generated once by
+`pnpm install` from the tracked `wrangler.example.jsonc` template — with the CLI (this does a
+targeted replace that preserves the file's comments and unrelated config):
 
 ```sh
 facet config set-db-id --id <database_id> --config apps/server/wrangler.jsonc
@@ -62,6 +62,35 @@ facet config check --config apps/server/wrangler.jsonc
 `check` exits nonzero if `database_id` is missing or still the placeholder, so it doubles as
 a pre-deploy guard.
 
+#### CRM database (optional)
+
+The CRM schema is an opt-in self-hosted extension. Facet does not create a shared CRM service or
+database, and the core analytics deployment does not need this binding. To enable the storage
+foundation, create a second D1 database in your own account and add its returned values to the
+existing `d1_databases` array:
+
+```sh
+wrangler d1 create my-facet-crm
+```
+
+```jsonc
+{
+  "binding": "CRM_DB",
+  "database_name": "my-facet-crm",
+  "database_id": "<database_id>",
+  "migrations_dir": "migrations-crm"
+}
+```
+
+Apply the generated CRM migration to that binding:
+
+```sh
+pnpm --filter @facet/server migrate:crm:remote
+```
+
+The database id belongs only to your deployment. Keep it in the gitignored `wrangler.jsonc` just
+like the primary `DB` id; do not add it to the tracked template.
+
 ### 2. Create the ingest queue
 
 The beacon enqueues events and a consumer batches the D1 writes off the hot path, so the queue must
@@ -76,6 +105,13 @@ wrangler queues create facet-ingest-dlq
 there instead of being dropped. Nothing reads it automatically — it exists so a poisoned message is
 inspectable (`wrangler queues consumer add facet-ingest-dlq <worker>` if you want to process it, or
 pull messages with the Cloudflare dashboard/API).
+
+Run `facet doctor` after provisioning and in deployment checks: it verifies both the primary queue
+and the configured DLQ exist. Configure a Cloudflare notification for queue backlog on
+`facet-ingest-dlq`; any nonzero backlog means an individually isolated event has exhausted retries.
+Inspect before replaying, then send a corrected message back to `facet-ingest` with the same event id
+so D1 persistence stays idempotent. Never attach the normal Worker consumer directly to the DLQ: an
+unchanged poison message would only fail again without adding diagnostic value.
 
 Cloudflare Queues requires the **Workers Paid** plan. On the free plan, comment the `queues` block
 out of `apps/server/wrangler.jsonc` instead — with no `INGEST_QUEUE` binding the beacon writes to D1
@@ -364,33 +400,55 @@ a copy, whether the deployment answers `/api/health`, and which sites exist — 
 that would fix what it found. It prints no secret values and truncates account/database identifiers,
 so the output is safe to paste into a bug report.
 
-### Backups (D1 export)
+### Backups and restore drills
 
-Facet stores everything in D1. Export a full SQL snapshot with Wrangler:
-
-```sh
-wrangler d1 export facet --remote --output facet-backup.sql
-```
-
-Store snapshots off-site and on a cadence that matches your tolerance for data loss (e.g. daily).
-To restore into a fresh database, create it, apply migrations, then execute the dump:
+D1 Time Travel is always enabled on production-storage databases. Record a bookmark before every
+migration or destructive maintenance operation:
 
 ```sh
-wrangler d1 create facet
-# set the new database_id (see `facet config set-db-id`), then:
-pnpm --filter @facet/server migrate:remote
-wrangler d1 execute facet --remote --file facet-backup.sql
+wrangler d1 info facet
+wrangler d1 time-travel info facet
 ```
 
-Aggregated `event_rollups` are durable; raw events/sessions/salts are subject to the retention
-window above, so a backup captures only data still inside that window.
+The second command prints the exact restore command for that bookmark. A Time Travel restore
+overwrites the live database, so export its current state first and require a second operator to
+verify the database name/bookmark before running it. Paid plans retain 30 days; free plans retain 7.
+
+For an offline copy or retention longer than Time Travel, export schema and data together:
+
+```sh
+mkdir -p .facet-backups
+wrangler d1 export facet --remote --output .facet-backups/facet-YYYY-MM-DD.sql
+```
+
+The dump contains analytics data and secrets such as alert-destination signing keys. Keep it out of
+Git (the `.facet-backups/` directory is ignored), encrypt it at rest, restrict access, and expire it
+on the same policy as the source database.
+
+Test the dump without touching production by importing it into a newly created drill database. Do
+not apply Facet migrations first: a full export already contains the schema.
+
+```sh
+wrangler d1 create facet-restore-drill
+# Put that database id in a temporary Wrangler config whose DB name is facet-restore-drill.
+wrangler d1 execute facet-restore-drill --remote --file .facet-backups/facet-YYYY-MM-DD.sql
+wrangler d1 execute facet-restore-drill --remote --command \
+  "SELECT COUNT(*) AS sites FROM sites; SELECT COUNT(*) AS events FROM events; PRAGMA integrity_check;"
+```
+
+Run this drill on a schedule and before relying on a new backup process. Also call the restored
+Worker's authenticated `/api/ready` endpoint; table counts alone cannot prove the application can
+read the schema. Delete the drill database after recording the result. Run retention immediately
+before a long-lived export if the file must contain only data inside the configured window.
 
 ### Observability & logs
 
 The Worker emits structured JSON log lines (level, message, request/handler context) with IPs
-stripped, and Cloudflare **Workers observability** is enabled in `wrangler.jsonc`
-(`observability.enabled = true`). View and query logs in the Cloudflare dashboard or with
-`wrangler tail`.
+stripped. Cloudflare **Workers observability** is enabled in `wrangler.jsonc`: invocation logs are
+retained at full sampling and traces at 10% head sampling. View/query logs and traces in the
+Cloudflare dashboard or stream logs with `wrangler tail`. Add notifications for Worker error rate,
+cron failures, and DLQ backlog; those account-level notification destinations cannot be safely
+created by a repository deploy.
 
 ## Anomaly and metric alerting
 
@@ -460,13 +518,11 @@ To turn it on: enable Email Routing on the zone, verify the destination address,
 "vars": { "ALERT_EMAIL_FROM": "facet@your-domain.example" }
 ```
 
-> **Note:** `apps/server/wrangler.jsonc` is tracked with git's `skip-worktree` bit so a live
-> `database_id` never reaches the repository — the committed copy keeps
-> `PLACEHOLDER_D1_DATABASE_ID`. That means local edits to this file are **not staged or committed**.
-> Apply the block above to your own working copy; do not clear the bit to commit it, or you will push
-> your real database id. Check with `git ls-files -v apps/server/wrangler.jsonc` (a leading `S` means
-> the bit is set). `facet init` writes to this file — the database id and the route — which is exactly
-> what the bit exists for: the edits stay in your working copy and are never staged.
+> **Note:** `apps/server/wrangler.jsonc` is gitignored and contains the deployment's database ids,
+> routes, and optional bindings. `apps/server/wrangler.example.jsonc` is the shareable source
+> template. `pnpm install` creates the local file only when it is absent and never overwrites it, so
+> dependency updates cannot erase live configuration. Change the template only when changing project
+> defaults; change the local file for a particular deployment.
 
 ## Trust & provenance configuration
 
@@ -514,10 +570,10 @@ attestation (`hardware:false`).
 
 ## Test Worker config
 
-`apps/server/wrangler.test.jsonc` is **generated** from `wrangler.jsonc` by
+`apps/server/wrangler.test.jsonc` is **generated** from `wrangler.example.jsonc` by
 `apps/server/scripts/gen-test-wrangler.mjs` (run automatically by the server `pretest` script,
-so it never drifts). It is identical to `wrangler.jsonc` except the `ai` binding is stripped:
+so it never drifts). It strips bindings the local Worker test runtime cannot provide:
 the `vitest-pool-workers` miniflare runtime can't resolve the external AI worker and crashes at
 startup. The NL pipeline is instead tested with an injectable stub `LlmRunner`, and
-`/api/stats/query` returns `503` when `env.AI` is absent. Edit `wrangler.jsonc` (not the test
-file) and regenerate with `pnpm --filter @facet/server gen:test-config`.
+`/api/stats/query` returns `503` when `env.AI` is absent. Edit `wrangler.example.jsonc` (not the
+generated test file) and regenerate with `pnpm --filter @facet/server gen:test-config`.

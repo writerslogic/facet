@@ -2,7 +2,8 @@
 
 # Privacy model
 
-Facet is cookieless and stores no personal identifiers. There are no cookies and no server-stored
+Facet's default analytics profile is cookieless and stores no personal identifiers. There are no
+analytics cookies and no server-stored
 cross-site or cross-day identifiers; the only client-side storage is an opt-out switch and, when
 experiments or feature flags are used, a random local bucketing id (see
 [Visitor opt-out, Do Not Track & Global Privacy Control](#visitor-opt-out-do-not-track--global-privacy-control)),
@@ -86,11 +87,29 @@ still ingested and still counted; see
 [Visitor opt-out, Do Not Track & Global Privacy Control](#visitor-opt-out-do-not-track--global-privacy-control).
 
 **Threat model for the identified tier.** A Tier-2 `uid:` hash is re-identifiable **by the site that
-supplied the uid** (that is the point — CRM join); the guarantees are per-site isolation and
+supplied the uid**; the guarantees are per-site isolation and
 Facet-side non-reversibility, not anonymity. The raw uid is stored at rest only to support
 uid-scoped revocation and is purged by retention/erasure. Per-event `consent:true` is a caller
 attestation (as trustworthy as the site's backend, exactly like the caller-supplied IP on
 `/api/event`), not an end-user cryptographic guarantee.
+
+## CRM storage foundation
+
+The CRM milestone is an opt-in storage contract for self-hosted deployments. Facet never provisions
+or operates a shared CRM database. An operator that enables the capability creates, binds, migrates,
+and owns a separate D1 database (`CRM_DB`); without that binding, no CRM storage exists. The physical
+boundary makes a cross-database analytics join impossible at the SQL layer.
+
+Facet acts as the data processor; the site operator remains the controller. A contact can exist only
+after explicit operator materialization and must carry a declared legal basis, origin source,
+source-event timestamp, and Facet creation timestamp. The operator identifier is required as a
+site-scoped HMAC-SHA-256 digest; the raw identifier, email, and telephone number have no columns in
+the schema. The optional alias is bounded and is not an identity or analytics join key.
+
+Every child row repeats `site_id` and reaches its parent through a composite foreign key. Deleting a
+contact therefore cascades its tag links, timeline events, and score ledger inside D1 while shared tag
+definitions survive. A future bridge must require a separate explicit, auditable operator grant; a
+client-supplied association is insufficient by contract and no silent session stitching exists.
 
 ## Sessions & UTM
 

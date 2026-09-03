@@ -76,8 +76,8 @@ Monorepo (pnpm). From the repo root:
 ```
 pnpm install
 pnpm -r typecheck          # all packages
-pnpm --filter @facet/trust test   # 100 tests, run in real workerd
-pnpm -r test               # full suite (536 tests)
+pnpm --filter @facet/trust test   # runs in real workerd
+pnpm -r test               # full workspace suite
 ```
 
 Trust tests live in `packages/trust/test/`. They run under `@cloudflare/vitest-pool-workers`, i.e. against the **real workerd runtime**, not a Node shim — so the crypto you review is the crypto that runs in production.
@@ -102,11 +102,14 @@ Findings in whatever form suits you — file:line + a concrete exploit per issue
 
 Let's run it as a loop so nothing gets lost:
 
-1. **File findings as GitHub issues** on the project repository (`github.com/writerslogic/facet` upstream) — one issue per finding, with file:line, a concrete exploit/repro, and a severity. Label them `security` so they're easy to triage.
-2. **The maintainers patch** each issue and reference the issue number in the fixing commit, then ping you when a batch is ready.
-3. **You re-review** the patches (re-open the issue if a fix is incomplete; close it if it holds).
+1. **Report every suspected vulnerability privately** through the channel in `SECURITY.md`, with
+   file:line, a concrete exploit/repro, and a proposed severity. Do not open a public issue before
+   coordinated disclosure, even when the initial severity appears low.
+2. **The maintainers patch** each private finding and reference its advisory identifier in the fixing
+   commit when disclosure timing allows, then ping you when a batch is ready.
+3. **You re-review** the patches (mark the private finding unresolved if a fix is incomplete; close
+   it if it holds). A sanitized public issue can be created after disclosure if follow-up work is
+   useful and no exploit detail remains sensitive.
 4. **Official report when everything passes** — once all issues are closed, a short signed-off summary of what you reviewed, what you found, and that the current state passes. That is the document to attach when presenting the trust layer as audited.
-
-One exception to step 1: if you find something **critical and actively exploitable**, please use the private disclosure channel first (coordinated disclosure) rather than opening a public issue, so it can be patched before it's visible. Everything else is fine in the open.
 
 Private disclosure channel: see [`SECURITY.md`](../SECURITY.md) — GitHub private security advisories, or the maintainer contact listed there. (Separately, a *running deployment* publishes its **own** operator's contact at `/.well-known/security.txt`, RFC 9116, built by `apps/server/src/lib/security-txt.ts`; that address belongs to whoever runs that instance, not to this project.)

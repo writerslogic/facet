@@ -15,14 +15,20 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   their identity tier (GPC-aware; `site_id` is taken from the key, never the body).
 - `GET /api/annotations`, `GET /api/stats/anomalies`, `GET /api/stats/experiments`, `GET /api/stats/experiment`,
   `GET /api/stats/retention`, `POST /api/stats/query` — **API key**.
-- `GET /api/stats`, `GET /api/stats/cube`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
+- `GET /api/stats`, `GET /api/stats/core`, `GET /api/stats/summary`,
+  `GET /api/stats/content`, `GET /api/stats/acquisition`, `GET /api/stats/technology`,
+  `GET /api/stats/engagement`, `GET /api/stats/revenue`, `GET /api/stats/freshness`,
+  `GET /api/stats/realtime-context`, `GET /api/stats/attribution`,
+  `GET /api/stats/cube`, `GET /api/stats/sessions`, `GET /api/stats/channels`,
   `GET /api/stats/interactions`, `GET /api/stats/realtime`, `GET /api/stats/export`,
   `GET /api/stats/conversions`, `GET /api/stats/goals`, `GET /api/stats/funnels`,
   `GET /api/funnels/:id/report` — **API key**: `Authorization: Bearer <clk_...>`
   (site-scoped; a key that does not own the requested `site_id` gets `403 site_mismatch`).
 - `POST /api/sites`, `GET /api/sites`, `POST /api/keys`, `GET /api/keys`,
   `DELETE /api/keys/:id`, goal/funnel CRUD (`POST`/`GET`/`DELETE /api/goals`,
-  `POST`/`GET`/`DELETE /api/funnels`), identity config (`PATCH /api/sites/:id/identity`),
+  `POST`/`GET`/`PATCH`/`DELETE /api/funnels`), experiment CRUD
+  (`POST`/`GET`/`PATCH`/`DELETE /api/experiments`), identity config
+  (`PATCH /api/sites/:id/identity`),
   flag CRUD (`POST`/`GET /api/flags`, `PATCH`/`DELETE /api/flags/:id`), alert destinations
   (`POST`/`GET /api/alerts`, `DELETE /api/alerts/:id`) and metric alert rules
   (`POST`/`GET /api/alerts/rules`, `DELETE /api/alerts/rules/:id`, `GET /api/alerts/deliveries`), timeline annotation writes
@@ -33,10 +39,6 @@ All endpoints live under `/api` on your deployment. Times are unix epoch **milli
   `GET /api/auth/me`, `POST /api/auth/logout`, `POST /api/auth/logout-everywhere` — **session
   cookie**. All `503 auth_unavailable`
   unless `SESSION_SECRET` is bound.
-- `/api/crm/*` — **session cookie + team role**, and deliberately *not* an API key. This is the only
-  authenticated surface that refuses `clk_` keys: they authorize aggregate analytics and are meant to
-  be handed out, which contact PII does not survive. `501 crm_unavailable` unless `CRM_DB` is bound.
-
 ## Error envelope
 
 Every error returns the canonical body:
@@ -293,12 +295,47 @@ every bucket; the `top_*` lists are `{ key, count }` rows sorted by count descen
 
 ---
 
+### Narrow stats reads (API key)
+
+Callers that do not render the complete analytics surface should use one of these bounded response
+contracts instead of `GET /api/stats`. They accept the same `site_id`, range, interval, hostname,
+and dimension filters, with the same ownership and 90-day range checks.
+
+| Endpoint | Response | D1 statements |
+| --- | --- | ---: |
+| `GET /api/stats/core` | `{ summary, series }` | 2, batched |
+| `GET /api/stats/summary` | `{ summary }` | 1 |
+| `GET /api/stats/content` | `{ top_paths, top_events }` | 2, batched |
+| `GET /api/stats/acquisition` | `{ top_referrers }` | 1 |
+| `GET /api/stats/technology` | `{ top_browsers, top_os, top_screens, top_languages, top_regions, top_networks, top_connections }` | 7, batched |
+| `GET /api/stats/engagement` | `{ engagement }` | 1 |
+| `GET /api/stats/revenue` | `{ revenue, revenue_by_channel }` | 2, batched |
+| `GET /api/stats/freshness` | `{ meta }` | 2, batched |
+| `GET /api/stats/realtime-context` | `{ top_paths, top_events, top_referrers, top_countries, top_devices, channels }` | 6, batched |
+| `GET /api/stats/attribution` | `{ revenue, revenue_by_channel, attribution }` | 3, batched |
+
+`attribution.meta` reports whether the 50,000-row attribution input bound produced an exact answer:
+`exact`, `truncated`, `rows_scanned`, and `range_supported`. These fields are additive to the legacy
+response; callers that do not know them remain compatible.
+
+`realtime-context.channels` is a raw-event breakdown for the requested trailing window, so it is
+current and applies the same active filters as the other five lists. The older `channels` field on
+`GET /api/stats` remains session-derived for compatibility.
+
+The Worker emits structured `stats_read` telemetry with endpoint name, elapsed time, statement
+count, and—on the batched narrow routes—D1 `rows_read`. It deliberately excludes site ids, query
+parameters, dimensions, paths, and query text.
+
+---
+
 ### `GET /api/stats/cube?site_id&start&end&interval=hour|day` (API key)
 
 The low-cardinality dimensional cube for the range: one cell per `(bucket, device, country,
 channel)` with `pageviews` / `events` / `visitors`. The dashboard hydrates this once and slices
-by those axes client-side with no further round-trips. Same query schema, site-ownership check
-and range cap as `GET /api/stats`; `interval` defaults the same way.
+by those axes client-side with no further round-trips. Path/referrer filters scope the cube while
+leaving its three low-cardinality axes open for client slicing. Same query schema, site-ownership
+check and range cap as `GET /api/stats`; `interval` defaults the same way. Its two dependent D1
+statements also emit the privacy-safe `stats_read` cost metadata described above.
 
 Country is folded to the top 30 by volume plus `'other'`, so the cube is bounded **and**
 complete — every event lands in a cell and the totals still reconcile with `GET /api/stats`.
@@ -814,7 +851,7 @@ Workers runtime boundaries (COSE/CBOR, `ecdsa-sd-2023`, `bbs-2023`, hardware RAT
 
 ## Goals, conversions & funnels
 
-Goals and funnels are per-site configuration. **Creating and deleting** them is
+Goals and funnels are per-site configuration. **Creating, editing, and deleting** them is
 admin-only (`Authorization: Bearer <ADMIN_TOKEN>`). **Reading** the catalog and running
 conversion/funnel reports uses a site-scoped stats **API key** so the dashboard can query
 them without the admin token.
@@ -956,6 +993,12 @@ curl -X POST https://your-deployment.example.com/api/funnels \
 
 Lists a site's funnels, newest first. Returns `200` with `{ "funnels": [...] }`.
 
+### `PATCH /api/funnels/:id` (admin)
+
+Replaces a funnel's name and ordered steps. The body and step constraints match creation and
+include the owning `site_id`. Returns `200` with `{ "funnel": { ... } }`, or `404 not_found` when
+the funnel does not belong to that site.
+
 ### `DELETE /api/funnels/:id?site_id=<uuid>` (admin)
 
 Deletes a funnel scoped to its site. Returns `200` with `{ "deleted": true }`, or
@@ -1006,12 +1049,24 @@ the assigned variant and fires one `$exposure` event per flag per page load.
 
 ### `POST /api/experiments` (admin)
 
-Body `{ site_id, name, flag_key, variants: [{ key, weight }], active? }` (2–8 variants; the first is
-the control). Returns `201` with `{ "experiment": { ... } }`.
+Body `{ site_id, name, flag_key, variants: [{ key, weight }], status? }` (2–8 variants; the first is
+the control). `status` is `draft` or `active`; omitted status preserves the legacy create behavior
+and starts the experiment. Variant keys must be unique and at least one weight must be positive.
+The deprecated `active` boolean remains accepted when `status` is absent. Returns `201` with
+`{ "experiment": { ... } }`.
+
+### `PATCH /api/experiments/:id` (admin)
+
+Replaces an experiment's configuration or advances its lifecycle. The body uses the creation
+contract and includes the owning `site_id`. Valid transitions are `draft → active → completed`.
+Draft configuration is editable, active allocation is locked, and completed experiments are
+terminal and immutable. Responses expose `status`, the compatibility `active` boolean,
+`started_at`, and `completed_at`. Returns `200`, `404 not_found`, or `409` for an invalid or locked
+transition.
 
 ### `GET /api/experiments?site_id=<uuid>` (admin) · `DELETE /api/experiments/:id?site_id=<uuid>` (admin)
 
-List (variants parsed, `active` as boolean) and delete, same contract as goals/funnels.
+List (variants parsed with durable lifecycle fields) and delete, same contract as goals/funnels.
 
 ### `GET /api/experiments/active?site_id=<uuid>` (public)
 
@@ -1344,15 +1399,14 @@ applied to someone else. Returns `{ "user_id": "...", "sessions_revoked": true }
 there is no such user, so a mistyped id is never reported as a revocation that did not happen.
 Idempotent: revoking twice is two epochs and the same outcome.
 
-This is **the lever the CRM audit log points at.** The log names the operator whose session read the
-contact table; without this route the only person who could act on that was that operator, which is
-precisely the wrong person when the question is whether their session was stolen.
+This is the deployment operator's remedy for a session believed to be stolen; the affected operator
+cannot be the only person able to revoke it.
 
 In the dashboard: **Settings → Operator sessions**, above the site selection because sessions belong
 to a person and to the whole deployment, not to the site being managed. It takes a pasted user id
 rather than offering a picker, for the same reason the route is behind `ADMIN_TOKEN` — there is no
-user directory to pick from. The ids come from the **Who** column of the CRM access log. Revoking is
-not a lockout: roles and data are untouched and the person can sign in again immediately.
+user directory to pick from. Revoking is not a lockout: roles and data are untouched and the person
+can sign in again immediately.
 
 It sits behind `ADMIN_TOKEN` rather than a team role, and that is a deliberate limit. Team admins
 have no user-management surface at all today — they cannot list their members, rename them, or remove
@@ -1568,272 +1622,23 @@ user row also ends their sessions, since an account that does not exist holds no
 
 ---
 
-## CRM (optional extension)
+## CRM storage contract (not an HTTP endpoint)
 
-The CRM is **off unless you bind it**. It lives in a second D1 database (`CRM_DB`); with no binding
-there is no database, no table, and every route below returns `501 crm_unavailable` — before
-authentication, so an unbound deployment answers uniformly. See `apps/server/wrangler.jsonc` for how
-to turn it on, and note that doing so changes the DPV claims this deployment signs at
-`/.well-known/facet-privacy.json` (it gains `dpv:Store`, `dpv:Erase`, `dpv:Consent`, and the
-`pd:` categories it holds — including `pd:CurrentEmployment`, because a contact linked to a company
-record carries a structured employer that a free-text box did not, and `pd:Transactional`, because a
-deal linked to `contact_id` attaches a monetary pipeline value to a named person).
+This section records the privacy-first storage invariants for Facet's optional self-hosted CRM
+extension; it does not define a Worker route. Each operator may create and bind its own separate D1
+database as `CRM_DB`. Facet does not provision, host, or receive data from that database.
 
-Every route is rate limited per *operator* (not per site, so one compromised session cannot hide
-inside its team's traffic), write bodies are capped at 16 KB, and every authorized request — reads
-included — is written to the [audit log](#get-apicrmauditsite_idactionactor_user_idtarget_idlimitoffset-session-admin)
-before its handler runs.
+The generated schema contains exactly five tables: `crm_contacts`, `crm_tags`,
+`crm_contact_tags`, `crm_contact_events`, and `crm_score_ledger`. Contacts require a site-scoped
+keyed digest, declared legal basis, origin source, source-event timestamp, and deterministic
+`(created_at, id)` cursor. There are no raw email, phone, external-id, company, deal, or legacy
+compatibility columns.
 
-**Auth is a session cookie, never an API key.** This is the one authenticated surface that refuses
-`Authorization: Bearer <clk_...>`. A `clk_` key authorizes aggregate analytics and is meant to be
-handed out — to agents, to a public demo dashboard — and contact PII is not something that survives
-that. Every route takes `?site_id=<uuid>`, and the caller must hold a role on the team that owns it
-(assign one with `PATCH /api/sites/:id/team`). `503 auth_unavailable` without `SESSION_SECRET`;
-`401 unauthorized` without a session; `403 forbidden` when the role is insufficient.
-
-| Role | Contacts, companies and deals |
-| --- | --- |
-| `viewer` | no access at all |
-| `analyst` | list, read, create, update, view the analytics link, read the pipeline summary |
-| `admin` / `owner` | the above, plus delete, export, and read the audit log |
-
-### `GET /api/crm/contacts?site_id&status&q&limit&offset` (session, analyst)
-
-Lists contacts, newest first. `status` ∈ `lead \| active \| archived`; `q` is a bounded substring
-match over name/email/company (LIKE metacharacters are escaped, so `q=%` matches a literal `%`). The
-company it matches on is the **resolved** one, so searching a company name finds the contacts linked
-to it as well as those carrying it as free text. `limit` defaults to 25, max 100. Returns
-`{ contacts: [...], total, role }`.
-
-`role` is the team role this request was authorized under. It is on the list responses because a
-client has no other way to learn it: `GET /api/auth/me` reports a role per *team*, and no
-session-reachable route says which team owns a given site, so a UI deciding whether to offer the
-admin-only delete and export could otherwise only guess. `offset` is capped at 100,000 — SQLite walks
-every skipped row, so an unbounded one is a full table scan.
-
-### `POST /api/crm/contacts?site_id` (session, analyst)
-
-Body: `{ external_user_id?, email?, name?, phone?, company?, company_id?, title?, status?, source?,
-notes?, owner_user_id? }`. `site_id` comes from the query parameter, **never** the body. Requires at
-least one of `email`, `external_user_id` or `name` — a row with none can never be matched or erased
-on request. Email is lowercased; `(site_id, email)` and `(site_id, external_user_id)` are unique, so
-a duplicate returns `409 contact_exists`. An `owner_user_id` that matches no user returns
-`400 unknown_owner`. Returns `201`.
-
-`company` and `company_id` are the same fact recorded two ways — free text, or a link to a
-`companies` row — and **exactly one of them answers at a time**. Sending both as non-empty is
-`400 company_conflict`; a `company_id` that is not a company on this site is `400 unknown_company`
-(the foreign key would accept another site's, so the site check is what rejects it). A non-empty
-write to either clears the other. Reads return `company` resolved to the linked company's **current**
-name, falling back to the free text when nothing is linked, so renaming a company changes every
-linked contact with no backfill. `company_id` is returned alongside it, so a link is still
-distinguishable from a label.
-
-### `GET`/`PATCH /api/crm/contacts/:id?site_id` (session, analyst)
-
-`PATCH` is partial: only keys present in the body are written, so omitting `notes` leaves the notes
-alone. A contact belonging to another site is `404 not_found`, indistinguishable from a missing one.
-
-### `DELETE /api/crm/contacts/:id?site_id` (session, admin)
-
-**Really deletes** — no tombstone, because a tombstone still holding an email is still that person's
-personal data. Also erases (not revokes) every `consent_records` row for their `external_user_id`,
-since those rows hold the raw identifier the erasure was about, and unlinks (not deletes) every deal
-naming this contact, the same "unlink, don't destroy" precedent as a company delete. Returns
-`{ "deleted": true, "consent_records_erased": <n>, "deals_unlinked": <n> }`. The pseudonymous event
-rows remain; with the consent record gone, nothing can re-associate them with a person.
-
-### `GET /api/crm/contacts/:id/analytics?site_id` (session, analyst)
-
-The **consent-gated** link. Resolves the contact's `external_user_id` through `consent_records` and
-returns activity only for visitor hashes taken from consent statements that verify against the
-deployment signing key. The hash comes from the signed claims, never from a column, so a hand-written
-row cannot attach a contact to an arbitrary visitor.
-
-Returns `{ "linked": false, "reason": "no_external_user_id" | "no_active_consent" }`, or
-`{ "linked": true, "windows": <n>, "activity": { pageviews, events, first_seen, last_seen,
-top_paths } }`. `windows` is how many salt windows currently have a live grant; it shrinks on its own
-as retention purges older consent records, and when the last one goes the link severs with no
-CRM-side cleanup — nothing here caches a visitor hash.
-
-Contacts themselves are **not** on the retention schedule. A contact is a business record with its
-own lifecycle; only the link to analytics is time-bounded.
-
-### `GET /api/crm/contacts/:id/export?site_id` (session, admin)
-
-Data-subject export: `{ exported_at, contact, consent: [...], analytics: { linked, windows, activity,
-events, events_truncated, events_limit } }`. The `consent` entries include each signed statement
-verbatim — they are PII-free by construction, so they add cryptographic evidence of what was
-consented to without widening what the export discloses. `events` is capped at `events_limit` (1000)
-and `events_truncated` says so explicitly rather than silently returning a prefix.
-
-### `GET`/`POST /api/crm/companies?site_id` (session, analyst)
-
-A company is an organization, not a data subject — a name, a domain and a note about a legal person
-are nobody's personal data. Body: `{ name, domain?, status?, notes?, owner_user_id? }`. `name` is
-required. `domain` is normalised before it is stored — lowercased, with the scheme, path, port and
-any trailing dot removed, so `https://Acme.com/about` and `acme.com` are one company; `www.` is
-deliberately **not** stripped, since deciding that `www.acme.com` is the same organization as
-`acme.com` is a guess. A domain that is not a hostname is `400`. `(site_id, name)` and
-`(site_id, domain)` are unique, so a duplicate returns `409 company_exists`.
-
-Name uniqueness is an **exact** match: names are displayed as typed, so they are not case-folded for
-the index. Use `domain` if you want a case-insensitive identity key.
-
-`GET` takes `status`, `q` (substring over name/domain), `limit`, `offset` and returns
-`{ companies: [...], total, role }`, with `role` as on the contacts list.
-
-### `GET`/`PATCH /api/crm/companies/:id?site_id` (session, analyst)
-
-`PATCH` is partial. A `name` that is present must be non-blank (`companies.name` is NOT NULL and is
-the display value); omitting it leaves it alone.
-
-### `DELETE /api/crm/companies/:id?site_id` (session, admin)
-
-**Deletes the company, not the people or the deals attached to it.** Deleting an organization is not
-an erasure request about anybody, so its contacts survive: each one's `company_id` is cleared and the
-company's name is written back into their free-text `company`, in a single D1 batch. "Where does this
-person work" therefore answers the same before and after — only the structured link is gone. Any deal
-naming this company is unlinked the same way, its `company_id` cleared. Returns
-`{ "deleted": true, "contacts_unlinked": <n>, "deals_unlinked": <n> }`.
-
-### `GET /api/crm/companies/:id/contacts?site_id&limit&offset` (session, analyst)
-
-That company's contacts, newest first, in the same resolved shape the contact list returns.
-
-### `GET /api/crm/companies/:id/analytics?site_id` (session, analyst)
-
-The company rollup: the **sum of its contacts' individually consent-gated links**, never a query over
-"the company". Every visitor hash comes from the same verified-statement gate the per-contact route
-uses, applied per contact, so a contact with no active signed consent contributes nothing — the
-aggregate is exactly the union of the per-contact results the same caller can already fetch one at a
-time, and is strictly less revealing than the calls it replaces.
-
-There is deliberately **no k-anonymity floor**, unlike the analytics breakdowns. `K_ANON` protects
-visitors the operator has no other route to; these are contacts the same caller can already retrieve
-individually and by name, so a floor would suppress a two-contact company's rollup while both of
-their pages stayed readable — hiding a legitimate answer while protecting nobody.
-
-What does need saying is the denominator, so it is in the response:
-
-```json
-{
-  "contacts_total": 12,       // contacts at this company, including those that can never link
-  "contacts_linked": 3,       // of those considered, how many consent currently authorizes
-  "contacts_considered": 12,  // how many were resolved (bounded by contacts_limit)
-  "contacts_truncated": false,
-  "contacts_limit": 100,
-  "linked": true,
-  "visitor_hashes": 4,
-  "activity": { "pageviews": 0, "events": 0, "total": 0, "first_seen": null, "last_seen": null, "top_paths": [] }
-}
-```
-
-`contacts_total` beside `contacts_linked` is what stops "142 pageviews" for a twelve-person account
-reading as the account's traffic when it is one person's. `contacts_truncated` is never silent: a
-capped fan-out is a lower bound, not a total. `visitor_hashes` is contacts multiplied by their live
-salt windows — a linkage-breadth number, **not** a headcount; `contacts_linked` is the headcount.
-When nothing is linked the response is `{ ..., "linked": false, "reason": "no_linked_contacts" }`
-rather than zeroes that would read as "this account did nothing". When the fan-out was capped the
-reason is `none_linked_within_cap` instead — with contacts left unexamined, "nobody is linked" is a
-claim about rows nothing looked at.
-
-There is **no company export**. A data-subject export is per person by definition; a company-wide one
-would be a bulk PII dump with no data-protection meaning. Use `/companies/:id/contacts` and then the
-per-contact export, which accounts for each person separately.
-
-### `GET /api/crm/deals?site_id&stage&company_id&contact_id&q&limit&offset` (session, analyst)
-
-Lists deals, newest first. `stage` ∈ `lead \| qualified \| proposal \| negotiation \| won \| lost`; `q`
-is a bounded substring match over the deal name; `company_id`/`contact_id` filter to that record's
-deals. `limit` defaults to 25, max 100. Returns `{ deals: [...], total, role }`.
-
-### `POST /api/crm/deals?site_id` (session, analyst)
-
-Body: `{ name, company_id?, contact_id?, stage?, value?, currency?, expected_close_date?, notes?,
-owner_user_id? }`. `name` is required. `value` is cents, matching how every other money amount in this
-ecosystem avoids float rounding, and `currency` is a three-letter ISO 4217 code, uppercased on the
-wire; they are one fact recorded in two columns, so sending one without the other is
-`400 deal_value_needs_currency`. `expected_close_date` is Unix ms. A `company_id`/`contact_id` that
-does not match a record on this site is `400 unknown_reference` — there is no unique index on `deals`,
-so a stale reference is the only write failure a caller's input can cause. An `owner_user_id` that
-matches no user is `400 unknown_owner`. Returns `201`.
-
-A deal linked to `contact_id` makes that contact's data include `pd:Transactional`, the same way
-`company_id` on a contact adds `pd:CurrentEmployment`.
-
-### `GET`/`PATCH /api/crm/deals/:id?site_id` (session, analyst)
-
-`PATCH` is partial: only keys present in the body are written. A `name` present in the body must still
-be non-blank. A deal belonging to another site is `404 not_found`.
-
-### `DELETE /api/crm/deals/:id?site_id` (session, admin)
-
-**Deletes the deal**, matching contact delete rather than company delete: there is nothing here to
-preserve by unlinking first, since a deleted deal is the opportunity itself going away, not a person or
-organization losing a label. Returns `{ "deleted": true }`.
-
-### `GET /api/crm/pipeline?site_id` (session, analyst)
-
-The pipeline summary, one row per currency: `{ pipeline: [{ currency, open_value, open_count,
-won_value, won_count }] }`. `open_value`/`won_value` are cents, summed in SQL across every deal on the
-site. Deals with no `value`/`currency` are excluded, not counted as zero — a deal nobody has priced is
-not a $0 deal. Values are never summed across currencies, which is why this is a list of per-currency
-rows rather than one grand total that would add unlike units. `open` is every non-terminal stage;
-`won`/`lost` are the only terminal ones, and `lost` deals count toward neither `open` nor `won`.
-
-A top-level path — not `/deals/pipeline` — for the same reason `/audit` is top-level: it is a distinct
-resource, not a deal by that id.
-
-### `GET /api/crm/audit?site_id&action&actor_user_id&target_id&limit&offset` (session, admin)
-
-The access log. **Every authorized request to any route above writes one entry, before its handler
-runs** — reads included, which is the point: a delete leaves a hole you can see, a read leaves
-nothing. An entry is `{ id, site_id, actor_user_id, actor_role, action, target_id, occurred_at,
-actor_email }`, and the response is `{ entries: [...], total, role }`, newest first.
-
-Written **first**, not last. Logging afterwards means any failure between the disclosure and the
-record — a D1 error, a crash — leaves an access that happened and was never written down, and for a
-delete there is then nothing left to notice the gap against. Writing first inverts that: if the log
-write fails the request fails `500` and nothing was read or changed. The cost is that an entry states
-an operator was *authorized* to do this to this id, not that it succeeded; a request that goes on to
-`404` is recorded like any other. For the id-probing case that is the more useful reading anyway.
-
-`action` is one of `contact.list`, `contact.create`, `contact.read`, `contact.update`,
-`contact.delete`, `contact.analytics`, `contact.export`, `company.list`, `company.create`,
-`company.read`, `company.update`, `company.delete`, `company.contacts`, `company.analytics`,
-`deal.list`, `deal.create`, `deal.read`, `deal.update`, `deal.delete`, `deal.pipeline`,
-`audit.read` — a closed set, so the log is filterable by equality. `target_id` is the contact,
-company or deal the request named, or `null` for a collection route and for a **create**, whose
-record does not exist yet when the entry is written. `actor_role` is the role the request was
-**authorized under**, stored rather than resolved later, so "an admin exported this" stays true after
-they are demoted. All three filters are exact matches; a log of ids has no fragments to search for.
-
-`actor_email` is resolved at read time from `users` in the analytics database — the log stores the
-id, which is stable and leaves no email behind once an account is closed, but "operator 8f3a1c…" is a
-record rather than accountability. It is `null` where the account is gone; the id stays either way.
-This is a **deliberate disclosure**: it tells a team admin the addresses of the colleagues who read
-this site's contacts, which no other session-reachable route does. Everyone who can appear in the log
-holds a role on that admin's own team, since that is what authorized the access being reported.
-
-`admin` rather than `analyst`, and not for the usual reason — no entry carries contact PII. It is
-that entries are about the deployment's own *operators*: a log of what each colleague read is
-oversight in an administrator's hands and surveillance in a peer's. Reading it is itself recorded.
-
-**Nothing can write here.** There is no update or delete route, and deleting a contact leaves its
-entries standing — they name it by id and hold none of its fields, so once the row is gone the
-pointer resolves to nothing and there is no personal data left for an erasure request to reach. A log
-an operator can clear by deleting the contact is not evidence of anything.
-
-The log is the one CRM table on a retention schedule. `CRM_AUDIT_RETENTION_DAYS` (default **365**)
-is enforced by the hourly cron; a value below `1` falls back to the default rather than putting the
-cutoff at or after now and wiping the log on every run. It is deliberately longer than
-`RAW_RETENTION_DAYS`: raw events are visitors' data and the short window *is* the privacy measure,
-while these entries record what operators did with contact data, and an access log that expires
-before the misuse it evidences is noticed has protected nobody. Contacts themselves remain on no
-schedule at all.
-
----
+Composite `(site_id, id)` foreign keys prevent cross-tenant associations. Deleting a contact
+cascades its tag links, timeline events, and score ledger while preserving shared tag definitions.
+The score update and ledger append are issued as one atomic D1 batch. An analytics bridge is not part
+of this milestone: a future bridge must require an explicit, auditable operator grant and cannot be
+created from a client-supplied association alone.
 
 ## `GET /api/health`
 

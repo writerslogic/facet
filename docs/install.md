@@ -8,7 +8,8 @@ cd facet && pnpm install
 npx @writerslogic/facet-cli init
 ```
 
-That is the whole install. `facet init` creates the D1 database, writes its id into the Worker
+That is the whole install. `pnpm install` first creates the gitignored deployment config from the
+tracked template without overwriting an existing one. `facet init` creates the D1 database, writes its id into the Worker
 config, generates and stores the admin token, applies the migrations, builds the dashboard, deploys
 the Worker, then creates your first site and issues its API key — and prints the dashboard URL with
 the credentials ready to paste.

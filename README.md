@@ -96,7 +96,9 @@ and [D1](https://developers.cloudflare.com/d1/platform/pricing/) pricing for the
 - **Ask in plain English.** Natural-language queries over your stats via Workers AI, translated to a constrained, safe query intent.
 - **Realtime.** Active-visitor snapshot over a 5-minute window (distinct daily hashes; no cookies or persistent id).
 - **Ad-block-resilient.** First-party `POST /api/event` server-to-server ingest — no client script to block.
-- **Visitor opt-out & Do-Not-Track.** Honors browser DNT and a per-visitor opt-out; ignored visitors are never recorded.
+- **Explicit visitor opt-out.** A per-visitor opt-out suppresses collection entirely. DNT/GPC disable
+  experiments and identity elevation but still allow the anonymous, cookieless pageview; the
+  distinction is documented in [the privacy guide](./docs/privacy.md#visitor-opt-out-do-not-track--global-privacy-control).
 - **CSV / JSON export.** Export any series or breakdown from the API or dashboard; CSV is spreadsheet formula-injection-safe.
 - **In-dashboard admin.** A Settings tab manages sites and API keys, with one-click multi-site switching.
 - **Verifiable trust & provenance.** Optional signed statements about the deployment — published keys (`did:web` + JWKS), a W3C VC 2.0 privacy attestation, a RATS build/config evidence EAT, and a SCITT transparency log — with hardware-rootable signing keys. See [`docs/trust.md`](./docs/trust.md).
@@ -107,8 +109,11 @@ and [D1](https://developers.cloudflare.com/d1/platform/pricing/) pricing for the
 The default `anonymous` profile provides the one-day, unlinkable behavior described below. Operators
 can deliberately enable longer pseudonymous windows or identified analytics, but those modes require
 deployment signing plus explicit, context-bound consent and are disclosed in the deployment's
-attestation. The optional CRM uses a separate D1 binding. See [Privacy model](./docs/privacy.md) before
-enabling either capability; they are not equivalent to the default anonymous profile.
+attestation. The CRM storage contract ships as an opt-in migration for a separate D1 binding. Facet
+does not provision or operate that database centrally: each self-hoster decides whether to create,
+bind, and migrate its own `CRM_DB`. No analytics bridge exists. See
+[Privacy model](./docs/privacy.md); none of these capabilities is equivalent to the default anonymous
+profile.
 
 A visitor is identified for **one UTC day only** by `SHA-256(ip ⧊ user_agent ⧊ daily_salt ⧊ site_id)`,
 rendered as lowercase hex. The salt rotates at UTC midnight, so the same person produces a different
@@ -212,8 +217,10 @@ gh attestation verify "$(npm pack @writerslogic/facet-cli --silent)" --repo writ
 ```
 
 Beyond the packages, a *deployment* signs machine-readable statements about itself (keys, privacy
-processing, build/config evidence) — see [Trust & provenance](./docs/trust.md). Security policy and
-reporting: [SECURITY.md](./SECURITY.md).
+processing, build/config evidence) — see [Trust & provenance](./docs/trust.md). That cryptographic
+layer has extensive conformance/adversarial tests but is not yet independently audited; the standing
+[external audit brief](./docs/security-audit-brief.md) makes that status and review scope explicit.
+Security policy and reporting: [SECURITY.md](./SECURITY.md).
 
 ## Documentation
 
