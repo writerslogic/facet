@@ -69,7 +69,9 @@ export function AdminProvider({
 	useEffect(() => {
 		const listener = () => setRejected(true);
 		rejectionListeners.add(listener);
-		return () => rejectionListeners.delete(listener);
+		return () => {
+			rejectionListeners.delete(listener);
+		};
 	}, []);
 
 	const setToken = useCallback((next: string) => {
