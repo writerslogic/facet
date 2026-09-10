@@ -106,13 +106,13 @@ importers:
         version: link:../../packages/trust
       '@hono/valibot-validator':
         specifier: 0.6.1
-        version: 0.6.1(hono@4.13.3)(valibot@1.4.2(typescript@5.9.3))
+        version: 0.6.1(hono@4.13.5)(valibot@1.4.2(typescript@5.9.3))
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@cloudflare/workers-types@4.20260702.1)
       hono:
-        specifier: 4.13.3
-        version: 4.13.3
+        specifier: 4.13.5
+        version: 4.13.5
       isbot:
         specifier: 5.2.1
         version: 5.2.1
@@ -1952,8 +1952,8 @@ packages:
   highlight.js@10.7.3:
     resolution: {integrity: sha512-tzcUFauisWKNHaRkN4Wjl/ZA07gENAjFl3J/c480dprkGTg5EQstgaNFqBfUqCq54kZRIEcreTsAgF/m2quD7A==}
 
-  hono@4.13.3:
-    resolution: {integrity: sha512-r8AO2mYHoLxSHkgafNeC/BXyb2vWRxD3jem4Ts+ptav8oTG5FIRifAjuJEmZI4bSvvc2ns0GxmIYiZnHqN3mMw==}
+  hono@4.13.5:
+    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
     engines: {node: '>=16.9.0'}
 
   html-encoding-sniffer@4.0.0:
@@ -3268,9 +3268,9 @@ snapshots:
   '@esbuild/win32-x64@0.28.1':
     optional: true
 
-  '@hono/valibot-validator@0.6.1(hono@4.13.3)(valibot@1.4.2(typescript@5.9.3))':
+  '@hono/valibot-validator@0.6.1(hono@4.13.5)(valibot@1.4.2(typescript@5.9.3))':
     dependencies:
-      hono: 4.13.3
+      hono: 4.13.5
       valibot: 1.4.2(typescript@5.9.3)
 
   '@img/colour@1.1.0': {}
@@ -4097,7 +4097,7 @@ snapshots:
 
   highlight.js@10.7.3: {}
 
-  hono@4.13.3: {}
+  hono@4.13.5: {}
 
   html-encoding-sniffer@4.0.0:
     dependencies:
