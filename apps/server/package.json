@@ -30,15 +30,15 @@
 		"@facet/shared": "workspace:*",
 		"@facet/trust": "workspace:*",
 		"@hono/valibot-validator": "0.6.1",
-		"drizzle-orm": "0.45.2",
-		"hono": "4.13.3",
-		"isbot": "5.2.1",
-		"valibot": "1.4.2"
+		"drizzle-orm": "0.45.3",
+		"hono": "4.13.9",
+		"isbot": "5.2.2",
+		"valibot": "1.5.0"
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "0.21.3",
 		"@cloudflare/workers-types": "4.20260702.1",
-		"drizzle-kit": "0.31.10",
+		"drizzle-kit": "0.31.11",
 		"typescript": "5.9.3",
 		"vitest": "4.1.11",
 		"wrangler": "4.123.0"

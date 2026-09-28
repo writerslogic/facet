@@ -28,10 +28,10 @@
 		"uplot": "1.6.32"
 	},
 	"devDependencies": {
-		"@playwright/test": "^1.62.1",
+		"@playwright/test": "^1.63.0",
 		"@tailwindcss/vite": "4.3.3",
 		"@testing-library/jest-dom": "6.9.1",
-		"@testing-library/react": "16.3.2",
+		"@testing-library/react": "16.3.3",
 		"@types/react": "19.2.18",
 		"@types/react-dom": "19.2.4",
 		"@vitejs/plugin-react": "4.7.0",
